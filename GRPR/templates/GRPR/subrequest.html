@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sub Request</title>
+    {% load static %}
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+</head>
+<body>
+    <!-- Nav bar -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container">
+            <a class="navbar-brand">GAS Golf</a>
+            <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarSupportedContent">
+                <ul class="navbar-nav mr-auto">
+                    <li class="nav-item active">
+                        <a href="{% url 'home_page' %}" class="nav-link">Home</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Sub Request Content -->
+    <div class="container my-4">
+        <h1>Sub Request</h1>
+        <p>
+            Please review and confirm the following Sub Request for <strong>{{ date }}</strong>. 
+        </p>
+        <blockquote class="blockquote">
+            {{ user_name }} is offering his tee time on <strong>{{ date }}</strong> at <strong>{{ course }}</strong> 
+            <strong>{{ time_slot }}</strong> to play with <strong>{{ other_players }}</strong> to the first person who wants it. 
+            <br>
+            
+        </blockquote>
+        <div class="mt-4">
+            <a href="{% url 'subrequestsent_view' %}?date={{ date }}&sub_offer={{ user_name }} is offering his tee time on {{ date }} at {{ course }} {{ time_slot }} to play with {{ other_players }} to the first person who wants it." class="btn btn-primary">Confirm</a>
+            <a href="{% url 'subswap_view' %}" class="btn btn-secondary-custom">Cancel the Sub Request</a>
+        </div>
+    </div>
+
+</body>
+</html>
