@@ -1,0 +1,10 @@
+# Ignore virtual environment
+.env/
+
+# Ignore other common files and directories
+*.pyc
+__pycache__/
+[db.sqlite3](http://_vscodecontentref_/1)
+.DS_Store
+
+
