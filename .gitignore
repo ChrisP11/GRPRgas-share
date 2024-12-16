@@ -7,4 +7,6 @@ __pycache__/
 [db.sqlite3](http://_vscodecontentref_/1)
 .DS_Store
 
+# Ignore journal files
+GRPRswapProcessPrompts.txt
 

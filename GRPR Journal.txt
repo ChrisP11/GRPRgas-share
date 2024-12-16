@@ -41,13 +41,25 @@ Next steps:
 - activated the environment 'source .env/bin/activate'
 - installed django in the env 'pip install django'
 - upgraded pip 'pip install --upgrade pip'
-- install dateutil 'pip install python-dateutil' [see if I need this, troubleshooting a date conversion issue at the moment 20241201]
+- install dateutil 'pip install python-dateutil' 
+- install twilio 'pip install twilio'
 - checked install status:
 (.env) cprouty@Chriss-MacBook-Air GRPR % pip freeze
 asgiref==3.8.1
 Django==4.2.16
 sqlparse==0.5.2
 typing_extensions==4.12.2
+- set env variables for twilio auth:
+1. nano /Users/cprouty/Dropbox/Dev/Python/Apps/GRPR/.env/bin/activate
+2. in the open activate file, add this section:
+# Set environment variables for Twilio
+export TWILIO_ACCOUNT_SID='your_account_sid' #add your specific stuff
+export TWILIO_AUTH_TOKEN='your_auth_token'
+3. stop the virt env:  in /Users/cprouty/Dropbox/Dev/Python/Apps/GRPR run 'deactivate'
+4. restart it:  source .env/bin/activate
+5. verify you get data from these:
+echo $TWILIO_ACCOUNT_SID
+echo $TWILIO_AUTH_TOKEN
 
 - created a project 'django-admin startproject portfolio .'
 - the 'dot' at the end tells the django admin app to create the project inside the portfolio folder instead of creating another folder called 'portfolio' inside the 'portfolio folder 
@@ -1286,3 +1298,671 @@ So that is what the 'gt' meant.  I was wondering.
 Ok.  Kinda leaning toward pulling in twilio functionality before wandering off and doing data then an initial game.  But...  yesterday's experience where I think C changed my code (and I had to use DropBox to undelete a file and restore it) has me somewhat concerned.
 
 Maybe I should check in my code into GitHub?
+
+I asked C and (shocking as it is a GitHub employee) it agreed, put it in git.
+
+Steps:
+1. in /Users/cprouty/Dropbox/Dev/Python/Apps/GRPR run 'git init'
+2. then run 'git add .'
+3. git commit -m "Initial upload of GRPR project files to Git.  Current functionality:  home page, tee sheet for each weekend, schedule for each player, Sub/swap working without twilio, look and feel consistent across all pages."
+4. Went to GH website and created a new project (GRPRgas since I already have the grpr project - the text based schedule work - up there).
+5.  Add the Remote Repository - 'git remote add origin https://github.com/ChrisP11/GRPRgas.git'
+*** bombed at the next step bc my remote repo (on the GH site) already had a file in it - the readme file.  SMH.  This may have been ok bc in the process of using command line to merge that remote file with my local files I discovered that C had me putting my entire virtual environment (/Users/cprouty/Dropbox/Dev/Python/Apps/GRPR/.env) into GitHub.  SMH.  So...  it then had me create a gitignore file to list out folders/files to NOT upload to GH.  Those steps:
+6. Create the ignore file - 'nano .gitignore'
+Text of the file:
+# Ignore virtual environment
+.env/
+
+# Ignore other common files and directories
+*.pyc
+__pycache__/
+[db.sqlite3](http://_vscodecontentref_/1)
+.DS_Store
+7. Add the .gitignore File to the Repository:
+'git add .gitignore'
+'git commit -m "Add .gitignore to exclude virtual environment"'
+8. Remove the Virtual Environment from the Repository (if already tracked):
+'git rm -r --cached .env'
+'git commit -m "Remove virtual environment from repository"'
+
+9. Steps to get remote repo contents and merge with local files
+- git fetch origin
+- git merge origin/main --allow-unrelated-histories (the tag is bc I created both repos separate from each other, thanks C)
+- git push origin main
+10. (this would need to be done prior to 'git push origin main', but just once).  How to set the remote location for your git repo:  git remote set-url origin https://github.com/ChrisP11/GRPRgas.git
+
+Ok.  That was 2 hours that feels wasted, but that is how it goes.  Just wait till I try to get this damn thing on the web somewhere....
+
+Let's see.  One more bit to this.  Create a new branch.
+According to C I can keep working in the same code base etc, I am just doing some clerical work on the back end, plus any code I would push to local or remote repos is tracked in a different branch/file.
+steps:
+1. git checkout -b feature/twilio-functionality
+2. Work on Your Code:Make changes, add new features, and commit them to the new branch:
+git add .
+git commit -m "Add new feature"
+3. Push the New Branch to Remote:
+git push origin feature/new-phase
+4. Switch Back to Main Branch (if needed):
+git checkout main
+
+Hmm.  Ok.  I did step one.  Now to work on code.
+
+Deeper list just to have it available
+- add twilio to the sub and swap requests?
+- add logging as changes (sub swaps what else?) are made
+- automate some testing?  look at test frameworks
+- get initial data page going with chart of player played with dates plus chart of which courses played and when (replicate google sheets in essence)
+- figure out better error handling / error.html
+- add a login page
+
+Let's work on these two things:
+- add twilio to the sub and swap requests
+- add logging as changes (sub swaps what else?) are made
+
+Context: The subswap.html page functions as a portal for the logged in user (currently hard coded as Chris Prouty) to review their current schedule and make offers of either a Sub (the player cannot make the date and is giving it away to anyone else in the group who is available that date) or a Swap (the player cannot make the date, would like to give it to someone else in the group in exchange for getting one that player's future available dates).  The Sub button available in each row of the table on the subswap.html page kicks off another page (swaprequest.html) via data encoded in the button logic and utilizing the subrequest_view function in views.py.  That subrequest.htlm page displays the Offer Detail information (inside the <blockquote class="blockquote"></blockquote> tags but also in encoded in the Confirm button logic on that page as the variable 'sub_offer').  When the Confirm button is pushed by the user, that button generates another page (subrequestsent.html) via data encoded in the Confirm button and the subrequestsent_view function in views.py.  At this point the user has officially offered up his tee time date to be claimed by anyone in the group who is available.  The subrequestsent.html page shows this list of users (first name, last name, mobile) in a table.
+
+Specific Requirements: I want all current functionality to stay the same.  I want to add the following additional functionality:
+For each Available Player in the table generated on subrequestsent.html I want to send a text message via twilio with details of sub offer and a short web link they can click on to claim the offered tee time.  We will use the Twilio python module  (from twilio.rest import Client).  The message we send via twilio will be the sub offer variable (from the Confirm button on subrequest.html) and the short web link.  For now, we will use a placeholder 'gasgolf.html' as the short web link.  The 'from' number we will use for Twilio will be '+18449472599'.  The to number we will use for twilio will be the Available Players mobile.  The Twilio account_sid and auth_token will be kept as secrets in a secrets file you will not have access to but for which I will provide variables to access the required information.  For this first pass, we will not actually be sending messages via Twilio.  Instead, we will print out the logic we will use later to send the twilio message.  We will print this out per Available Player in text on the subrequestsent.htlm page below the Available Players table.
+
+Highlight Key Parts: I want all functionality of the code to remain the same.  I want to know what we will need to add to the code and where to be able to use Twilio in this project.  I want to print out the code logic on the subrequestsent.htlm page to see how it will work before we actually connect to Twilio and send text messages.
+
+Examples: user Chris Prouty clicks the Sub button on subswap.html in the row with date May 4, 2024.  This takes him to subrequest.html where he sees he has a sub offer 'Chris Prouty is offering his tee time on May 4, 2024 at The Preserve 9:00 to play with John Sullivan, John Mcilwain, Keith Huizinga to the first person who wants it.' to Confirm.  He clicks the 'Confirm' button which takes him to subrequestsent.html page.  There he sees a table of Available Players
+First Name	Last Name	Mobile
+Chris	English	13129538825
+John	Kane	17089080883
+Mike	May	17734912582
+Pete	Birmingham	17734912582
+John	Griffin	17088609849
+Brad	Hunter	17732516499
+Mike	Peterson	13128103161
+Ed	Sloan	13123174996
+Mike	DeHaan	17088040914
+Chris	Lynn	13123755246
+Mike	Ryan	17082144242
+Tom	Canepa	13129252466
+
+Below which he sees 
+msg = "Chris Prouty is offering his tee time on May 4, 2024 at The Preserve 9:00 to play with John Sullivan, John Mcilwain, Keith Huizinga to the first person who wants it."
+message = client.messages \
+	                .create(
+	                    from_='+18449472599',
+	                    body=msg,
+	                    to= 13129538825 
+	                 )
+
+msg = "Chris Prouty is offering his tee time on May 4, 2024 at The Preserve 9:00 to play with John Sullivan, John Mcilwain, Keith Huizinga to the first person who wants it."
+message = client.messages \
+	                .create(
+	                    from_='+18449472599',
+	                    body=msg,
+	                    to= 17089080883 
+	                 )
+etc. until all 12 Available Players have the logic needed to send a text message to them via twilio.
+
+Do you have any questions or need additional information or context?
+
+944p - went away for a bit after I ran the prompt above.  Worked pretty well but still have not implemented the code fully.  Let's see what it wants me to add:
+1. to views.py imports
+- from twilio.rest import Client
+2. to views.py subrequestsent_view func:
+    # Generate Twilio message code for each available player
+    twilio_messages = []
+    for player in available_players:
+        msg = sub_offer
+        message_code = f"""
+        msg = "{msg}"
+        message = client.messages.create(
+            from_='+18449472599',
+            body=msg,
+            to={player.Mobile}
+        )
+        """
+        twilio_messages.append(message_code)
+
+and into the context variable:
+	'twilio_messages': twilio_messages,
+	                 
+3. to subrequestsent.html at the end:
+        <h2>Twilio Message Code</h2>
+        <pre>
+            {% for message in twilio_messages %}
+                {{ message }}
+            {% endfor %}
+        </pre>
+
+wow.  it worked.  ok, yay us.  I mean, it only got a paper trading type scenario.  It also feels like a lot of work to get something relatively minor done that...  I could have done myself in as much time maybe?  Mmmm.  Maybe.
+
+Ok.  Next steps for tomorrow:
+* install twilio on the virt env
+* figure out how to do the secrets file, keep it out of github, and also verify C will not look in its contents?  So SVS of me.
+* add in twilio login info on views.py
+* add in a section where the site uses twilio BUT only sends the messages to me - leaving the current paper trade twilio print out as is.
+- stretch goal:  create a sub request accept page where the user can go to click the link and take the tee time
+
+20241204 1248p
+installed twilio
+
+push branch AFTER creating an empty secrets.py file.
+
+after some yapping with C, am going with setting environment variables with my twilio info - C says it is the safest/securest way.  Even though I fear env variables deeply.  Rightly too.
+1. nano /Users/cprouty/Dropbox/Dev/Python/Apps/GRPR/.env/bin/activate
+
+2. in the open activate file, add this section:
+
+# Set environment variables for Twilio
+export TWILIO_ACCOUNT_SID='your_account_sid'
+export TWILIO_AUTH_TOKEN='your_auth_token'
+
+3. add to views.py:
+- import os
+- uncomment out twilio import (now that it is loaded into the env
+-     # Initialize the Twilio client
+    account_sid = os.getenv('TWILIO_ACCOUNT_SID')
+    auth_token = os.getenv('TWILIO_AUTH_TOKEN')
+    client = Client(account_sid, auth_token)
+
+Ok.  per usual, env var fucked with me, but I got there eventually.  So secrets are done, twilio log in is good.  Now to get the site to send me texts via twilio
+
+418p. Good news!  Arsenal beat ManU and I got the hard code twilio send to me to work.  Fuck yeah.
+
+Gonna go hit some serves to prep for tonight's big match with OPCC.  But first thing for tomorrow:
+
+- stretch goal:  create a sub request accept page where the user can go to click the link and take the tee time
+
+I suspect there is some thought that needs to go into this.  The user will get a link probably with their user name etc.  Then have a confirm page where they need to accept, decline or just cancel.  But I also probably want to add a button to index.html for Subs & Swaps on offer.  But maybe too confusing there?  Maybe another button on the subswap.html page?  Maybe, almost like Tabs.  One for the current Schedule for User, and then one for Subs & Swaps on Offer?  Hmmm.  All of this will surely require the Log table and maybe even a specific Swap/Sub table.  Like I said, will need thought.
+
+20241205 503p
+Ah.  What a day.  They had Ninja Unicorn at the OPCC hut last night.  And I won my match handily!  So yeah.  I partook.  Not toooo much, but left a tired edge on this little camper today.  To the woods with the dogs, then lunch wil Billy Heintz (hey, maybe he gets me a job?).  Now?  An hour or so available before I make dinner and Tink & I go to Fitzgeralds.  So let's use that hour.
+
+20241206 1241p
+Ok.  Yesterday = not productive.  Today will be better.
+
+Hmmmm.  this feels weirdly complex.  Or am I making it so.
+
+What is the functionality I want?
+- text message to available players with a short url link to an accept or can't do it page.
+- a list of available sub swap offers in a table, each with a link to accept of can't do it
+- available history for each player to see what were originally scheduled tee times, which times have been offered out (and taken) and which ones that player took.  Maybe on the Schedule page
+
+Ok.  I think that is the func.  Now how to do it?
+first one requires a subaccept and subacceptdone page
+second one requires a subswap table to be created and an additional table on the subswap.html page
+third one....  that subswap table plus some other thinking.
+
+The first one also will require the subswap table eventually so let's do that now.
+
+SubSwap
+ID - will be auto generated by django
+oDate - datetime, when offer is made, cannot be NULL
+OfferID - integer, player offering the slot, cannot be NULL
+AcceptID - integer, player accepting offer, can be NULL
+TeeTimeID - integer, foreign key to the TeeTimeInd table, cannot be NULL
+Status - varchar(16) Status of the offer, can be one of the following:  sub offer, sub accept, swap offer, swap accept, swap counter
+
+
+
+How will a swap work?
+1. Offer player offers TeeTimeX [Generates new entry in SubSwap][Generates new entry in Log]
+2. Available Player:
+	2a Can't do it - rejection [Generates new entry in Log, reference to SubSwap ID]
+	2b. Can do it, reverse offer, chooses dates to offer [Generates new entry in Log, reference to SubSwap ID]
+		2b1. TeeTimeA [Generates new entry in SubSwap as swap counter][Generates new entry in Log]
+		2b2. TeeTimeB [Generates new entry in SubSwap as swap counter][Generates new entry in Log]
+		2b3. TeeTimeC [Generates new entry in SubSwap as swap counter][Generates new entry in Log]
+		...
+			2bX1. Offer Player rejects all dates, kills that swap with that player
+			2bX2. Accepts one of the offer dates
+			
+Sub Process
+1. Offer player offers TeeTimeX [Generates new entry in SubSwap][Generates new entry in Log]
+2. Available Player:
+	2a Rejects [Generates new entry in Log, reference to SubSwap ID]
+	2b Accepts [Generates new entry in Log, reference to SubSwap ID][Updates SubSwap entry - changes status to accepted, enters AcceptID]
+	
+	
+	
+
+Insert into SubSwap (RequestDate, OfferID, AcceptID, TeeTimeIndID, Status, SwapID)
+
+
+Insert into SubSwap (RequestDate, OfferID, TeeTimeIndID, Status) Values(now(), 13, 14, 'swap offer');
+
+Insert into Log (sentDate, type, messageID, offerID, receiveID, msg, status, to_number) Values (now(), 'swap offer', 'DELETE', 1, 2, 'test swap offer msg', 0, )
+
+
+| English    |  2 | 13129538825 |
+| Kane       |  3 | 17089080883 |
+| May        |  4 | 17734912582 |
+| Birmingham |  5 | 17734912582 |
+| Griffin    |  8 | 17088609849 |
+| Hunter     |  9 | 17732516499 |
+| Peterson   | 12 | 13128103161 |
+| Sloan      | 15 | 13123174996 |
+| DeHaan     | 19 | 17088040914 |
+| Lynn       | 21 | 13123755246 |
+| Ryan       | 23 | 17082144242 |
+| Canepa     | 24 | 13129252466 |
+
+Select LastName, ID, Mobile
+from Players 
+where ID = 2
+or ID = 3 
+or ID = 4
+or ID = 5
+or ID = 8
+or ID = 9
+or ID = 12
+or ID = 15
+or ID = 19
+or ID = 21
+or ID = 23
+or ID = 24
+
+# View for Sub Offer History
+Select S.RequestDate
+,L.type
+,T.gDate
+,C.CourseName
+,C.CourseTimeSlot
+, P.FirstName
+, P.LastName
+From SubSwap S left outer join LogTest L
+on S.SwapID = L.refID
+left outer join TeeTimesInd T
+on S.TeeTimeIndID = T.TeeTimeID
+left outer join Courses C
+on T.CourseID = C.CourseID
+left outer join Players P
+on L.receiveID = P.ID
+;
+
+# Kane rejects swap offer
+Insert into LogTest (sentDate, type, messageID, offerID, receiveID, refID, msg, status) 
+Values (now(), 'swap reject', 'DELETE', 1, 3, 1, 'cannot do swap for X date', 101);
+
+# English accepts and makes counter offer
+[Generates new entry in SubSwap as swap counter]
+[Generates new entry in Log]
+
+# offers up 5/11
+Insert into SubSwap (RequestDate, OfferID, TeeTimeIndID, Status, SwapID) Values(now(), 2, 136, 'swap counter', 1);
+Insert into LogTest (sentDate, type, messageID, offerID, receiveID, refID, msg, status) 
+Values (now(), 'swap counter', 'DELETE', 13, 2, 1, 'can swap 5/11 for 5/4', 102);
+
+
+# offers up 6/8
+Insert into SubSwap (RequestDate, OfferID, TeeTimeIndID, Status, SwapID) Values(now(), 2, 211, 'swap counter', 1);
+Insert into LogTest (sentDate, type, messageID, offerID, receiveID, refID, msg, status) 
+Values (now(), 'swap counter', 'DELETE', 13, 2, 1, 'can swap 6/8 for 5/4', 102);
+
+# offers up 6/15
+Insert into SubSwap (RequestDate, OfferID, TeeTimeIndID, Status, SwapID) Values(now(), 2, 26, 'swap counter', 1);
+Insert into LogTest (sentDate, type, messageID, offerID, receiveID, refID, msg, status) 
+Values (now(), 'swap counter', 'DELETE', 13, 2, 1, 'can swap 6/15 for 5/4', 102);
+
+Hmmm.  The 'table comes back way complicated bc my join statement needs work, but also bc I may be just ding too much.  What can I get just using the SubSwap table?  Ish.
+
+Select S.RequestDate
+,S.Status
+,T.gDate
+,C.CourseName
+,C.CourseTimeSlot
+, P.FirstName
+, P.LastName
+From SubSwap S left outer join TeeTimesInd T
+on S.TeeTimeIndID = T.TeeTimeID
+left outer join Courses C
+on T.CourseID = C.CourseID
+left outer join Players P
+on S.OfferID = P.ID
+;
+
+This view does not tell you who the offer was sent to, nor does it tell you if someone rejected it.  Also....  not message for exactly what this is for.  IE, Chris English will swap one of these dates with you for your date on May 4th.......
+
+Hmmm.  But maybe there is a swapoffer.html page (instead of swapaccept which...  doesnt make sense now that I think about it).  so how does that work?  Similar to above I am sure:
+1. offer player kicks it off with the swap confirm on swaprequest.html
+2. Available Players received the text an shortlink to the swapoffer.html page
+	2a. You can also get to the swapoffer.html from a link of the subswap.html page from a table called 'Available Swaps'.  Which lists all the swaps currently alive the user is qualified for.
+3. swapoffer.html is kicked off by a specific swap request id (or that is the key variable you need, along with the user login).  The page will list the offer and then all the future available dates the user has to offer.  They check a box next to each date they are willing to offer, then a confirm button.  That kicks off a text to both the offer player and the swap counter player.  
+4. The offer player gets a link to swapofferaccept.html.  On that page, there will be the offer (Player X offer TeeTime Y on MM/DD/YYYY) and then the counter offers listed from the counter player (or players if multiple players counter).  Player X can click a button in that row to accept the offer or click a button at the bottom to reject them all.
+5.  If he accepts one of the offers, he gets sent to swapofferfinal.html where the full offer (Player X, TeeTime Y in exchange for TeeTimeZ from Player A, etc) is written out and there is a confirm or cancel buttons.
+
+20241210 339p
+Man.  I have been down some rabbit holes and definitely not working on this project.  I should probably write this somewhere else, but.... meh.  If it gets found, it gets found.  Otherwise, just more flotsam.  I am currently in love with the Vita Nostra book.  It doesn't have a plot?  I mean, not really?  A cycle of young woman not understanding what the fuck is going on, grappling with things that absolutely make no sense, but she is smart and driven by fear by other characters mostly threatening (vaguely but surely) her mother's health and safety.  Or her new born brother.  Then she gets through it and has greater control/access to incredible yet...  not per se useful abilities.  Then another cycle of that.  And again.  Yet the book is not about that at all.  Anyways, totally in love with it and of course it makes me run off and skirt my weird... fantasy?... that I could be a magician?  Yick.  Sounds so dumb out loud.  As, I suppose, it is meant to.  Might as well wish to be a super hero or something.  But I .... believe is a strong word, but sure lets use it....  that it is a reaction to feeling like something is missing from me.  Like someone put a restiction on my full abilities.  Or removed a vital cog from my internal mechanisms so I cannot fulfill some glorious purpose.  Or something.  Like I should have been Harry Potter or something but instead ended up like the other kid in those books, but not going to the cool school or even remembering any of it.
+
+Or maybe all just a weird through-the-prism-of-too-much-sci-fi-&-fantasy-and-fucking-comic-books and reacting to societal, why aren't I a billionaire like Elon?  I'm smart and shit stuff.  Ugh.  smh for sure.
+
+anyway.  Have done nothing on this yesterday (have been busy, calm-a-te) and nor yesterday (when I was very busy.  Gonna run to yoga in a few minutes.  So not gonna get much done, but will do a quick review of where we are at.
+
+20241211 921a
+Continuing the confessional theme....  had a dream right before I woke about a fight with Tink that was going quite poorly.  Surely  subconcious musings on my current state.  But woke up to her saying she was sorry about being difficult Sunday night.  Which I was unaware of.  So ok, that is a nice upturn on the roller coaster.
+
+Ok.  Back to GRPR.
+
+In order to change the hard coded user name, go to subswap_view func in views.py and change it for user_name and FirstName / LastName.
+
+#Sub Offer - Coogan offering 4/20
+Insert into SubSwap (RequestDate, OfferID, TeeTimeIndID, Status) Values(now(), 6, 3, 'sub offer');
+Insert into LogTest (sentDate, type, messageID, offerID, msg, status) 
+Values (now(), 'sub offer', 'DELETE', 6, 'sub offer 4/20 at TPOM', 500);
+
+
+Ok.  Change up SubSwap table:
+- Change'OfferId' to 'PlayerID' - 
+- Eliminate AcceptID
+- Add 'Status' - this can be either 'swap open' or 'swap closed', will be used to find open and available swaps
+- Status:  'swap offer', 'swap counter', 'swap reject', 'swap available player'
+
+
+# Prouty offers up 5/18 at TPOM 850 - 3 DB cruds to SubSwap, X to LogTest
+Insert into SubSwap (RequestDate, PlayerID, TeeTimeIndID, Type, Status) Values(now(), 13, 14, 'swap offer', 'swap open');
+
+#gets the swapid to equal the SID after initial creation
+Update SubSwap set SwapID = 1 Where SID = 1;
+
+Insert into SubSwap(RequestDate, PlayerID, Type, Status, SwapID) Values(now(), , 'swap available player', 'swap open', 1)
+
+Insert into LogTest(sentDate, type, messageID, requestDate, offerID, refID, msg, to_number) Values(now(), 'swap offer', 'fake mID', '2024-05-18', 13, 1, 'Prouty swap offer 5/18 TPOM 850a', '13122961817');
+
+#blank ish to add AVs to LogTest
+Insert into LogTest(sentDate, type, messageID, requestDate, offerID, refID, msg, to_number) Values(now(), 'swap offer sent', 'fake mID', '2024-05-18', 2, 1, 'Prouty swap offer 5/18 TPOM 850a sent to English', '13129538825');
+
+# Coogan offers up 5/25 at TPOM 850 - 3 DB cruds
+Insert into SubSwap (RequestDate, PlayerID, TeeTimeIndID, Type, Status) Values(now(), 6, 143, 'swap offer', 'swap open');
+
+#gets the swapid to equal the SID after initial creation
+Update SubSwap set SwapID = 14 Where SID = 14;
+
+# blank for sheets concat to create available players, must change swapid
+Insert into SubSwap(RequestDate, PlayerID, Type, Status, SwapID) Values(now(), , 'swap available player', 'swap open', 14)
+
+# initial offer into LogTest
+Insert into LogTest(sentDate, type, messageID, requestDate, offerID, refID, msg, to_number) Values(now(), 'swap offer', 'fake mID', '2024-05-25', 6, 14, 'Coogan swap offer 5/25 TPOM 850a', '17083342800');
+
+#AVs into LogTest
+Insert into LogTest(sentDate, type, messageID, requestDate, offerID, refID, msg, to_number) Values(now(), 'swap offer sent', 'fake mID', '2024-05-25', 1, 1, 'Coogan swap offer 5/25 TPOM 850a sent to Brown', '17737443434');
+
+
+20241212 1117a
+Happy 1/2 bday to me.  Gonna continue fleshing out the swap process with an eye on creating subswaps entries in the DB and then seeing how this shakes out for actual use.
+
+Select PID from TeeTimesInd where gDate = '2024-05-25';
+
+# gets PIDs for available players for a date
+Select LastName, ID, Mobile from Players where ID Not In (Select PID from TeeTimesInd where gDate = '2024-05-25');
+
+
+Insert into LogTest(sentDate, type, messageID, requestDate, offerID, refID, msg, to_number) Values(now(), 'swap offer', 'fake mID', '2024-05-18', 13, 'Prouty swap offer 5/18 TPOM 850a', '13122961817');
+
+
+Insert into LogTest(sentDate, type, messageID, requestDate, offerID, refID, msg, to_number) Values(now(), 'swap offer sent', 'fake mID', '2024-05-18', 2, 1, 'Prouty swap offer 5/18 TPOM 850a sent to English', '13129538825');
+
+Ok.  Starting to populate SubSwap and LogTest tables with fake data
+
+
+Putting the whole process in one place with DB selects for tables and insert for test data.
+
+1. swaprequest.html [request variables: date, course, time_slot, other_players, user_name] : offer player kicks it off with the swap confirm. This sends the user to swaprequestsent.html where they see the list of available players and the msg sent to them.  
+	ACTIONS
+	1. twilio msg sent to offer player with offerdetails
+		- Insert into SubSwap table
+		- Update that insert to have the SwapID match the row ID
+		- Insert into Log table with initial offer details
+	2. twilio msg sent to each available player with offer + Link
+		- Insert into SubSwap table with row per Available Player
+		- Insert into Log with msg sent details
+
+2. subswap.html [request variables: user_name currently hard coded, swapid]: new table to add Available Swaps
+Tee Time Swap Offers Available for UserName
+Select S.SwapiD
+,T.gDate
+, C.CourseName
+, C.CourseTimeSlot
+,S.OtherPlayers
+,substring(S.Msg, 1, 20)
+From SubSwap S left outer join TeeTimesInd T
+on S.TeeTimeIndID = T.TeetimeID
+left outer join Courses C
+on T.CourseID = C.CourseID
+Where S.Type = 'swap available player'
+and S.PID = 23;
+
+Then a Review Offer button for each row that goes to the swapoffer.html page
+
+_new table to add Swap Options_
+Tee Time Offers Available for your [gDate] [CourseName] [CourseTimeSlot] swap request
+[Offer_Msg]
+
+Table
+[dates offered] with 'Accept' button in each row.
+
+Select
+S.RequestDate 
+,Concat(P.FirstName, " ", P.LastName) 'Offer Player'
+,T.gDate
+,C.CourseName
+,C.CourseTimeSlot
+,S.OtherPlayers
+From SubSwap S left outer join TeeTimesInd T
+on S.TeeTimeIndID = T.TeeTimeID
+left outer join Players P
+on S.PID = P.ID
+left outer join Courses C
+on T.CourseID = C.CourseID
+Where S.Type = 'swap counter'
+and S.Status = 'swap open'
+and S.SwapID = 14
+Order by S.RequestDate;
+
+Button at bottom with 'Reject All Dates' (yes?)
+
+Accept button sends user to swapcounteraccept.html, needs UserID, TeeTimeIndID, SwapID
+
+	
+3. swapoffer.html [request variables: user_id, swapid]: 
+
+Page looks the same as swaprequest.html - nav bar, title says 'Available Dates to trade for Swap Offer'
+
+[offer_msg]
+
+Your dates available to swap [table w/ checkbox each row]
+Select T.TeeTimeID
+,T.gDate
+,P.FirstName
+,P.LastName
+,C.CourseID
+,C.CourseName
+,C.CourseTimeSlot
+from TeeTimesInd T left outer join Players P
+on T.PID = P.ID
+left outer join Courses C
+on T.CourseID = C.CourseID
+where PID = 23 and gDate not in (Select gDate from TeeTimesInd where PID = 6) and gDate > '2024-05-25'
+order by T.gDate asc;
+[should add other players for each of these]
+
+-check box each row
+-button for 'select all dates to offer'
+-button 'offer checked dates'
+-button 'cancel'
+
+'offer' button kicks off a text to both the offer player (w/ link to swapcounteraccept.html) and the swap counter player (w/ link to swapcounter.html) and sends the user to swapcounter.html
+
+
+4. swapcounter.html [request variables: user_id, swapid]:
+Same format:
+nav bar
+title - Swap Counter Offer 
+[Offer_msg]
+[dates offered]
+
+Insert into SubSwap table
+
+Insert into Log table
+ 
+5. swapcounteraccept.html [request variables: user_id, swapid, TeeTimeIndID]:
+Can be accessed either via a table on subswap.html or the link sent to the offer player via text.  
+
+format
+nav bar
+title - Please confirm you are accepting the proposed tee time swap
+Your Offer: [Offer_msg]
+[Counter Offer]
+
+Buttons:  
+Cancel - takes user back to subswap.html
+Confirm - takes user to swapfinal.html
+
+
+
+5.  If he accepts one of the offers, he gets sent to swapofferfinal.html where the full offer (Player X, TeeTime Y in exchange for TeeTimeZ from Player A, etc) is written out and there is a confirm or cancel buttons.
+
+
+
+Test Data for Swaps:
+
+# Prouty offers up 5/18 at TPOM 850 - 3 DB cruds to SubSwap, X to LogTest
+Insert into SubSwap (RequestDate, PID, TeeTimeIndID, Type, Status, Msg, OtherPlayers) Values(now(), 13, 14, 'swap offer', 'swap open', 'Chris Prouty would like to swap his tee time on May 18, 2024 at The Preserve 8:50 (playing with Brad Hunter, Chris Lynn, Chris Marzec) with one of your tee times.', 'Brad Hunter, Chris Lynn, Chris Marzec');
+
+#gets the swapid to equal the SID after initial creation
+Update SubSwap set SwapID = 1 Where SID = 1;
+
+# Insert Available Players in SubSwap (use Sheets)
+Insert into SubSwap(RequestDate, PID, TeeTimeIndID, Type, Status, Msg, OtherPlayers, SwapID) Values(now(),2, 14 , 'swap available player','swap open','Chris Prouty would like to swap his tee time on May 18, 2024 at The Preserve 8:50 (playing with Brad Hunter, Chris Lynn, Chris Marzec) with one of your tee times.', 'Brad Hunter, Chris Lynn, Chris Marzec', 1);
+
+# insert
+Insert into LogTest(sentDate, type, messageID, requestDate, offerID, refID, msg, to_number) Values(now(), 'swap offer', 'fake mID', '2024-05-18', 13, 1, 'Prouty swap offer 5/18 TPOM 850a', '13122961817');
+
+#blank ish to add AVs to LogTest
+Insert into LogTest(sentDate, type, messageID, requestDate, offerID, refID, msg, to_number) Values(now(), 'swap offer sent', 'fake mID', '2024-05-18', 2, 1, 'Prouty swap offer 5/18 TPOM 850a sent to English', '13129538825');
+
+# Coogan offers up 5/25 at TPOM 850 - 3 DB cruds
+Insert into SubSwap (RequestDate, PID, TeeTimeIndID, Type, Status, Msg, OtherPlayers) Values(now(), 6, 143, 'swap offer', 'swap open', 'Chris Coogan would like to swap his tee time on May 25, 2024 at The Preserve 8:50 (playing with Keith Huizinga, John Sullivan, Mike Peterson) with one of your tee times.', 'Keith Huizinga, John Sullivan, Mike Peterson');
+
+#gets the swapid to equal the SID after initial creation
+Update SubSwap set SwapID = 14 Where SID = 14;
+
+# blank for sheets concat to create available players, must change swapid
+Insert into SubSwap(RequestDate, PlayerID, Type, Status, SwapID) Values(now(), , 'swap available player', 'swap open', 14)
+
+# initial offer into LogTest
+Insert into LogTest(sentDate, type, messageID, requestDate, offerID, refID, msg, to_number) Values(now(), 'swap offer', 'fake mID', '2024-05-25', 6, 14, 'Coogan swap offer 5/25 TPOM 850a', '17083342800');
+
+#AVs into LogTest
+Insert into LogTest(sentDate, type, messageID, requestDate, offerID, refID, msg, to_number) Values(now(), 'swap offer sent', 'fake mID', '2024-05-25', 1, 1, 'Coogan swap offer 5/25 TPOM 850a sent to Brown', '17737443434');
+
+# create counter offers for Coogan spot, Mike Ryan
+Insert into SubSwap(RequestDate, PID, TeeTimeIndID, Type, Status, Msg, OtherPlayers, SwapID) Values(now(),23, 216, 'swap counter', 'swap open', 'Mike Ryan offers June 15th at The Preserve 900a, playing with John Griffin, Mike Peterson, Kelly Taira ', 'John Griffin, Mike Peterson, Kelly Taira ', 14);
+
+# create counter offers for Coogan spot, Paul Deutsch
+Insert into SubSwap(RequestDate, PID, TeeTimeIndID, Type, Status, Msg, OtherPlayers, SwapID) Values(now(),23, 216, 'swap counter', 'swap open', 'Mike Ryan offers June 15th at The Preserve 900a, playing with John Griffin, Mike Peterson, Kelly Taira ', 'John Griffin, Mike Peterson, Kelly Taira ', 14);
+
+
+### SubSwap Select 
+Select SID, RequestDate, PID, TeeTimeIndID, Type, Status, substring(Msg, 1, 10),OtherPlayers, SwapID from SubSwap;
+
+
+20241213 1027a
+Happy half bday Tink!  Working above.  Man, knew this swap process was complex with lots of decision tree branches, but.... yeesh.
+
+Item:
+add the testing data for swaps to the data loader file.
+
+
+#Mike Ryan Other Players for Swap Offer to Coogan
+Select T.gDate
+, P.FirstName
+, P.LastName 
+from TeeTimesInd T left outer join Players P
+on T.PID = P.ID
+Where gDate = '2024-06-15' 
+and CourseID = 3
+and T.PID != 23;
+
+Select T.gDate
+, P.FirstName
+, P.LastName 
+from TeeTimesInd T left outer join Players P
+on T.PID = P.ID
+Where gDate = '2024-07-20' 
+and CourseID = 3
+and T.PID != 23;
+
+Select T.gDate
+, P.FirstName
+, P.LastName 
+from TeeTimesInd T left outer join Players P
+on T.PID = P.ID
+Where gDate = '2024-08-17' 
+and CourseID = 2
+and T.PID != 23;
+
+Select T.gDate
+, P.FirstName
+, P.LastName 
+from TeeTimesInd T left outer join Players P
+on T.PID = P.ID
+Where gDate = '2024-08-24' 
+and CourseID = 2
+and T.PID != 23;
+
+
+#Paul Deutsch Other Players for Swap Offer to Coogan
+Select T.gDate
+, P.FirstName
+, P.LastName 
+from TeeTimesInd T left outer join Players P
+on T.PID = P.ID
+Where gDate = '2024-06-29' 
+and CourseID = 3
+and T.PID != 18;
+
+Select T.gDate
+, P.FirstName
+, P.LastName 
+from TeeTimesInd T left outer join Players P
+on T.PID = P.ID
+Where gDate = '2024-07-06' 
+and CourseID = 2
+and T.PID != 18;
+
+Select T.gDate
+, P.FirstName
+, P.LastName 
+from TeeTimesInd T left outer join Players P
+on T.PID = P.ID
+Where gDate = '2024-08-17' 
+and CourseID = 1
+and T.PID != 18;
+
+
+20241216 1017a
+Taking a little bit to get the engine going on Monday morning.  I've been in this planning/architecting/paper trading swap process for....  10 days technically.  Started just trying to figure out the process on 12/6.  I knew it was complex.  But, good news, I think I am close to ironing out the 90% (with the last 10 being crap I missed and becomes obv when I try to make it all work).  And...  I should be able to chunk this all off into prompts and have the C write most of this?  Just like magic....
+
+At the risk of over complicating stuff, what will my prompt list look like?
+
+1. DB adds - SubSwap and Log tables 
+2. swaprequest.html - update to include inserts to new tables
+3. Adds to subswap.html - new tables: Available Swaps & Available Counters
+4. creation of swapoffer.html
+5. creation of swapcounter.html
+6. creation of swapcounteraccept.html
+7. creation of swapfinal.html
+8. [not sure I will need this since I will use the new tables + pages to run user tests and create this data] - DataLoader.py additions - mostly test data
+
+
+Select UID, sentDate, type, messageID, requestDate, offerID, receiveID, substring(msg, 1, 11), status, to_number from Log;
+
+413p.  Alright, have really banhged shit out today.  Just got back from taking the boys to the muddy woods.  Let's figure out next steps:
+
+1. git update to get the code in the repo up to date
+- add to gitignore file
+2. ...  not gonna do a new virt env.  I suspect there is a lot to that.  Also, with the dataloader.py, when I do create a new env, it can be fresh and clean.
+3. create the new tables
+4. insert the test data
+	- 2 swap offers (Prouty & Coogan)
+	- 2 swap counters (Ryan & Deutsh)
+	- each sawp offer + the 12 Avail Plyrs that received an alert
+	- I have NOT added logging for the swap counters.  I should
+	
+	/Users/cprouty/Dropbox/Dev/Python/Apps/GRPR/GRPRswapProcessPrompts.txt

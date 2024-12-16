@@ -1,3 +1,4 @@
+import os
 from django.shortcuts import render
 from django.http import HttpResponse
 from django.http import HttpResponseBadRequest
@@ -7,6 +8,9 @@ from GRPR.forms import DateForm
 from datetime import datetime
 from dateutil import parser
 from dateutil.parser import ParserError
+
+# Import the Twilio client (for future use)
+from twilio.rest import Client
 
 
 # Create your views here.
@@ -94,11 +98,11 @@ def schedule_view(request):
 
 def subswap_view(request):
     # Hardcoded user for now
-    user_name = "Chris Prouty"
+    user_name = "Chris Coogan"
 
     # Query to find the user's unique ID
     try:
-        user = Players.objects.get(FirstName="Chris", LastName="Prouty")
+        user = Players.objects.get(FirstName="Chris", LastName="Coogan")
     except Players.DoesNotExist:
         return HttpResponse("User not found.", status=404)
 
@@ -162,11 +166,37 @@ def subrequestsent_view(request):
     # Get all players and subtract playing players and Course Credit (ID 25)
     available_players = Players.objects.exclude(id__in=list(playing_players) + [25])
 
+    # Initialize the Twilio client
+    account_sid = os.getenv('TWILIO_ACCOUNT_SID')
+    auth_token = os.getenv('TWILIO_AUTH_TOKEN')
+    client = Client(account_sid, auth_token)
+
+    # Generate Twilio message code for each available player
+    twilio_messages = []
+    for player in available_players:
+        msg = sub_offer
+        message_code = f"""
+        msg = "{msg}"
+        message = client.messages.create(
+            from_='+18449472599',
+            body=msg,
+            to={player.Mobile}
+        )
+        """
+        twilio_messages.append(message_code)
+    
+    #holy crap, this worked.  hard code to send sub offer to Chris Prouty
+    to_number = '13122961817'
+    message = client.messages.create(from_='+18449472599',body=sub_offer,to= to_number )
+    mID = message.sid
+    print(mID, ' sent to ', to_number)
+    
     # Pass data to the template
     context = {
         'date': date_raw,
         'sub_offer': sub_offer,
         'available_players': available_players,
+        'twilio_messages': twilio_messages,
     }
     return render(request, 'GRPR/subrequestsent.html', context)
 

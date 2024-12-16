@@ -51,6 +51,12 @@
                 {% endfor %}
             </tbody>
         </table>
+        <h2>Twilio Message Code</h2>
+        <pre>
+            {% for message in twilio_messages %}
+                {{ message }}
+            {% endfor %}
+        </pre>
     </div>
 </body>
 </html>
