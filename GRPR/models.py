@@ -51,3 +51,40 @@ class Players(models.Model):
 
     class Meta:
         db_table = "Players"
+
+
+class SubSwap(models.Model):
+    RequestDate = models.DateTimeField()
+    PID = models.IntegerField()
+    TeeTimeIndID = models.IntegerField()
+    Type = models.CharField(max_length=32)
+    Status = models.CharField(max_length=32)
+    Msg = models.CharField(max_length=2048)
+    OtherPlayers = models.CharField(max_length=1024)
+    SwapID = models.IntegerField()
+
+    class Meta:
+        db_table = "SubSwap"
+    
+    # This is usable to help make tables human readable in the Django admin interface
+    # I am not using it for now, though recommended by C.  May come back to it later
+    # def __str__(self):
+    #     return f"SubSwap {self.id} - {self.Type} - {self.Status}"
+
+
+class Log(models.Model):
+    SentDate = models.DateTimeField()
+    Type = models.CharField(max_length=256)
+    MessageID = models.CharField(max_length=256)
+    RequestDate = models.DateTimeField()
+    OfferID = models.IntegerField()
+    ReceiveID = models.IntegerField()
+    RefID = models.IntegerField()
+    Msg = models.CharField(max_length=1024)
+    Status = models.IntegerField()
+    To_number = models.CharField(max_length=16)
+
+    class Meta:
+        db_table = "Log"
+
+
