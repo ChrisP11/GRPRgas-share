@@ -61,7 +61,7 @@ class SubSwap(models.Model):
     Status = models.CharField(max_length=32)
     Msg = models.CharField(max_length=2048)
     OtherPlayers = models.CharField(max_length=1024)
-    SwapID = models.IntegerField()
+    SwapID = models.IntegerField(null=True, blank=True) 
 
     class Meta:
         db_table = "SubSwap"

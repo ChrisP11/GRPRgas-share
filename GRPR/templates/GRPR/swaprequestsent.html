@@ -49,8 +49,8 @@
                         <td>{{ player.LastName }}</td>
                         <td>{{ player.Mobile }}</td>
                         <td>
-                            {% for date in player.swap_dates %}
-                                {{ date }}<br>
+                            {% for date, id in player.swap_dates %}
+                                {{ date }} <br>
                             {% endfor %}
                         </td>
                     </tr>

@@ -2,7 +2,8 @@ import os
 from django.shortcuts import render
 from django.http import HttpResponse
 from django.http import HttpResponseBadRequest
-from GRPR.models import Courses, TeeTimesInd, Players
+from django.utils import timezone
+from GRPR.models import Courses, TeeTimesInd, Players, SubSwap
 from django.db import connection
 from GRPR.forms import DateForm
 from datetime import datetime
@@ -83,6 +84,7 @@ def schedule_view(request):
 
                 other_players = [f"{gp.PID.FirstName} {gp.PID.LastName}" for gp in group_players]
                 schedule.append({
+                    "id": teetime.id,  # Add the ID column here
                     "gDate": teetime.gDate,
                     "courseName": teetime.CourseID.courseName,
                     "courseTimeSlot": teetime.CourseID.courseTimeSlot,
@@ -99,6 +101,7 @@ def schedule_view(request):
 def subswap_view(request):
     # Hardcoded user for now
     user_name = "Chris Coogan"
+    user_id = "6"
 
     # Query to find the user's unique ID
     try:
@@ -117,6 +120,7 @@ def subswap_view(request):
         ).exclude(PID=user)
 
         schedule_data.append({
+            'tt_id': teetime.id,  # Add the ID column here
             'date': teetime.gDate,
             'course': teetime.CourseID.courseName,
             'time_slot': teetime.CourseID.courseTimeSlot,
@@ -126,8 +130,8 @@ def subswap_view(request):
         })
 
     context = {
-        'user_name': user_name,
-        'user_id': user.id,  # Pass the unique user ID to the template
+        'user_name': user_name, # hard coded above
+        'user_id': user_id,  # hard coded above
         'schedule_data': schedule_data,
     }
     print("context", context)
@@ -159,6 +163,7 @@ def subrequestsent_view(request):
     date_raw = request.GET.get('date', 'Unknown date')
     gDate = parser.parse(date_raw).strftime("%Y-%m-%d") #this normalizes the raw date and converts it to YYYY-MM-DD format
     sub_offer = request.GET.get('sub_offer', '')
+    tt_id = request.GET.get('tt_id', 'Unknown Tee Time ID')
 
     # Get players already playing on the date
     playing_players = TeeTimesInd.objects.filter(gDate=gDate).values_list('PID_id', flat=True)
@@ -208,6 +213,8 @@ def swaprequest_view(request):
     time_slot = request.GET.get('time_slot', 'Unknown time slot')
     other_players = request.GET.get('other_players', 'No other players')
     user_name = request.GET.get('user_name', 'Unknown User')
+    user_id = request.GET.get('user_id', 'Unknown User ID')
+    tt_id = request.GET.get('tt_id', 'Unknown Tee Time ID')
 
     # Pass the data to the template
     context = {
@@ -216,6 +223,8 @@ def swaprequest_view(request):
         'time_slot': time_slot,
         'other_players': other_players,
         'user_name': user_name,
+        'user_id': user_id,
+        'tt_id': tt_id,
     }
     return render(request, 'GRPR/swaprequest.html', context)
 
@@ -231,6 +240,7 @@ def swaprequestsent_view(request):
     time_slot = request.GET.get('time_slot', 'Unknown time slot')
     user_name = request.GET.get('user_name', 'Unknown User')
     other_players = request.GET.get('other_players', 'No other players')
+    tt_id = request.GET.get('tt_id', 'Unknown TT ID')
 
     # Message to display at the top of the page
     swap_offer = f"{user_name} would like to swap his tee time on {date_raw} at {course} {time_slot} (playing with {other_players}) with one of your tee times."
@@ -249,22 +259,77 @@ def swaprequestsent_view(request):
         pk__in=players_on_requested_date
     ).exclude(pk=25)  # Exclude Course Credit
 
+    print("")
+    print("")
+    print("")
+    print("tt_id", tt_id)
+    print("swap_offer", swap_offer)
+    print("other_players", other_players)
+    print("")
+    print("")
+    
+
+    # Insert the initial swap offer into SubSwap
+    initial_swap = SubSwap.objects.create(
+        RequestDate=timezone.now(),
+        PID=swap_request_player.id,
+        TeeTimeIndID=tt_id,
+        Type="swap offer",
+        Status="swap open",
+        Msg=swap_offer,
+        OtherPlayers=other_players
+    )
+
+    print("")
+    print("")
+    print("")
+    print("")
+    print("Init Swap")
+    print(initial_swap)
+    print("")
+    print("")
+    print("")
+    print("")
+
+    # Update the SwapID of the initial swap offer
+    initial_swap.SwapID = initial_swap.id
+    initial_swap.save()
+
+    # Insert a swap offer for each available player
+    for player in available_players:
+        SubSwap.objects.create(
+            RequestDate=timezone.now(),
+            PID=player.id,
+            TeeTimeIndID=tt_id,
+            Type="swap offer sent",
+            Status="swap open",
+            Msg=swap_offer,
+            OtherPlayers=other_players,
+            SwapID=initial_swap.id
+        )
+
     # Generate Available Swap Dates for each available player
     filtered_players = []  # List to store players with available swap dates
     for player in available_players:
         # Find dates the available player is playing in the future
-        available_player_dates = TeeTimesInd.objects.filter(PID=player, gDate__gt=gDate).values_list('gDate', flat=True)
+        available_player_dates = TeeTimesInd.objects.filter(PID=player, gDate__gt=gDate).values_list('gDate', 'id')
 
         # Find dates the swap request player is playing in the future
         swap_request_player_dates = TeeTimesInd.objects.filter(PID=swap_request_player, gDate__gt=gDate).values_list('gDate', flat=True)
 
         # Find dates where the available player is playing, but the swap request player is not
-        swap_dates = sorted([d for d in available_player_dates if d not in swap_request_player_dates])
+        swap_dates = sorted([(d[0], d[1]) for d in available_player_dates if d[0] not in swap_request_player_dates])
 
         # Only add the player to the filtered list if they have available swap dates
         if swap_dates:
             player.swap_dates = swap_dates
-            filtered_players.append(player)
+            filtered_players.append({
+                'id': player.id,
+                'FirstName': player.FirstName,
+                'LastName': player.LastName,
+                'Mobile': player.Mobile,
+                'swap_dates': swap_dates,
+            })
 
     context = {
         'swap_offer': swap_offer,

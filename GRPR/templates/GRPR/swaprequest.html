@@ -32,6 +32,8 @@
         <p>
             Please review and confirm the following Swap Request.  <strong>IF </strong>you click 'Confirm', the following message will be sent to all available members in the group.
         </p>
+        <p>TT ID should be here:  {{ tt_id }}</p>
+        <p>course is fine:  {{ course }}</p>
         <blockquote class="blockquote">
             <strong>{{ user_name }}</strong> would like to swap his tee time on <strong>{{ date }}</strong> at 
             <strong>{{ course }}</strong> <strong>{{ time_slot }}</strong> (playing with <strong>{{ other_players }}</strong>) 
@@ -40,7 +42,7 @@
 
         <!-- Action Buttons -->
         <div class="d-flex">
-            <a href="{% url 'swaprequestsent_view' %}?date={{ date }}&course={{ course }}&time_slot={{ time_slot }}&user_name={{ user_name }}&other_players={{ other_players }}" class="btn btn-primary">Confirm</a>
+            <a href="{% url 'swaprequestsent_view' %}?date={{ date }}&course={{ course }}&time_slot={{ time_slot }}&user_name={{ user_name }}&other_players={{ other_players }}&tt_id={{ tt_id }}" class="btn btn-primary">Confirm</a>
             <a href="{% url 'subswap_view' %}" class="btn btn-secondary-custom">Cancel the Swap Request</a>
         </div>
     </div>
