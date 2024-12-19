@@ -76,12 +76,12 @@ class Log(models.Model):
     SentDate = models.DateTimeField()
     Type = models.CharField(max_length=256)
     MessageID = models.CharField(max_length=256)
-    RequestDate = models.DateTimeField()
-    OfferID = models.IntegerField()
-    ReceiveID = models.IntegerField()
-    RefID = models.IntegerField()
+    RequestDate = models.DateTimeField(null=True, blank=True) 
+    OfferID = models.IntegerField(null=True, blank=True) 
+    ReceiveID = models.IntegerField(null=True, blank=True) 
+    RefID = models.IntegerField(null=True, blank=True) 
     Msg = models.CharField(max_length=1024)
-    Status = models.IntegerField()
+    Status = models.IntegerField(null=True, blank=True)
     To_number = models.CharField(max_length=16)
 
     class Meta:

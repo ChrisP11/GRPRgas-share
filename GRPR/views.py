@@ -3,14 +3,15 @@ from django.shortcuts import render
 from django.http import HttpResponse
 from django.http import HttpResponseBadRequest
 from django.utils import timezone
-from GRPR.models import Courses, TeeTimesInd, Players, SubSwap
+from GRPR.models import Courses, TeeTimesInd, Players, SubSwap, Log
 from django.db import connection
 from GRPR.forms import DateForm
 from datetime import datetime
 from dateutil import parser
 from dateutil.parser import ParserError
+from django.conf import settings  # Import settings
 
-# Import the Twilio client (for future use)
+# Import the Twilio client
 from twilio.rest import Client
 
 
@@ -171,31 +172,23 @@ def subrequestsent_view(request):
     # Get all players and subtract playing players and Course Credit (ID 25)
     available_players = Players.objects.exclude(id__in=list(playing_players) + [25])
 
-    # Initialize the Twilio client
-    account_sid = os.getenv('TWILIO_ACCOUNT_SID')
-    auth_token = os.getenv('TWILIO_AUTH_TOKEN')
-    client = Client(account_sid, auth_token)
-
-    # Generate Twilio message code for each available player
-    twilio_messages = []
-    for player in available_players:
-        msg = sub_offer
-        message_code = f"""
-        msg = "{msg}"
-        message = client.messages.create(
-            from_='+18449472599',
-            body=msg,
-            to={player.Mobile}
-        )
-        """
-        twilio_messages.append(message_code)
+    if settings.TWILIO_ENABLED:
+        # Initialize the Twilio client
+        account_sid = settings.TWILIO_ACCOUNT_SID
+        auth_token = settings.TWILIO_AUTH_TOKEN
+        client = Client(account_sid, auth_token)
+        
+        for player in available_players:
+            msg = sub_offer
+            # to_number=player.Mobile
+            to_number='13122961817'
+            message = client.messages.create(from_='+18449472599',body=msg,to=to_number )
+            mID = message.sid
+    else:
+        print("Twilio is off")
     
-    #holy crap, this worked.  hard code to send sub offer to Chris Prouty
-    to_number = '13122961817'
-    message = client.messages.create(from_='+18449472599',body=sub_offer,to= to_number )
-    mID = message.sid
-    print(mID, ' sent to ', to_number)
-    
+    twilio_messages= "blank for now"
+       
     # Pass data to the template
     context = {
         'date': date_raw,
@@ -258,17 +251,7 @@ def swaprequestsent_view(request):
     available_players = Players.objects.exclude(
         pk__in=players_on_requested_date
     ).exclude(pk=25)  # Exclude Course Credit
-
-    print("")
-    print("")
-    print("")
-    print("tt_id", tt_id)
-    print("swap_offer", swap_offer)
-    print("other_players", other_players)
-    print("")
-    print("")
     
-
     # Insert the initial swap offer into SubSwap
     initial_swap = SubSwap.objects.create(
         RequestDate=timezone.now(),
@@ -280,33 +263,122 @@ def swaprequestsent_view(request):
         OtherPlayers=other_players
     )
 
-    print("")
-    print("")
-    print("")
-    print("")
-    print("Init Swap")
-    print(initial_swap)
-    print("")
-    print("")
-    print("")
-    print("")
-
     # Update the SwapID of the initial swap offer
     initial_swap.SwapID = initial_swap.id
     initial_swap.save()
 
-    # Insert a swap offer for each available player
-    for player in available_players:
-        SubSwap.objects.create(
+     # Check if Twilio is enabled
+    if settings.TWILIO_ENABLED:
+        # Initialize the Twilio client
+        account_sid = settings.TWILIO_ACCOUNT_SID
+        auth_token = settings.TWILIO_AUTH_TOKEN
+        client = Client(account_sid, auth_token)
+
+        # Generate text message and send to Offering Player
+        msg = "This msg has been sent to all of the players available for your request date: '" + swap_offer + "'      you will be able to see this offer and status on the sub swap page."
+        # hard code to send sub offer to Chris Prouty
+        to_number = '13122961817'
+        # to_number=swap_request_player.Mobile
+        message = client.messages.create(from_='+18449472599',body=msg,to= to_number )
+        mID = message.sid
+    else:
+        # still be able to fill in appropriate fields in the tables
+        mID = "Twilio turned off"
+        msg = "This msg has been sent to all of the players available for your request date: '" + swap_offer + "'      you will be able to see this offer and status on the sub swap page."
+        to_number=swap_request_player.Mobile
+
+    # Insert the initial swap offer into Log
+    Log.objects.create(
+        SentDate=timezone.now()
+        ,Type="Swap Offer"
+        ,MessageID=mID
+        ,RequestDate=gDate
+        ,OfferID=swap_request_player.id
+        ,RefID=initial_swap.id
+        ,Msg=swap_offer
+        ,To_number=to_number
+    )
+
+     # Check if Twilio is enabled
+    if settings.TWILIO_ENABLED:
+        # Initialize the Twilio client
+        account_sid = settings.TWILIO_ACCOUNT_SID
+        auth_token = settings.TWILIO_AUTH_TOKEN
+        client = Client(account_sid, auth_token)
+
+        print("")
+        print("")
+        print("")
+        print("twilio enablement process ran")
+        print("")
+        print("")
+        print("")
+        print("")
+
+
+        for player in available_players:
+            SubSwap.objects.create(
             RequestDate=timezone.now(),
             PID=player.id,
             TeeTimeIndID=tt_id,
-            Type="swap offer sent",
-            Status="swap open",
+            Type="Swap Offer Sent",
+            Status="Swap Open",
             Msg=swap_offer,
             OtherPlayers=other_players,
             SwapID=initial_swap.id
         )
+        
+            # Generate and send text to each available player
+            msg = player.Mobile + " " + swap_offer + " Use this link to pick a date to swap."
+            # hard code to send sub offer to Chris Prouty
+            to_number = '13122961817'
+            # to_number=player.Mobile
+            message = client.messages.create(from_='+18449472599',body=msg,to=to_number )
+            # mID = "fake Mib"
+            mID = message.sid
+
+            # Insert into Log table for tracking
+            Log.objects.create(
+            SentDate=timezone.now()
+            ,Type="Swap Offer Sent"
+            ,MessageID=mID
+            ,RequestDate=gDate
+            ,OfferID=swap_request_player.id
+            ,ReceiveID=player.id
+            ,RefID=initial_swap.id
+            ,Msg=swap_offer
+            ,To_number=to_number
+        )
+    else:
+        for player in available_players:
+            SubSwap.objects.create(
+            RequestDate=timezone.now(),
+            PID=player.id,
+            TeeTimeIndID=tt_id,
+            Type="Swap Offer Sent",
+            Status="Swap Open",
+            Msg=swap_offer,
+            OtherPlayers=other_players,
+            SwapID=initial_swap.id
+        )
+            # fill out the needed variables with false data since Twilio is off
+            mID = 'Twilio off'
+            to_number=player.Mobile
+            msg = player.Mobile + " " + swap_offer + " Use this link to pick a date to swap."
+            
+            # Insert into Log table for tracking
+            Log.objects.create(
+            SentDate=timezone.now()
+            ,Type="Swap Offer Sent"
+            ,MessageID=mID
+            ,RequestDate=gDate
+            ,OfferID=swap_request_player.id
+            ,ReceiveID=player.id
+            ,RefID=initial_swap.id
+            ,Msg=swap_offer
+            ,To_number=to_number
+        )
+                
 
     # Generate Available Swap Dates for each available player
     filtered_players = []  # List to store players with available swap dates
