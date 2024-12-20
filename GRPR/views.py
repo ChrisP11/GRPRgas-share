@@ -1,4 +1,5 @@
 import os
+import json
 from django.shortcuts import render, get_object_or_404
 from django.http import HttpResponse
 from django.http import HttpResponseBadRequest
@@ -143,10 +144,23 @@ def subswap_view(request):
             CourseID=teetime.CourseID, gDate=teetime.gDate
         ).exclude(PID=user_id)
 
+        # Fetch the OfferID for the swap offer
+        try:
+            swap_offer = SubSwap.objects.get(SwapID=swap.SwapID, Type='Swap Offer')
+            offer_pid = swap_offer.PID.id
+        except SubSwap.DoesNotExist:
+            offer_pid = None
+            print(f"No swap offer found for SwapID: {swap.SwapID}")
+
+
         available_swaps_data.append({
             'date': teetime.gDate,
+            'ymdDate': teetime.gDate.strftime("%Y-%m-%d"), #converts date to YYYY-MM-DD
             'course': teetime.CourseID.courseName,
             'time_slot': teetime.CourseID.courseTimeSlot,
+            'swapID': swap.SwapID,
+            'Msg': swap.Msg,
+            'OfferID': offer_pid,
             'other_players': ", ".join([
                 f"{player.PID.FirstName} {player.PID.LastName}" for player in other_players
             ])
@@ -158,7 +172,6 @@ def subswap_view(request):
         'schedule_data': schedule_data,
         'available_swaps_data': available_swaps_data,
     }
-    print("context", context)
 
     return render(request, 'GRPR/subswap.html', context)
 
@@ -460,6 +473,7 @@ def swapoffer_view(request):
         ).exclude(PID=user)
 
         available_dates_data.append({
+            'tt_id': teetime.id,
             'date': teetime.gDate,
             'player': f"{user.FirstName} {user.LastName}",
             'course': teetime.CourseID.courseName,
@@ -472,6 +486,122 @@ def swapoffer_view(request):
     context = {
         'msg': msg,
         'available_dates': available_dates_data,
+        'user_id': user_id,
+        'swap_id': swap_id,
     }
     return render(request, 'GRPR/swapoffer.html', context)
 
+def swapcounter_view(request):
+    user_id = request.POST.get('user_id')
+    swap_id = request.POST.get('swap_id')
+    offer_msg = request.POST.get('offer_msg')
+    selected_dates = request.POST.get('selected_dates')
+
+    selected_dates = json.loads(selected_dates)
+
+    # Fetch the user instance
+    user = get_object_or_404(Players, pk=user_id)
+
+    # Fetch the offer player instance
+    swap_offer = get_object_or_404(SubSwap, pk=swap_id, Type='Swap Offer')
+    offer_player = swap_offer.PID
+
+    # Fetch the mobile numbers
+    # offer_mobile = offer_player.Mobile
+    # counter_mobile = user.Mobile
+    # hard code to Prouty for now
+    offer_mobile = '13122961817'
+    counter_mobile = '13122961817'
+
+    # Fetch the original offer details
+    offer_date = swap_offer.TeeTimeIndID.gDate
+    offer_course = swap_offer.TeeTimeIndID.CourseID.courseName
+    offer_timeslot = swap_offer.TeeTimeIndID.CourseID.courseTimeSlot
+
+    # Create messages
+    offer_msg = f"{user.FirstName} {user.LastName} has proposed dates to swap for your tee time on {offer_date} at {offer_course} {offer_timeslot}am."
+    counter_msg = f"You have proposed dates to swap for {offer_player.FirstName} {offer_player.LastName}'s tee time on {offer_date} at {offer_course} {offer_timeslot}am."
+
+    # Send Twilio messages
+    if settings.TWILIO_ENABLED:
+        client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+
+        # Send message to offer player
+        message = client.messages.create(from_='+18449472599', body=offer_msg, to=offer_mobile)
+        offer_mID = message.sid
+
+        # Send message to counter player
+        message = client.messages.create(from_='+18449472599', body=counter_msg, to=counter_mobile)
+        counter_mID = message.sid
+
+        # Insert into Log table for offer player
+        Log.objects.create(
+            SentDate=timezone.now(),
+            Type='Swap Counter',
+            MessageID=offer_mID,
+            RequestDate=offer_date,
+            OfferID=user_id,
+            ReceiveID=offer_player.id,
+            RefID=swap_id,
+            To_number=offer_mobile,
+            Msg=offer_msg
+        )
+
+        # Insert into Log table for counter player
+        Log.objects.create(
+            SentDate=timezone.now(),
+            Type='Swap Counter',
+            MessageID=counter_mID,
+            RequestDate=offer_date,
+            OfferID=user_id,
+            ReceiveID=offer_player.id,
+            RefID=swap_id,
+            To_number=counter_mobile,
+            Msg=counter_msg
+        )
+    else:
+        print('Twilio is not enabled')
+        # Insert into Log table for offer player
+        Log.objects.create(
+            SentDate=timezone.now(),
+            Type='Swap Counter',
+            MessageID='fake Mib',
+            RequestDate=offer_date,
+            OfferID=user_id,
+            ReceiveID=offer_player.id,
+            RefID=swap_id,
+            To_number=offer_mobile,
+            Msg=offer_msg
+        )
+
+        # Insert into Log table for counter player
+        Log.objects.create(
+            SentDate=timezone.now(),
+            Type='Swap Counter',
+            MessageID='fake Mib',
+            RequestDate=offer_date,
+            OfferID=user_id,
+            ReceiveID=offer_player.id,
+            RefID=swap_id,
+            To_number=counter_mobile,
+            Msg=counter_msg
+        )
+
+    # Insert into SubSwap table for each selected date
+    for date in selected_dates:
+        SubSwap.objects.create(
+            RequestDate=timezone.now(),
+            PID=user,
+            Type='Swap Counter',
+            Status='Swap Open',
+            Msg=counter_msg,
+            OtherPlayers=date['other_players'],
+            SwapID=swap_id,
+            TeeTimeIndID_id=date['tt_id']
+        )
+
+    context = {
+        'offer_msg': offer_msg,
+        'available_dates': selected_dates,
+    }
+    return render(request, 'GRPR/swapcounter.html', context)

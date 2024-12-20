@@ -72,6 +72,7 @@
 
                 <tr>
 
+                    <th>SwapID</th>
                     <th>Date</th>
 
                     <th>Course</th>
@@ -92,6 +93,8 @@
 
                 <tr>
 
+                    <td>{{ swap.swapID }}</td>
+                    
                     <td>{{ swap.date }}</td>
 
                     <td>{{ swap.course }}</td>
@@ -102,7 +105,7 @@
 
                     <td>
 
-                        <a href="{% url 'swapoffer_view' %}?userid={{ user_id }}&swapID={{ swap.id }}&Msg={{ swap.Msg }}&RequestDate={{ swap.date }}&OfferID={{ swap.OfferID }}" class="btn btn-primary btn-sm">Review Offer</a>
+                        <a href="{% url 'swapoffer_view' %}?userid={{ user_id }}&swapID={{ swap.swapID }}&Msg={{ swap.Msg }}&RequestDate={{ swap.ymdDate }}&OfferID={{ swap.OfferID }}" class="btn btn-primary btn-sm">Review Offer</a>
                         
 
                     </td>

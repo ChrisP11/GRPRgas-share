@@ -42,26 +42,61 @@
             </thead>
             <tbody>
                 {% for entry in available_dates %}
-                <tr>
-                    <td>{{ entry.date }}</td>
-                    <td>{{ entry.player }}</td>
-                    <td>{{ entry.course }}</td>
-                    <td>{{ entry.time_slot }}</td>
-                    <td>{{ entry.other_players }}</td>
+                <tr data-tt-id="{{ entry.tt_id }}">
+                    <td class="date">{{ entry.date }}</td>
+                    <td class="player">{{ entry.player }}</td>
+                    <td class="course">{{ entry.course }}</td>
+                    <td class="time_slot">{{ entry.time_slot }}</td>
+                    <td class="other_players">{{ entry.other_players }}</td>
                     <td><input type="checkbox" class="select-checkbox"></td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
         
-        <button class="btn btn-primary">Offer Checked Dates</button>
+        <button id="offer-checked-dates" class="btn btn-primary">Offer Checked Dates</button>
         <a href="{% url 'subswap_view' %}" class="btn btn-secondary">Cancel</a>
+        <p id="error-msg" style="color: red; font-weight: bold; display: none;">You need to choose at least one date to make an offer to swap dates</p>
     </div>
 
     <script>
         document.getElementById('select-all').addEventListener('change', function() {
             const checkboxes = document.querySelectorAll('.select-checkbox');
             checkboxes.forEach(checkbox => checkbox.checked = this.checked);
+        });
+
+        document.getElementById('offer-checked-dates').addEventListener('click', function() {
+            const checkboxes = document.querySelectorAll('.select-checkbox:checked');
+            if (checkboxes.length === 0) {
+                document.getElementById('error-msg').style.display = 'block';
+                return;
+            }
+
+            const selectedDates = [];
+            checkboxes.forEach(checkbox => {
+                const row = checkbox.closest('tr');
+                selectedDates.push({
+                    tt_id: row.dataset.ttId,
+                    date: row.querySelector('.date').textContent,
+                    player: row.querySelector('.player').textContent,
+                    course: row.querySelector('.course').textContent,
+                    time_slot: row.querySelector('.time_slot').textContent,
+                    other_players: row.querySelector('.other_players').textContent
+                });
+            });
+
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = "{% url 'swapcounter_view' %}";
+            form.innerHTML = `
+                <input type="hidden" name="user_id" value="{{ user_id }}">
+                <input type="hidden" name="swap_id" value="{{ swap_id }}">
+                <input type="hidden" name="offer_msg" value="{{ msg }}">
+                <input type="hidden" name="selected_dates" value='${JSON.stringify(selectedDates)}'>
+                {% csrf_token %}
+            `;
+            document.body.appendChild(form);
+            form.submit();
         });
     </script>
 </body>

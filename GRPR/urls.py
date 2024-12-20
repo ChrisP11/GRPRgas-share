@@ -11,4 +11,5 @@ urlpatterns = [
     path('swaprequest', views.swaprequest_view, name='swaprequest_view'),
     path('swaprequestsent', views.swaprequestsent_view, name='swaprequestsent_view'),
     path('swapoffer/', views.swapoffer_view, name='swapoffer_view'), 
+     path('swapcounter/', views.swapcounter_view, name='swapcounter_view'), 
 ]
