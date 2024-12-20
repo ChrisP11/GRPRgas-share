@@ -60,6 +60,61 @@
                 {% endfor %}
             </tbody>
         </table>
+
+        <h1>Available Swaps</h1>
+        <h7> (requires swapping one of your future dates for the date below)</h7>
+
+        <!-- Available Swaps Table -->
+
+        <table class="table table-striped">
+
+            <thead>
+
+                <tr>
+
+                    <th>Date</th>
+
+                    <th>Course</th>
+
+                    <th>Time Slot</th>
+
+                    <th>Current Foursome</th>
+
+                    <th>Actions</th>
+
+                </tr>
+
+            </thead>
+
+            <tbody>
+
+                {% for swap in available_swaps_data %}
+
+                <tr>
+
+                    <td>{{ swap.date }}</td>
+
+                    <td>{{ swap.course }}</td>
+
+                    <td>{{ swap.time_slot }}</td>
+
+                    <td>{{ swap.other_players }}</td>
+
+                    <td>
+
+                        <a href="{% url 'swapoffer_view' %}?userid={{ user_id }}&swapID={{ swap.id }}&Msg={{ swap.Msg }}&RequestDate={{ swap.date }}&OfferID={{ swap.OfferID }}" class="btn btn-primary btn-sm">Review Offer</a>
+                        
+
+                    </td>
+
+                </tr>
+
+                {% endfor %}
+
+            </tbody>
+
+        </table>
+
     </div>
 
 

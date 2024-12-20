@@ -55,8 +55,8 @@ class Players(models.Model):
 
 class SubSwap(models.Model):
     RequestDate = models.DateTimeField()
-    PID = models.IntegerField()
-    TeeTimeIndID = models.IntegerField()
+    PID = models.ForeignKey('Players', on_delete=models.CASCADE)
+    TeeTimeIndID = models.ForeignKey('TeeTimesInd', on_delete=models.CASCADE)
     Type = models.CharField(max_length=32)
     Status = models.CharField(max_length=32)
     Msg = models.CharField(max_length=2048)

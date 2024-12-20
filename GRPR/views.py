@@ -1,5 +1,5 @@
 import os
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from django.http import HttpResponse
 from django.http import HttpResponseBadRequest
 from django.utils import timezone
@@ -101,27 +101,49 @@ def schedule_view(request):
 
 def subswap_view(request):
     # Hardcoded user for now
-    user_name = "Chris Coogan"
-    user_id = "6"
-
-    # Query to find the user's unique ID
-    try:
-        user = Players.objects.get(FirstName="Chris", LastName="Coogan")
-    except Players.DoesNotExist:
-        return HttpResponse("User not found.", status=404)
+    # user_name = "Chris Coogan"
+    # user_id = "6"
+    # user_name = "Chris Prouty"
+    # user_id = "13"
+    user_name = "Mike Ryan"
+    user_id = "23"
 
     # Fetch the schedule for the user
-    schedule = TeeTimesInd.objects.filter(PID=user).select_related('CourseID').order_by('gDate')
+    schedule = TeeTimesInd.objects.filter(PID=user_id).select_related('CourseID').order_by('gDate')
 
-    # Prepare the data for the table
+    # Prepare the data for the schedule table
     schedule_data = []
     for teetime in schedule:
         other_players = TeeTimesInd.objects.filter(
             CourseID=teetime.CourseID, gDate=teetime.gDate
-        ).exclude(PID=user)
+        ).exclude(PID=user_id)
 
         schedule_data.append({
             'tt_id': teetime.id,  # Add the ID column here
+            'date': teetime.gDate,
+            'course': teetime.CourseID.courseName,
+            'time_slot': teetime.CourseID.courseTimeSlot,
+            'other_players': ", ".join([
+                f"{player.PID.FirstName} {player.PID.LastName}" for player in other_players
+            ])
+        })
+    
+    # Fetch available swaps for the user
+    available_swaps = SubSwap.objects.filter(
+        Type='Swap Offer Sent',
+        Status='Swap Open',
+        PID=user_id
+    ).select_related('TeeTimeIndID', 'TeeTimeIndID__CourseID').order_by('TeeTimeIndID__gDate')
+
+    # Prepare the data for the available swaps table
+    available_swaps_data = []
+    for swap in available_swaps:
+        teetime = swap.TeeTimeIndID
+        other_players = TeeTimesInd.objects.filter(
+            CourseID=teetime.CourseID, gDate=teetime.gDate
+        ).exclude(PID=user_id)
+
+        available_swaps_data.append({
             'date': teetime.gDate,
             'course': teetime.CourseID.courseName,
             'time_slot': teetime.CourseID.courseTimeSlot,
@@ -134,6 +156,7 @@ def subswap_view(request):
         'user_name': user_name, # hard coded above
         'user_id': user_id,  # hard coded above
         'schedule_data': schedule_data,
+        'available_swaps_data': available_swaps_data,
     }
     print("context", context)
 
@@ -235,6 +258,11 @@ def swaprequestsent_view(request):
     other_players = request.GET.get('other_players', 'No other players')
     tt_id = request.GET.get('tt_id', 'Unknown TT ID')
 
+    # Validate tt_id
+    if not tt_id or not tt_id.isdigit():
+        return HttpResponse("Invalid Tee Time ID.", status=400)
+    tt_id = int(tt_id)
+
     # Message to display at the top of the page
     swap_offer = f"{user_name} would like to swap his tee time on {date_raw} at {course} {time_slot} (playing with {other_players}) with one of your tee times."
 
@@ -243,6 +271,9 @@ def swaprequestsent_view(request):
         swap_request_player = Players.objects.get(FirstName=user_name.split()[0], LastName=user_name.split()[1])
     except (Players.DoesNotExist, AttributeError, IndexError):
         return HttpResponse("Swap request player not found or invalid user name format.", status=400)
+    
+     # Fetch the tee time instance (more foreign key crap)
+    tee_time_instance = get_object_or_404(TeeTimesInd, pk=tt_id)
 
     # Find all players playing on the requested date
     players_on_requested_date = TeeTimesInd.objects.filter(gDate=gDate).values_list('PID_id', flat=True)
@@ -255,10 +286,10 @@ def swaprequestsent_view(request):
     # Insert the initial swap offer into SubSwap
     initial_swap = SubSwap.objects.create(
         RequestDate=timezone.now(),
-        PID=swap_request_player.id,
-        TeeTimeIndID=tt_id,
-        Type="swap offer",
-        Status="swap open",
+        PID=swap_request_player, #this dumps the players 'instance' in instead of the ID bc this field in subswap is a foreign key to the Players table.
+        TeeTimeIndID=tee_time_instance, #this assigns the whole instance of teetimesind not just a key
+        Type="Swap Offer",
+        Status="Swap Open",
         Msg=swap_offer,
         OtherPlayers=other_players
     )
@@ -306,21 +337,11 @@ def swaprequestsent_view(request):
         auth_token = settings.TWILIO_AUTH_TOKEN
         client = Client(account_sid, auth_token)
 
-        print("")
-        print("")
-        print("")
-        print("twilio enablement process ran")
-        print("")
-        print("")
-        print("")
-        print("")
-
-
         for player in available_players:
             SubSwap.objects.create(
             RequestDate=timezone.now(),
-            PID=player.id,
-            TeeTimeIndID=tt_id,
+            PID=player, # foreign key thing , player instance not just the ID number
+            TeeTimeIndID=tee_time_instance, #same foreign key thing as above
             Type="Swap Offer Sent",
             Status="Swap Open",
             Msg=swap_offer,
@@ -353,8 +374,8 @@ def swaprequestsent_view(request):
         for player in available_players:
             SubSwap.objects.create(
             RequestDate=timezone.now(),
-            PID=player.id,
-            TeeTimeIndID=tt_id,
+            PID=player,
+            TeeTimeIndID=tee_time_instance, #same foreign key thing as above
             Type="Swap Offer Sent",
             Status="Swap Open",
             Msg=swap_offer,
@@ -410,4 +431,47 @@ def swaprequestsent_view(request):
     return render(request, 'GRPR/swaprequestsent.html', context)
 
 
+def swapoffer_view(request):
+    user_id = request.GET.get('userid')
+    swap_id = request.GET.get('swapID')
+    msg = request.GET.get('Msg')
+    request_date = request.GET.get('RequestDate')
+    offer_id = request.GET.get('OfferID')
+
+    # Fetch the user instance
+    user = get_object_or_404(Players, pk=user_id)
+
+    # Fetch the offer player instance
+    offer_player = get_object_or_404(Players, pk=offer_id)
+
+    # Fetch available dates for the user
+    available_dates = TeeTimesInd.objects.filter(
+        PID=user,
+        gDate__gt=request_date
+    ).exclude(
+        gDate__in=TeeTimesInd.objects.filter(PID=offer_player).values_list('gDate', flat=True)
+    ).select_related('CourseID').order_by('gDate')
+
+    # Prepare the data for the table
+    available_dates_data = []
+    for teetime in available_dates:
+        other_players = TeeTimesInd.objects.filter(
+            CourseID=teetime.CourseID, gDate=teetime.gDate
+        ).exclude(PID=user)
+
+        available_dates_data.append({
+            'date': teetime.gDate,
+            'player': f"{user.FirstName} {user.LastName}",
+            'course': teetime.CourseID.courseName,
+            'time_slot': teetime.CourseID.courseTimeSlot,
+            'other_players': ", ".join([
+                f"{player.PID.FirstName} {player.PID.LastName}" for player in other_players
+            ])
+        })
+
+    context = {
+        'msg': msg,
+        'available_dates': available_dates_data,
+    }
+    return render(request, 'GRPR/swapoffer.html', context)
 
