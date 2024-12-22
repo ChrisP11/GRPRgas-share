@@ -165,12 +165,51 @@ def subswap_view(request):
                 f"{player.PID.FirstName} {player.PID.LastName}" for player in other_players
             ])
         })
+    
+    # Fetch counter offers for the user
+    offered_swaps = SubSwap.objects.filter(
+        PID=user_id,
+        Type='Swap Offer',
+        Status='Swap Open'
+    )
+
+    counter_offers_data = []
+    if offered_swaps.exists():
+        for offer in offered_swaps:
+            # Fetch the original offer details
+            original_offer = SubSwap.objects.filter(
+                Type='Swap Offer',
+                Status='Swap Open',
+                SwapID=offer.SwapID
+            ).select_related('TeeTimeIndID', 'TeeTimeIndID__CourseID').first()
+
+            if original_offer:
+                original_offer_date = f"{original_offer.TeeTimeIndID.gDate} at {original_offer.TeeTimeIndID.CourseID.courseName}  {original_offer.TeeTimeIndID.CourseID.courseTimeSlot}am"
+
+                # Fetch the proposed swaps
+                proposed_swaps = SubSwap.objects.filter(
+                    Type='Swap Counter',
+                    Status='Swap Open',
+                    SwapID=offer.SwapID
+                ).select_related('TeeTimeIndID', 'TeeTimeIndID__CourseID', 'PID')
+
+                for proposed_swap in proposed_swaps:
+                    proposed_swap_date = f"{proposed_swap.TeeTimeIndID.gDate} at {proposed_swap.TeeTimeIndID.CourseID.courseName}  {proposed_swap.TeeTimeIndID.CourseID.courseTimeSlot}am"
+                    proposed_by = f"{proposed_swap.PID.FirstName} {proposed_swap.PID.LastName}"
+
+                    counter_offers_data.append({
+                        'original_offer_date': original_offer_date,
+                        'proposed_swap_date': proposed_swap_date,
+                        'proposed_by': proposed_by,
+                        'swapID': proposed_swap.SwapID
+                    })
 
     context = {
         'user_name': user_name, # hard coded above
         'user_id': user_id,  # hard coded above
         'schedule_data': schedule_data,
         'available_swaps_data': available_swaps_data,
+        'counter_offers_data': counter_offers_data,
     }
 
     return render(request, 'GRPR/subswap.html', context)

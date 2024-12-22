@@ -61,6 +61,7 @@
             </tbody>
         </table>
 
+        {% if available_swaps_data %}
         <h1>Available Swaps</h1>
         <h7> (requires swapping one of your future dates for the date below)</h7>
 
@@ -71,16 +72,10 @@
             <thead>
 
                 <tr>
-
-                    <th>SwapID</th>
                     <th>Date</th>
-
                     <th>Course</th>
-
                     <th>Time Slot</th>
-
                     <th>Current Foursome</th>
-
                     <th>Actions</th>
 
                 </tr>
@@ -88,38 +83,49 @@
             </thead>
 
             <tbody>
-
                 {% for swap in available_swaps_data %}
-
                 <tr>
-
-                    <td>{{ swap.swapID }}</td>
-                    
                     <td>{{ swap.date }}</td>
-
                     <td>{{ swap.course }}</td>
-
                     <td>{{ swap.time_slot }}</td>
-
                     <td>{{ swap.other_players }}</td>
-
                     <td>
 
                         <a href="{% url 'swapoffer_view' %}?userid={{ user_id }}&swapID={{ swap.swapID }}&Msg={{ swap.Msg }}&RequestDate={{ swap.ymdDate }}&OfferID={{ swap.OfferID }}" class="btn btn-primary btn-sm">Review Offer</a>
                         
-
                     </td>
-
                 </tr>
-
                 {% endfor %}
-
             </tbody>
-
         </table>
+        {% endif %}
 
-    </div>
-
+    {% if counter_offers_data %}
+        <h1>Counter Offers</h1>
+        <h7>Tee Times being offered by other players for your swap request/s</h7>
+        
+        <!-- Counter Offers Table -->
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Your Offered Date</th>
+                    <th>Proposed Swap</th>
+                    <th>Proposed by</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for offer in counter_offers_data %}
+                <tr>
+                    <td>{{ offer.original_offer_date }}</td>
+                    <td>{{ offer.proposed_swap_date }}</td>
+                    <td>{{ offer.proposed_by }}</td>
+                    <td><button class="btn btn-primary btn-sm">Accept</button></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
 
     <script>
         document.addEventListener("DOMContentLoaded", () => {
@@ -132,6 +138,6 @@
             });
         });
     </script>
-    
+    </div>
 </body>
 </html>
