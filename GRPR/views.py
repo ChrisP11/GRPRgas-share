@@ -104,10 +104,10 @@ def subswap_view(request):
     # Hardcoded user for now
     # user_name = "Chris Coogan"
     # user_id = "6"
-    # user_name = "Chris Prouty"
-    # user_id = "13"
-    user_name = "Mike Ryan"
-    user_id = "23"
+    user_name = "Chris Prouty"
+    user_id = "13"
+    # user_name = "Mike Ryan"
+    # user_id = "23"
 
     # Fetch the schedule for the user
     schedule = TeeTimesInd.objects.filter(PID=user_id).select_related('CourseID').order_by('gDate')
@@ -166,7 +166,7 @@ def subswap_view(request):
             ])
         })
     
-    # Fetch counter offers for the user
+    # Counter Offers table - Fetch counter offers for the user
     offered_swaps = SubSwap.objects.filter(
         PID=user_id,
         Type='Swap Offer',
@@ -185,6 +185,7 @@ def subswap_view(request):
 
             if original_offer:
                 original_offer_date = f"{original_offer.TeeTimeIndID.gDate} at {original_offer.TeeTimeIndID.CourseID.courseName}  {original_offer.TeeTimeIndID.CourseID.courseTimeSlot}am"
+                offer_other_players = original_offer.OtherPlayers
 
                 # Fetch the proposed swaps
                 proposed_swaps = SubSwap.objects.filter(
@@ -196,11 +197,14 @@ def subswap_view(request):
                 for proposed_swap in proposed_swaps:
                     proposed_swap_date = f"{proposed_swap.TeeTimeIndID.gDate} at {proposed_swap.TeeTimeIndID.CourseID.courseName}  {proposed_swap.TeeTimeIndID.CourseID.courseTimeSlot}am"
                     proposed_by = f"{proposed_swap.PID.FirstName} {proposed_swap.PID.LastName}"
+                    swap_other_players = proposed_swap.OtherPlayers
 
                     counter_offers_data.append({
                         'original_offer_date': original_offer_date,
+                        'offer_other_players': offer_other_players,
                         'proposed_swap_date': proposed_swap_date,
                         'proposed_by': proposed_by,
+                        'swap_other_players': swap_other_players,
                         'swapID': proposed_swap.SwapID
                     })
 
@@ -644,3 +648,24 @@ def swapcounter_view(request):
         'available_dates': selected_dates,
     }
     return render(request, 'GRPR/swapcounter.html', context)
+
+
+def swapcounteraccept_view(request):
+    user_id = request.GET.get('userID')
+    original_offer_date = request.GET.get('original_offer_date')
+    offer_other_players = request.GET.get('offer_other_players')
+    proposed_swap_date = request.GET.get('proposed_swap_date')
+    swap_other_players = request.GET.get('swap_other_players')
+    swap_id = request.GET.get('swapid')
+
+    # Fetch the counter player instance
+    counter_player = get_object_or_404(Players, pk=user_id)
+
+    context = {
+        'original_offer_date': original_offer_date,
+        'offer_other_players': offer_other_players,
+        'proposed_swap_date': proposed_swap_date,
+        'swap_other_players': swap_other_players,
+        'counter_player': f"{counter_player.FirstName} {counter_player.LastName}",
+    }
+    return render(request, 'GRPR/swapcounteraccept.html', context)

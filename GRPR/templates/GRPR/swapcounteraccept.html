@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+{% load static %}
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proposed Swap</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container">
+            <a class="navbar-brand">GAS Golf</a>
+            <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'home_page' %}">Home</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <h1>Proposed Swap</h1>
+        <h3>Please review the proposed swap details below, click the confirm button to accept the swap.</h3>
+        <br>
+        <h5><strong>Your offered date:</strong> {{ original_offer_date }} playing with {{ offer_other_players }}</h5>
+        <br>
+        <h5>In exchange for this tee time, <strong>{{ counter_player }}</strong> is offering <strong>{{ proposed_swap_date }}</strong> playing with {{ swap_other_players }}</h5>
+        <br>
+        <h3 style="color: red; font-weight: bold;">Warning:  clicking the Confirm button switches the tee times</h3>
+        <br>
+
+        <a href="" class="btn btn-primary">Confirm Tee Time Swap</a>
+        <a href="{% url 'subswap_view' %}" class="btn btn-secondary">Cancel</a>
+    </div>
+</body>
+</html>

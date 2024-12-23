@@ -120,7 +120,9 @@
                     <td>{{ offer.original_offer_date }}</td>
                     <td>{{ offer.proposed_swap_date }}</td>
                     <td>{{ offer.proposed_by }}</td>
-                    <td><button class="btn btn-primary btn-sm">Accept</button></td>
+                    <td>
+                        <a href="{% url 'swapcounteraccept_view' %}?userID={{ user_id }}&original_offer_date={{ offer.original_offer_date }}&offer_other_players={{ offer.offer_other_players }}&proposed_swap_date={{ offer.proposed_swap_date }}&swap_other_players={{ offer.swap_other_players }}&swapid={{ offer.swapID }}" class="btn btn-primary btn-sm">Accept</a>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
