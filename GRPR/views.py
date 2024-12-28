@@ -102,10 +102,10 @@ def schedule_view(request):
 
 def subswap_view(request):
     # Hardcoded user for now
-    # user_name = "Chris Coogan"
-    # user_id = "6"
-    user_name = "Chris Prouty"
-    user_id = "13"
+    user_name = "Chris Coogan"
+    user_id = "6"
+    # user_name = "Chris Prouty"
+    # user_id = "13"
     # user_name = "Mike Ryan"
     # user_id = "23"
 
@@ -205,7 +205,8 @@ def subswap_view(request):
                         'proposed_swap_date': proposed_swap_date,
                         'proposed_by': proposed_by,
                         'swap_other_players': swap_other_players,
-                        'swapID': proposed_swap.SwapID
+                        'swapID': proposed_swap.SwapID,
+                        'swap_ttid': proposed_swap.TeeTimeIndID.id,
                     })
 
     context = {
@@ -657,6 +658,7 @@ def swapcounteraccept_view(request):
     proposed_swap_date = request.GET.get('proposed_swap_date')
     swap_other_players = request.GET.get('swap_other_players')
     swap_id = request.GET.get('swapid')
+    counter_ttid = request.GET.get('swap_ttid')
 
     # Fetch the counter player instance
     counter_player = get_object_or_404(Players, pk=user_id)
@@ -667,5 +669,153 @@ def swapcounteraccept_view(request):
         'proposed_swap_date': proposed_swap_date,
         'swap_other_players': swap_other_players,
         'counter_player': f"{counter_player.FirstName} {counter_player.LastName}",
+        'user_id': user_id,
+        'counter_ttid': counter_ttid,
+        'swap_id': swap_id,
     }
     return render(request, 'GRPR/swapcounteraccept.html', context)
+
+
+def swapfinal_view(request):
+    user_id = request.GET.get('user_id')
+    counter_ttid = request.GET.get('counter_ttid')
+    swap_id = request.GET.get('swap_id')
+
+    # Fetch the offer player instance
+    offer_player = get_object_or_404(Players, pk=user_id)
+    offer_mobile = offer_player.Mobile
+    offer_name = f"{offer_player.FirstName} {offer_player.LastName}"
+
+    # Fetch the counter offer details
+    counter_offer = SubSwap.objects.filter(
+        TeeTimeIndID=counter_ttid,
+        SwapID=swap_id,
+        Type='Swap Counter',
+        Status='Swap Open'
+    ).select_related('TeeTimeIndID', 'TeeTimeIndID__CourseID', 'PID').first()
+
+    counter_user_id = counter_offer.PID.id
+    counter_gDate = counter_offer.TeeTimeIndID.gDate
+    counter_Course = counter_offer.TeeTimeIndID.CourseID.courseName
+    counter_TimeSlot = counter_offer.TeeTimeIndID.CourseID.courseTimeSlot
+    counter_name = f"{counter_offer.PID.FirstName} {counter_offer.PID.LastName}"
+    counter_mobile = counter_offer.PID.Mobile
+
+    # Fetch the original offer details
+    original_offer = SubSwap.objects.filter(
+        SwapID=swap_id,
+        Type='Swap Offer',
+        Status='Swap Open'
+    ).select_related('TeeTimeIndID', 'TeeTimeIndID__CourseID').first()
+
+    offer_ttid = original_offer.TeeTimeIndID.id
+    offer_gDate = original_offer.TeeTimeIndID.gDate
+    offer_Course = original_offer.TeeTimeIndID.CourseID.courseName
+    offer_TimeSlot = original_offer.TeeTimeIndID.CourseID.courseTimeSlot
+
+    # Update SubSwap table
+    SubSwap.objects.filter(
+        SwapID=swap_id,
+        Status='Swap Open',
+        Type='Swap Counter',
+        TeeTimeIndID=counter_ttid
+    ).update(Type='Swap Accepted')
+
+    SubSwap.objects.filter(
+        SwapID=swap_id,
+        Status='Swap Open'
+    ).update(Status='Swap Closed')
+
+    # Update TeeTimesInd table
+    TeeTimesInd.objects.filter(id=offer_ttid).update(PID=counter_user_id)
+    TeeTimesInd.objects.filter(id=counter_ttid).update(PID=user_id)
+
+    # create the msgs that will be sent via text to the players + be entered into the Log table
+    offer_msg = f"Tee Time Swap Accepted. You are now playing {counter_gDate} at {counter_Course} at {counter_TimeSlot}am. {counter_name} will play {offer_gDate} at {offer_Course} at {offer_TimeSlot}am."
+    counter_msg = f"Tee Time Swap Accepted. You are now playing {offer_gDate} at {offer_Course} at {offer_TimeSlot}am. {offer_name} will play {counter_gDate} at {counter_Course} at {counter_TimeSlot}am."
+    
+
+    # Send texts via Twilio
+    if settings.TWILIO_ENABLED:
+        client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+
+        # hard code mobiles to Chris Prouty
+        print("currently hard coded to Prouty Mobile, but offer_mobile would be ", offer_mobile)
+        offer_mobile='13122961817'
+        print("currently hard coded to Prouty Mobile, but counter_mobile would be ", counter_mobile)
+        counter_mobile='13122961817'
+
+        # Send text to Offer Player
+        message = client.messages.create(from_='+18449472599', body=offer_msg, to=offer_mobile)
+        offer_mID = message.sid
+
+        # Send text to Counter Player
+        message = client.messages.create(from_='+18449472599', body=counter_msg, to=counter_mobile)
+        counter_mID = message.sid
+
+        # Insert into Log table for offer player
+        Log.objects.create(
+            SentDate=timezone.now(),
+            Type='Swap Counter Accept',
+            MessageID=offer_mID,
+            RequestDate=counter_gDate,
+            OfferID=counter_user_id,
+            ReceiveID=user_id,
+            RefID=swap_id,
+            Msg=offer_msg,
+            To_number=offer_mobile
+        )
+
+        # Insert into Log table for counter player
+        Log.objects.create(
+            SentDate=timezone.now(),
+            Type='Swap Offer Accept',
+            MessageID=counter_mID,
+            RequestDate=offer_gDate,
+            OfferID=user_id,
+            ReceiveID=counter_user_id,
+            RefID=swap_id,
+            Msg=counter_msg,
+            To_number=counter_mobile
+        )
+    else:
+        print('Twilio is not enabled')
+        offer_mID = 'Fake Mib'
+        counter_mID = 'Fake Mib'
+
+         # Insert into Log table for offer player
+        Log.objects.create(
+            SentDate=timezone.now(),
+            Type='Swap Counter Accept',
+            MessageID=offer_mID,
+            RequestDate=counter_gDate,
+            OfferID=counter_user_id,
+            ReceiveID=user_id,
+            RefID=swap_id,
+            Msg=offer_msg,
+            To_number=offer_mobile
+        )
+
+        # Insert into Log table for counter player
+        Log.objects.create(
+            SentDate=timezone.now(),
+            Type='Swap Offer Accept',
+            MessageID=counter_mID,
+            RequestDate=offer_gDate,
+            OfferID=user_id,
+            ReceiveID=counter_user_id,
+            RefID=swap_id,
+            Msg=counter_msg,
+            To_number=counter_mobile
+        )
+
+    context = {
+        'counter_gDate': counter_gDate,
+        'counter_Course': counter_Course,
+        'counter_TimeSlot': counter_TimeSlot,
+        'counter_Player': counter_name,
+        'offer_gDate': offer_gDate,
+        'offer_Course': offer_Course,
+        'offer_TimeSlot': offer_TimeSlot,
+    }
+    return render(request, 'GRPR/swapfinal.html', context)

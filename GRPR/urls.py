@@ -13,4 +13,5 @@ urlpatterns = [
     path('swapoffer/', views.swapoffer_view, name='swapoffer_view'), 
     path('swapcounter/', views.swapcounter_view, name='swapcounter_view'), 
     path('swapcounteraccept/', views.swapcounteraccept_view, name='swapcounteraccept_view'), 
+    path('swapfinal/', views.swapfinal_view, name='swapfinal_view'),
 ]

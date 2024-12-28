@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Proposed Swap</title>
+    <title>Tee Time Swap Completed</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="{% static 'css/styles.css' %}">
 </head>
@@ -26,20 +26,13 @@
     </nav>
 
     <div class="container mt-4">
-        <h1>Proposed Swap</h1>
-        <h4>Please review & <strong>Confirm</strong> the proposed swap details below</h4>
+        <h1>Tee Time Swap Completed</h1>
         <br>
-        <h4>Your Offer Details</h4>
-        <h5><strong>{{ original_offer_date }}</strong>  playing with <strong>{{ offer_other_players }}</strong> </h5>
+        <h5>You have accepted a Tee Time Swap.</h5>
         <br>
-        <h4>Counter Offer Details</h4>
-        <h5><strong>{{ counter_player }}</strong> is offering <strong>{{ proposed_swap_date }}</strong> playing with {{ swap_other_players }}</h5>
+        <h5> You are now playing {{ counter_gDate }} {{ counter_Course }} {{ counter_TimeSlot }}. </h5>
         <br>
-        <h3 style="color: red; font-weight: bold;">Clicking the Confirm button switches the tee times</h3>
-        <br>
-
-        <a href="{% url 'swapfinal_view' %}?user_id={{ user_id }}&counter_ttid={{ counter_ttid }}&swap_id={{ swap_id }}" class="btn btn-primary">Confirm Tee Time Swap</a>
-        <a href="{% url 'subswap_view' %}" class="btn btn-secondary">Cancel</a>
+        <h5>{{ counter_Player }} will play {{ offer_gDate }} at {{ offer_Course }} at {{ offer_TimeSlot }}am.</h5>
     </div>
 </body>
 </html>
