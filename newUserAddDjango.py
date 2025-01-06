@@ -1,0 +1,60 @@
+### IMPORTANT, CHANGE FLASTNAMES TO BE ALL LOWER CAPS IN NEXT GO ROUND
+
+# run this code to create the player in the User Table
+# THEN run the newUserPlayerAddLinkDjango.py to link the User table to the Players table
+
+# Creates a new user in Django
+# first open the djnago shell:  python manage.py shell
+# then do the import
+from django.contrib.auth.models import User
+
+# then insert the new users (cprouty is not in here bc he is admin and added manually)
+# this broke the heck out of the terminal and the virt server last time.  Maybe run in chunks
+user = User.objects.create_user(username='mBrown', email='brownmkb@gmail.com', password='pword1', first_name = 'Mark', last_name = 'Brown' ) 
+user.save()
+user = User.objects.create_user(username='cEnglish', email='lumencapital@hotmail.com', password='pword1', first_name = 'Chris', last_name = 'English' ) 
+user.save()
+user = User.objects.create_user(username='jKane', email='jkane726@comcast.net', password='pword1', first_name = 'John', last_name = 'Kane' ) 
+user.save()
+user = User.objects.create_user(username='mMay', email='Mike.May@spagwealth.com', password='pword1', first_name = 'Mike', last_name = 'May' ) 
+user.save()
+user = User.objects.create_user(username='pBirmingham', email='pete@bdi5.net', password='pword1', first_name = 'Pete', last_name = 'Birmingham' ) 
+user.save()
+user = User.objects.create_user(username='cCoogan', email='Christopher_Coogan@rush.edu', password='pword1', first_name = 'Chris', last_name = 'Coogan' ) 
+user.save()
+user = User.objects.create_user(username='mEwell', email='mike.ewell@sbcglobal.net', password='pword1', first_name = 'Mike', last_name = 'Ewell' ) 
+user.save()
+user = User.objects.create_user(username='jGriffin', email='johngriffin87@comcast.net', password='pword1', first_name = 'John', last_name = 'Griffin' ) 
+user.save()
+user = User.objects.create_user(username='bHunter', email='brhunter35@gmail.com', password='pword1', first_name = 'Brad', last_name = 'Hunter' ) 
+user.save()
+user = User.objects.create_user(username='cMarzec', email='cmarz818@yahoo.com', password='pword1', first_name = 'Chris', last_name = 'Marzec' ) 
+user.save()
+user = User.objects.create_user(username='jMcilwain', email='jmcilwain45@gmail.com', password='pword1', first_name = 'John', last_name = 'Mcilwain' ) 
+user.save()
+user = User.objects.create_user(username='mPeterson', email='petersonrtw@hotmail.com', password='pword1', first_name = 'Mike', last_name = 'Peterson' ) 
+user.save()
+user = User.objects.create_user(username='jSantana', email='sanslaw@ameritech.net', password='pword1', first_name = 'Jaime', last_name = 'Santana' ) 
+user.save()
+user = User.objects.create_user(username='eSloan', email='edsloanmd@gmail.com', password='pword1', first_name = 'Ed', last_name = 'Sloan' ) 
+user.save()
+user = User.objects.create_user(username='mStutz', email='mikestutz1@yahoo.com', password='pword1', first_name = 'Mike', last_name = 'Stutz' ) 
+user.save()
+user = User.objects.create_user(username='kTaira', email='kelly_taira@bofa.com', password='pword1', first_name = 'Kelly', last_name = 'Taira' ) 
+user.save()
+user = User.objects.create_user(username='pDeutsch', email='paul.t.deutsch@gmail.com', password='pword1', first_name = 'Paul', last_name = 'Deutsch' ) 
+user.save()
+user = User.objects.create_user(username='mDeHaan', email='forestsurgical@yahoo.com', password='pword1', first_name = 'Mike', last_name = 'DeHaan' ) 
+user.save()
+user = User.objects.create_user(username='jSullivan', email='john.sullivan@tjmbrokerage.com', password='pword1', first_name = 'John', last_name = 'Sullivan' ) 
+user.save()
+user = User.objects.create_user(username='cLynn', email='chris.lynn@jcinvests.com', password='pword1', first_name = 'Chris', last_name = 'Lynn' ) 
+user.save()
+user = User.objects.create_user(username='kHuizinga', email='keith.huizinga@gmail.com', password='pword1', first_name = 'Keith', last_name = 'Huizinga' ) 
+user.save()
+user = User.objects.create_user(username='mRyan', email='mpryan94@gmail.com', password='pword1', first_name = 'Mike', last_name = 'Ryan' ) 
+user.save()
+user = User.objects.create_user(username='tCanepa', email='tvcanepa@gmail.com', password='pword1', first_name = 'Tom', last_name = 'Canepa' ) 
+user.save()
+user = User.objects.create_user(username='ccourse', email='cprouty@gmail.com', password='pword1', first_name = 'Course', last_name = 'Credit' ) 
+user.save()

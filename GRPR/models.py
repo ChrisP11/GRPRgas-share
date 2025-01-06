@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.auth.models import User #Built-in Django User model, called to tie to the User model and the Player table
 
 # Create your models here.
 class Courses(models.Model):
@@ -42,9 +43,10 @@ class TeeTimesInd(models.Model):
 
 
 class Players(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True) # Links to the built-in Django User model, a foreign key
     CrewID = models.IntegerField()
-    FirstName = models.CharField(max_length=256)
-    LastName = models.CharField(max_length=256)
+    FirstName = models.CharField(max_length=30)
+    LastName = models.CharField(max_length=30)
     Email = models.CharField(max_length=256)
     Mobile = models.CharField(max_length=256)
     SplitPartner = models.IntegerField(null=True)

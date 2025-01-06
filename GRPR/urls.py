@@ -1,8 +1,15 @@
 from django.urls import path
 from GRPR import views
+from django.contrib.auth import views as auth_views
+from GRPR.views import CustomLoginView, register
 
 urlpatterns = [
-    path('', views.home_page, name='home_page'),
+    path('login/', CustomLoginView.as_view(), name='login'),
+    path('register/', register, name='register'),
+    path('logout/', auth_views.LogoutView.as_view(), name='logout'),
+    path('', CustomLoginView.as_view(), name='login'),  # Set the root URL to the login view
+    path('home/', views.home_page, name='home_page'),  # Add a separate URL for the home page
+    # path('', views.home_page, name='home_page'),
     path('tee_sheet', views.teesheet_view, name='teesheet_view'),
     path('schedule', views.schedule_view, name='schedule_view'),
     path('subswap', views.subswap_view, name='subswap_view'), 

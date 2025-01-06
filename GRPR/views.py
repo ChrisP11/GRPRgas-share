@@ -1,6 +1,6 @@
 import os
 import json
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpResponse
 from django.http import HttpResponseBadRequest
 from django.utils import timezone
@@ -11,12 +11,30 @@ from datetime import datetime
 from dateutil import parser
 from dateutil.parser import ParserError
 from django.conf import settings  # Import settings
+from django.contrib.auth.views import LoginView # added for secure login page creation
+from django.contrib.auth.forms import UserCreationForm # added for secure login page creation
 
 # Import the Twilio client
 from twilio.rest import Client
 
+# added for secure login page creation
+class CustomLoginView(LoginView):
+    template_name = 'GRPR/login.html'
+
 
 # Create your views here.
+# login page?
+def register(request):
+    if request.method == 'POST':
+        form = UserCreationForm(request.POST)
+        if form.is_valid():
+            form.save()
+            return redirect('login')
+    else:
+        form = UserCreationForm()
+    return render(request, 'register.html', {'form': form})
+
+# Initial home page
 def home_page(request):
     # return HttpResponse("Hello, world! This is the GRPR app.")
     return render(request, 'GRPR/index.html')
