@@ -25,13 +25,25 @@
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'home_page' %}">Home</a>
                     </li>
+                    <li class="nav-item">
+                        <a href="{% url 'logout' %}" class="nav-link" role="button">Logout</a>
+                    </li>
+                </ul>
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a href="#" class="nav-link" role="button">{{ first_name }} {{ last_name }}</a>
+                    </li>
                 </ul>
             </div>
         </div>
     </nav>
 
+
     <div class="container mt-4">
-        <h1>Schedule for {{ user_name }}</h1>
+        <p>{{ user_name }} </p>
+        <p>{{ user_id }} </p>
+        <br>
+        <h1>Current Schedule</h1>
         
         <!-- Schedule Table -->
         <table class="table table-striped">
@@ -54,7 +66,8 @@
                     <td>
                         <!-- Pass the user ID in data attributes -->
                         <a href="{% url 'subrequest_view' %}?user_name={{ user_name }}&user_id={{ user_id|urlencode }}&date={{ entry.date }}&course={{ entry.course }}&time_slot={{ entry.time_slot }}&other_players={{ entry.other_players }}&tt_id={{ entry.tt_id|urlencode }}" class="btn btn-primary btn-sm">Sub</a>
-                        <a href="{% url 'swaprequest_view' %}?date={{ entry.date }}&course={{ entry.course }}&time_slot={{ entry.time_slot }}&other_players={{ entry.other_players|urlencode }}&user_name={{ user_name|urlencode }}&user_id={{ user_id|urlencode }}&tt_id={{ entry.tt_id|urlencode }}" class="btn btn-sm btn-secondary-custom">Swap</a>
+                        <!-- <a href="{% url 'swaprequest_view' %}?date={{ entry.date }}&course={{ entry.course }}&time_slot={{ entry.time_slot }}&other_players={{ entry.other_players|urlencode }}&user_name={{ user_name|urlencode }}&user_id={{ user_id|urlencode }}&tt_id={{ entry.tt_id|urlencode }}" class="btn btn-sm btn-secondary-custom">Swap</a> -->
+                        <a href="{% url 'store_swap_data_view' %}?tt_id={{ entry.tt_id }}" class="btn btn-sm btn-secondary-custom">Swap</a>
                     </td>
                 </tr>
                 {% endfor %}

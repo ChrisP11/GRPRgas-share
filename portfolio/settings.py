@@ -113,6 +113,22 @@ AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
 ]
 
+# Redirect users to the home page after login
+LOGIN_REDIRECT_URL = '/home/'
+
+# Redirect users to the login page if not authenticated
+LOGIN_URL = '/login/'
+
+# Redirect users to the login page after logout
+LOGOUT_REDIRECT_URL = '/login/'
+
+# Session settings, recommended settings
+SESSION_COOKIE_AGE = 3600  # Set session duration to 1 hour (3600 seconds), default is 2 weeks, comment out this line to revert to that timeframe
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True  # Expire session when the browser is closed
+SESSION_COOKIE_SECURE = True  # Ensure session cookies are only sent over HTTPS
+SESSION_COOKIE_HTTPONLY = True  # Ensure session cookies are inaccessible to JavaScript
+SESSION_COOKIE_SAMESITE = 'Lax'  # Set the SameSite attribute for session cookies
+
 
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/

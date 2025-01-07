@@ -123,12 +123,18 @@
     
             <div class="collapse navbar-collapse" id="navbarSupportedContent">
                 <ul class="navbar-nav mr-auto">
-                <li class="nav-item active">
-
-                    <!-- <a href="/" class="nav-link" href="">Home</a> -->
-                    <a href="{% url 'home_page' %}" class="nav-link" role="button">Home</a>
+                  <li class="nav-item active">
+                      <a href="{% url 'home_page' %}" class="nav-link" role="button">Home</a>
+                  </li>
+                  <li class="nav-item">
+                    <a href="{% url 'logout' %}" class="nav-link" role="button">Logout</a>
                 </li>
-                </ul>
+              </ul>
+              <ul class="navbar-nav ms-auto">
+                <li class="nav-item">
+                    <a href="#" class="nav-link" role="button">{{ first_name }} {{ last_name }}</a>
+                </li>
+              </ul>
             </div>
         </div>
     </nav>
@@ -195,10 +201,9 @@
   </symbol>
 </svg>
 
-
 <div class="col-lg-6 col-xxl-4 my-5 mx-auto">
   <div class="d-grid gap-2">
-    <a href="tee_sheet?gDate=2024-07-13" class="btn btn-primary" role="button">Tee Sheet</a>
+    <a href="{% url 'teesheet_view' %}?gDate=2024-07-13" class="btn btn-primary" role="button">Tee Sheet</a>
     <a href="{% url 'schedule_view' %}" class="btn btn-secondary-custom" role="button">Schedule</a>
     <button class="btn btn-primary" type="button">Games</button>
     <a href="{% url 'subswap_view' %}" class="btn btn-primary" role="button">Sub / Swap</a>

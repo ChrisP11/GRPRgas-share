@@ -13,6 +13,7 @@ from dateutil.parser import ParserError
 from django.conf import settings  # Import settings
 from django.contrib.auth.views import LoginView # added for secure login page creation
 from django.contrib.auth.forms import UserCreationForm # added for secure login page creation
+from django.contrib.auth.decorators import login_required # added to require certified login to view any page
 
 # Import the Twilio client
 from twilio.rest import Client
@@ -35,11 +36,18 @@ def register(request):
     return render(request, 'register.html', {'form': form})
 
 # Initial home page
+@login_required
 def home_page(request):
-    # return HttpResponse("Hello, world! This is the GRPR app.")
-    return render(request, 'GRPR/index.html')
+    context = {
+        'userid': request.user.id,
+        'username': request.user.username,
+        'first_name': request.user.first_name,
+        'last_name': request.user.last_name,
+    }
+    return render(request, 'GRPR/index.html', context)
 
 
+@login_required
 def teesheet_view(request):
     # Check if the form was submitted
     if request.method == "GET" and "gDate" in request.GET:
@@ -76,22 +84,28 @@ def teesheet_view(request):
         # Pass data to the template
         context = {
             "cards": cards,
-            "gDate": gDate  # Add the chosen date to the context
+            "gDate": gDate,  # Add the chosen date to the context
+            "first_name": request.user.first_name,  # Add the first name of the logged-in user
+            "last_name": request.user.last_name, # Add the last name of the logged-in user
         }
         return render(request, "GRPR/teesheet.html", context)
     else:
         return HttpResponseBadRequest("Invalid request.")
 
-
+@login_required
 def schedule_view(request):
     players = Players.objects.all().order_by('LastName', 'FirstName')
+
+    # Fetch the logged-in user's player ID
+    logged_in_user_id = request.user.id
+    logged_in_player = Players.objects.filter(user_id=logged_in_user_id).first()
 
     # If a player is selected, fetch their schedule
     selected_player = None
     schedule = []
 
-    if request.method == "GET" and "player_id" in request.GET:
-        player_id = request.GET.get("player_id")
+    if request.method == "GET":
+        player_id = request.GET.get("player_id", logged_in_player.id if logged_in_player else None)
         if player_id:
             selected_player = Players.objects.filter(id=player_id).first()
             schedule_query = TeeTimesInd.objects.filter(PID=player_id).select_related('CourseID').order_by('gDate')
@@ -115,17 +129,24 @@ def schedule_view(request):
         "players": players,
         "selected_player": selected_player,
         "schedule": schedule,
+        "first_name": request.user.first_name,  # Add the first name of the logged-in user
+        "last_name": request.user.last_name, # Add the last name of the logged-in user
     }
     return render(request, "GRPR/schedule.html", context)
 
+@login_required
 def subswap_view(request):
     # Hardcoded user for now
-    user_name = "Chris Coogan"
-    user_id = "6"
+    # user_name = "Chris Coogan"
+    # user_id = "6"
     # user_name = "Chris Prouty"
     # user_id = "13"
     # user_name = "Mike Ryan"
     # user_id = "23"
+
+    # Fetch the logged-in user's information
+    user_id = request.user.id
+    user_name = f"{request.user.first_name} {request.user.last_name}"
 
     # Fetch the schedule for the user
     schedule = TeeTimesInd.objects.filter(PID=user_id).select_related('CourseID').order_by('gDate')
@@ -233,11 +254,13 @@ def subswap_view(request):
         'schedule_data': schedule_data,
         'available_swaps_data': available_swaps_data,
         'counter_offers_data': counter_offers_data,
+        "first_name": request.user.first_name,  # Add the first name of the logged-in user
+        "last_name": request.user.last_name, # Add the last name of the logged-in user
     }
 
     return render(request, 'GRPR/subswap.html', context)
 
-
+@login_required
 def subrequest_view(request):
     # Get data passed via query parameters
     user_name = request.GET.get('user_name', 'User')
@@ -256,7 +279,7 @@ def subrequest_view(request):
     }
     return render(request, 'GRPR/subrequest.html', context)
 
-
+@login_required
 def subrequestsent_view(request):
     # Get data passed via query parameters
     date_raw = request.GET.get('date', 'Unknown date')
@@ -296,30 +319,56 @@ def subrequestsent_view(request):
     }
     return render(request, 'GRPR/subrequestsent.html', context)
 
+# this view is used to store session data for the swap request
+@login_required
+def store_swap_data_view(request):
+    if request.method == "GET" and "tt_id" in request.GET:
+        tt_id = request.GET["tt_id"]
 
+        # Store necessary data in the session
+        request.session['swap_tt_id'] = tt_id
+        request.session['user_id'] = request.user.id
+
+        return redirect('swaprequest_view')
+    else:
+        return HttpResponseBadRequest("Invalid request.")
+    
+@login_required
 def swaprequest_view(request):
-    # Get the data passed via query parameters
-    date = request.GET.get('date', 'Unknown date')  
-    course = request.GET.get('course', 'Unknown course')
-    time_slot = request.GET.get('time_slot', 'Unknown time slot')
-    other_players = request.GET.get('other_players', 'No other players')
-    user_name = request.GET.get('user_name', 'Unknown User')
-    user_id = request.GET.get('user_id', 'Unknown User ID')
-    tt_id = request.GET.get('tt_id', 'Unknown Tee Time ID')
+    # Retrieve data from the session
+    swap_tt_id = request.session.pop('swap_tt_id', None)
+    user_id = request.session.pop('user_id', None)
 
-    # Pass the data to the template
+    if not swap_tt_id or not user_id:
+        return HttpResponseBadRequest("Required data is missing.")
+
+    # Fetch the tee time entry
+    teetime = TeeTimesInd.objects.get(id=swap_tt_id)
+
+    # Fetch other necessary data from the database
+    date = teetime.gDate
+    course = teetime.CourseID.courseName
+    time_slot = teetime.CourseID.courseTimeSlot
+    other_players = ", ".join([
+        f"{player.PID.FirstName} {player.PID.LastName}" for player in TeeTimesInd.objects.filter(
+            CourseID=teetime.CourseID, gDate=teetime.gDate
+        ).exclude(PID=user_id)
+    ])
+
     context = {
+        'swap_tt_id': swap_tt_id,
+        'user_id': user_id,
         'date': date,
         'course': course,
         'time_slot': time_slot,
         'other_players': other_players,
-        'user_name': user_name,
-        'user_id': user_id,
-        'tt_id': tt_id,
+        'first_name': request.user.first_name,
+        'last_name': request.user.last_name,
     }
+
     return render(request, 'GRPR/swaprequest.html', context)
 
-
+@login_required
 def swaprequestsent_view(request):
     date_raw = request.GET.get('date')  # Raw date string from the request
     try:
@@ -505,7 +554,7 @@ def swaprequestsent_view(request):
     }
     return render(request, 'GRPR/swaprequestsent.html', context)
 
-
+@login_required
 def swapoffer_view(request):
     user_id = request.GET.get('userid')
     swap_id = request.GET.get('swapID')
@@ -553,6 +602,7 @@ def swapoffer_view(request):
     }
     return render(request, 'GRPR/swapoffer.html', context)
 
+@login_required
 def swapcounter_view(request):
     user_id = request.POST.get('user_id')
     swap_id = request.POST.get('swap_id')
@@ -668,7 +718,7 @@ def swapcounter_view(request):
     }
     return render(request, 'GRPR/swapcounter.html', context)
 
-
+@login_required
 def swapcounteraccept_view(request):
     user_id = request.GET.get('userID')
     original_offer_date = request.GET.get('original_offer_date')
@@ -693,7 +743,7 @@ def swapcounteraccept_view(request):
     }
     return render(request, 'GRPR/swapcounteraccept.html', context)
 
-
+@login_required
 def swapfinal_view(request):
     user_id = request.GET.get('user_id')
     counter_ttid = request.GET.get('counter_ttid')
