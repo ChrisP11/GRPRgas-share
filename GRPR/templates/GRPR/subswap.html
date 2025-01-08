@@ -41,7 +41,8 @@
 
     <div class="container mt-4">
         <p>{{ user_name }} </p>
-        <p>{{ user_id }} </p>
+        <p>User ID {{ user_id }} </p>
+        <p>Player ID {{ player_id }} </p>
         <br>
         <h1>Current Schedule</h1>
         
@@ -66,7 +67,6 @@
                     <td>
                         <!-- Pass the user ID in data attributes -->
                         <a href="{% url 'subrequest_view' %}?user_name={{ user_name }}&user_id={{ user_id|urlencode }}&date={{ entry.date }}&course={{ entry.course }}&time_slot={{ entry.time_slot }}&other_players={{ entry.other_players }}&tt_id={{ entry.tt_id|urlencode }}" class="btn btn-primary btn-sm">Sub</a>
-                        <!-- <a href="{% url 'swaprequest_view' %}?date={{ entry.date }}&course={{ entry.course }}&time_slot={{ entry.time_slot }}&other_players={{ entry.other_players|urlencode }}&user_name={{ user_name|urlencode }}&user_id={{ user_id|urlencode }}&tt_id={{ entry.tt_id|urlencode }}" class="btn btn-sm btn-secondary-custom">Swap</a> -->
                         <a href="{% url 'store_swap_data_view' %}?tt_id={{ entry.tt_id }}" class="btn btn-sm btn-secondary-custom">Swap</a>
                     </td>
                 </tr>
@@ -104,7 +104,8 @@
                     <td>{{ swap.other_players }}</td>
                     <td>
 
-                        <a href="{% url 'swapoffer_view' %}?userid={{ user_id }}&swapID={{ swap.swapID }}&Msg={{ swap.Msg }}&RequestDate={{ swap.ymdDate }}&OfferID={{ swap.OfferID }}" class="btn btn-primary btn-sm">Review Offer</a>
+                        <a href="{% url 'store_swapoffer_data_view' %}?userid={{ user_id }}&swapID={{ swap.swapID }}&Msg={{ swap.Msg }}&RequestDate={{ swap.ymdDate }}&OfferID={{ swap.OfferID }}" class="btn btn-primary">Review Offer</a>
+                        <!-- <a href="{% url 'swapoffer_view' %}?userid={{ user_id }}&swapID={{ swap.swapID }}&Msg={{ swap.Msg }}&RequestDate={{ swap.ymdDate }}&OfferID={{ swap.OfferID }}" class="btn btn-primary btn-sm">A Review Offer</a> -->
                         
                     </td>
                 </tr>

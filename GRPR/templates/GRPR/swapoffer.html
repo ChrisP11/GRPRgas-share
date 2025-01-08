@@ -24,6 +24,11 @@
                         <a href="{% url 'logout' %}" class="nav-link" role="button">Logout</a>
                     </li>
                 </ul>
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a href="#" class="nav-link" role="button">{{ first_name }} {{ last_name }}</a>
+                    </li>
+                </ul>
             </div>
         </div>
     </nav>
@@ -57,8 +62,16 @@
             </tbody>
         </table>
         
-        <button id="offer-checked-dates" class="btn btn-primary">Offer Checked Dates</button>
-        <a href="{% url 'subswap_view' %}" class="btn btn-secondary">Cancel</a>
+        <div class="d-flex justify-content-start">
+            <form method="post" action="{% url 'store_swapcounter_data_view' %}" id="swapcounter-form" class="d-inline">
+                {% csrf_token %}
+                <input type="hidden" name="selected_dates" id="selected_dates">
+                <input type="hidden" name="swap_id" value="{{ swap_id }}">
+                <input type="hidden" name="offer_msg" value="{{ msg }}">
+                <button type="submit" id="offer-checked-dates" class="btn btn-primary btn-sm">Offer Checked Dates</button>
+            </form>
+            <a href="{% url 'subswap_view' %}" class="btn btn-secondary btn-sm ms-2">Cancel</a>
+        </div>
         <p id="error-msg" style="color: red; font-weight: bold; display: none;">You need to choose at least one date to make an offer to swap dates</p>
     </div>
 
@@ -68,10 +81,11 @@
             checkboxes.forEach(checkbox => checkbox.checked = this.checked);
         });
 
-        document.getElementById('offer-checked-dates').addEventListener('click', function() {
+        document.getElementById('offer-checked-dates').addEventListener('click', function(event) {
             const checkboxes = document.querySelectorAll('.select-checkbox:checked');
             if (checkboxes.length === 0) {
                 document.getElementById('error-msg').style.display = 'block';
+                event.preventDefault();
                 return;
             }
 
@@ -88,18 +102,7 @@
                 });
             });
 
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = "{% url 'swapcounter_view' %}";
-            form.innerHTML = `
-                <input type="hidden" name="user_id" value="{{ user_id }}">
-                <input type="hidden" name="swap_id" value="{{ swap_id }}">
-                <input type="hidden" name="offer_msg" value="{{ msg }}">
-                <input type="hidden" name="selected_dates" value='${JSON.stringify(selectedDates)}'>
-                {% csrf_token %}
-            `;
-            document.body.appendChild(form);
-            form.submit();
+            document.getElementById('selected_dates').value = JSON.stringify(selectedDates);  // Convert to JSON string
         });
     </script>
 </body>
