@@ -65,9 +65,13 @@
                     <td>{{ entry.time_slot }}</td>
                     <td>{{ entry.other_players }}</td>
                     <td>
-                        <!-- Pass the user ID in data attributes -->
-                        <a href="{% url 'subrequest_view' %}?user_name={{ user_name }}&user_id={{ user_id|urlencode }}&date={{ entry.date }}&course={{ entry.course }}&time_slot={{ entry.time_slot }}&other_players={{ entry.other_players }}&tt_id={{ entry.tt_id|urlencode }}" class="btn btn-primary btn-sm">Sub</a>
-                        <a href="{% url 'store_swap_data_view' %}?tt_id={{ entry.tt_id }}" class="btn btn-sm btn-secondary-custom">Swap</a>
+                        {% if entry.tt_id in offered_tee_time_ids %}
+                            <button class="btn btn-primary btn-sm" disabled>Sub</button>
+                            <button class="btn btn-secondary-custom btn-sm" disabled>Swap</button>
+                        {% else %}
+                            <a href="{% url 'subrequest_view' %}?user_name={{ user_name }}&user_id={{ user_id|urlencode }}&date={{ entry.date }}&course={{ entry.course }}&time_slot={{ entry.time_slot }}&other_players={{ entry.other_players }}&tt_id={{ entry.tt_id|urlencode }}" class="btn btn-primary btn-sm">Sub</a>
+                            <a href="{% url 'store_swap_data_view' %}?tt_id={{ entry.tt_id }}" class="btn btn-sm btn-secondary-custom">Swap</a>
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}
@@ -75,6 +79,7 @@
         </table>
 
         {% if available_swaps_data %}
+        <br>
         <h1>Available Swaps</h1>
         <h7> (requires swapping one of your future dates for the date below)</h7>
 
@@ -105,7 +110,6 @@
                     <td>
 
                         <a href="{% url 'store_swapoffer_data_view' %}?userid={{ user_id }}&swapID={{ swap.swapID }}&Msg={{ swap.Msg }}&RequestDate={{ swap.ymdDate }}&OfferID={{ swap.OfferID }}" class="btn btn-primary">Review Offer</a>
-                        <!-- <a href="{% url 'swapoffer_view' %}?userid={{ user_id }}&swapID={{ swap.swapID }}&Msg={{ swap.Msg }}&RequestDate={{ swap.ymdDate }}&OfferID={{ swap.OfferID }}" class="btn btn-primary btn-sm">A Review Offer</a> -->
                         
                     </td>
                 </tr>
@@ -115,7 +119,8 @@
         {% endif %}
 
     {% if counter_offers_data %}
-        <h1>Counter Offers</h1>
+    <br>
+    <h1>Counter Offers</h1>
         <h7>Tee Times being offered by other players for your swap request/s</h7>
         
         <!-- Counter Offers Table -->
@@ -135,13 +140,45 @@
                     <td>{{ offer.proposed_swap_date }}</td>
                     <td>{{ offer.proposed_by }}</td>
                     <td>
-                        <a href="{% url 'swapcounteraccept_view' %}?userID={{ user_id }}&original_offer_date={{ offer.original_offer_date }}&offer_other_players={{ offer.offer_other_players }}&proposed_swap_date={{ offer.proposed_swap_date }}&swap_other_players={{ offer.swap_other_players }}&swapid={{ offer.swapID }}&swap_ttid={{ offer.swap_ttid }}" class="btn btn-primary btn-sm">Accept</a>
+                        <a href="{% url 'store_swapcounteraccept_data_view' %}?userID={{ user_id }}&original_offer_date={{ offer.original_offer_date }}&offer_other_players={{ offer.offer_other_players }}&proposed_swap_date={{ offer.proposed_swap_date }}&swap_other_players={{ offer.swap_other_players }}&swapid={{ offer.swapID }}&swap_ttid={{ offer.swap_ttid }}" class="btn btn-primary btn-sm">Accept</a>
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
         {% endif %}
+
+    <!-- Swaps Proposed Table -->
+    {% if swaps_proposed_data %}
+    <br>
+    <h1>Swaps Offered</h1>
+    <h7>Tee Times you have requested a Swap for</h7>
+
+    <table class="table table-striped mt-4">
+        <thead>
+            <tr>
+                <th>Date Swap Requested</th>
+                <th>Playing Date</th>
+                <th>Course</th>
+                <th>Tee Time</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for swap in swaps_proposed_data %}
+            <tr>
+                <td>{{ swap.request_date }}</td>
+                <td>{{ swap.playing_date }}</td>
+                <td>{{ swap.course }}</td>
+                <td>{{ swap.tee_time }}</td>
+                <td>
+                    <a href="{% url 'store_swapcancelconfirm_data_view' %}?gDate={{ swap.playing_date }}&courseName={{ swap.course }}&courseTimeSlot={{ swap.tee_time }}&swap_id={{ swap.swap_id }}" class="btn btn-danger btn-sm">Cancel Swap</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
 
     <script>
         document.addEventListener("DOMContentLoaded", () => {
