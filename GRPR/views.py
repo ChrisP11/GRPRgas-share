@@ -165,7 +165,42 @@ def subswap_view(request):
                 f"{player.PID.FirstName} {player.PID.LastName}" for player in other_players
             ])
         })
-    
+    # Fetch available subs for the player
+    available_subs = SubSwap.objects.filter(
+        Type='Sub Offer Sent',
+        Status='Sub Open',
+        PID=player_id
+    ).select_related('TeeTimeIndID', 'TeeTimeIndID__CourseID').order_by('TeeTimeIndID__gDate')
+
+    # Prepare the data for the available subs table
+    available_subs_data = []
+    for sub in available_subs:
+        teetime = sub.TeeTimeIndID
+        other_players = TeeTimesInd.objects.filter(
+            CourseID=teetime.CourseID, gDate=teetime.gDate
+        ).exclude(PID=player_id)
+
+        # Fetch the OfferID for the sub offer
+        try:
+            sub_offer = SubSwap.objects.get(SwapID=sub.SwapID, Type='Sub Offer')
+            offer_pid = sub_offer.PID.id
+        except SubSwap.DoesNotExist:
+            offer_pid = None
+            print(f"No sub offer found for SwapID: {sub.SwapID}")
+
+        available_subs_data.append({
+            'date': teetime.gDate,
+            'ymdDate': teetime.gDate.strftime("%Y-%m-%d"), #converts date to YYYY-MM-DD
+            'course': teetime.CourseID.courseName,
+            'time_slot': teetime.CourseID.courseTimeSlot,
+            'swapID': sub.SwapID,
+            'Msg': sub.Msg,
+            'OfferID': offer_pid,
+            'other_players': ", ".join([
+                f"{player.PID.FirstName} {player.PID.LastName}" for player in other_players
+            ])
+        })
+
     # Fetch available swaps for the player
     available_swaps = SubSwap.objects.filter(
         Type='Swap Offer Sent',
@@ -264,12 +299,23 @@ def subswap_view(request):
             'swap_id': swap.id
         })
         offered_tee_time_ids.add(swap.TeeTimeIndID.id)
+    
+    # Query for Open Sub Offers - used to gray out Sub Swap buttons on subswap.html
+    open_sub_offers = SubSwap.objects.filter(
+        Type='Sub Offer',
+        Status='Sub Open',
+        PID=player_id
+    ).select_related('TeeTimeIndID')
+
+    for sub_offer in open_sub_offers:
+        offered_tee_time_ids.add(sub_offer.TeeTimeIndID.id)
 
     context = {
         'user_name': user_name,  # Use the logged-in user's name
         'user_id': user_id,  # Use the logged-in user's ID
         'player_id': player_id,  # Use the logged-in user's Player ID
         'schedule_data': schedule_data,
+        'available_subs_data': available_subs_data,
         'available_swaps_data': available_swaps_data,
         'counter_offers_data': counter_offers_data,
         'swaps_proposed_data': swaps_proposed_data,
@@ -319,6 +365,7 @@ def store_sub_request_data_view(request):
     request.session['course_name'] = course_name
     request.session['course_time_slot'] = course_time_slot
     request.session['other_players'] = other_players
+    request.session['tt_id'] = tt_id
 
     return redirect('subrequest_view')
 
@@ -332,6 +379,7 @@ def subrequest_view(request):
     course_name = request.session.pop('course_name', 'Unknown course')
     course_time_slot = request.session.pop('course_time_slot', 'Unknown time slot')
     other_players = request.session.pop('other_players', 'No other players')
+    tt_id = request.session.pop('tt_id', None)
 
     # Convert the date string back to a datetime object
     gDate_str = datetime.strptime(gDate, '%Y-%m-%d')
@@ -348,17 +396,88 @@ def subrequest_view(request):
         'course_name': course_name,
         'course_time_slot': course_time_slot,
         'other_players': other_players,
+        'tt_id': tt_id, 
     }
     return render(request, 'GRPR/subrequest.html', context)
 
 
 @login_required
+def store_sub_request_sent_data_view(request):
+    tt_id = request.GET.get('tt_id')
+
+    # Fetch the Player ID associated with the logged-in user
+    user_id = request.user.id
+    first_name = request.user.first_name
+    last_name = request.user.last_name
+
+    player = get_object_or_404(Players, user_id=user_id)
+    player_id = player.id
+
+    # Fetch the TeeTimeInd instance
+    teetime = get_object_or_404(TeeTimesInd, id=tt_id)
+    gDate = teetime.gDate
+    course = teetime.CourseID
+    course_name = course.courseName
+    course_time_slot = course.courseTimeSlot
+
+    # Fetch other players
+    other_players_qs = TeeTimesInd.objects.filter(
+        CourseID=course,
+        gDate=gDate,
+        CourseID__courseTimeSlot=course_time_slot
+    ).exclude(PID=player_id).select_related('PID')
+
+    other_players = ', '.join([f"{entry.PID.FirstName} {entry.PID.LastName}" for entry in other_players_qs])
+
+    # Store necessary data in the session
+    request.session['first_name'] = first_name
+    request.session['last_name'] = last_name
+    request.session['player_id'] = player_id
+    request.session['gDate'] = gDate.strftime('%Y-%m-%d')
+    request.session['course_name'] = course_name
+    request.session['course_time_slot'] = course_time_slot
+    request.session['other_players'] = other_players
+    request.session['tt_id'] = tt_id
+
+    return redirect('subrequestsent_view')
+
+
+@login_required
 def subrequestsent_view(request):
-    # Get data passed via query parameters
-    date_raw = request.GET.get('date', 'Unknown date')
-    gDate = parser.parse(date_raw).strftime("%Y-%m-%d") #this normalizes the raw date and converts it to YYYY-MM-DD format
-    sub_offer = request.GET.get('sub_offer', '')
-    tt_id = request.GET.get('tt_id', 'Unknown Tee Time ID')
+    # Retrieve data from the session
+    first_name = request.session.pop('first_name', 'User')
+    last_name = request.session.pop('last_name', 'User')
+    player_id = request.session.pop('player_id', None)
+    gDate_str = request.session.pop('gDate', 'Unknown date')
+    course_name = request.session.pop('course_name', 'Unknown course')
+    course_time_slot = request.session.pop('course_time_slot', 'Unknown time slot')
+    other_players = request.session.pop('other_players', 'No other players')
+    tt_id = request.session.pop('tt_id', None)
+
+    # Convert the date string back to a datetime object
+    gDate = datetime.strptime(gDate_str, '%Y-%m-%d')
+
+    # get Sub Offer Player details, mostly for Mobile
+    player = get_object_or_404(Players, id=player_id)
+
+    # Create the sub_offer message
+    sub_offer = f"{first_name} {last_name} is offering his tee time on {gDate_str} at {course_name} {course_time_slot} to play with {other_players} to the first person who wants it."
+
+    # Insert the initial Sub Offer into SubSwap
+    initial_sub = SubSwap.objects.create(
+        RequestDate=timezone.now(),
+        PID_id=player_id,
+        TeeTimeIndID_id=tt_id,
+        Type="Sub Offer",
+        Status="Sub Open",
+        Msg=sub_offer,
+        OtherPlayers=other_players
+    )
+
+    # Update the SwapID of the initial Sub Offer
+    initial_sub.SwapID = initial_sub.id
+    initial_sub.save()
+    swap_id = initial_sub.id
 
     # Get players already playing on the date
     playing_players = TeeTimesInd.objects.filter(gDate=gDate).values_list('PID_id', flat=True)
@@ -371,26 +490,397 @@ def subrequestsent_view(request):
         account_sid = settings.TWILIO_ACCOUNT_SID
         auth_token = settings.TWILIO_AUTH_TOKEN
         client = Client(account_sid, auth_token)
-        
+
+        # Generate text message and send to Sub Offering player
+        msg = "This msg has been sent to all of the players available for your request date: '" + sub_offer + "'      you will be able to see this offer and status on the sub swap page."
+        to_number = '13122961817'  # Hardcoded for now
+        # to_number = player.Mobile
+        message = client.messages.create(from_='+18449472599', body=msg, to=to_number)
+        mID = message.sid
+
+        # Insert initial Sub Offer into Log
+        Log.objects.create(
+            SentDate=timezone.now(),
+            Type="Sub Offer",
+            MessageID=mID,
+            RequestDate=gDate,
+            OfferID=player_id,
+            RefID=swap_id,
+            Msg=sub_offer,
+            To_number=to_number
+        )
+
+        # Create an insert in SubSwap table for every player in the Available Players list
         for player in available_players:
-            msg = sub_offer
-            # to_number=player.Mobile
-            to_number='13122961817'
-            message = client.messages.create(from_='+18449472599',body=msg,to=to_number )
+            SubSwap.objects.create(
+                RequestDate=timezone.now(),
+                PID=player,
+                TeeTimeIndID_id=tt_id,
+                Type="Sub Offer Sent",
+                Status="Sub Open",
+                Msg=sub_offer,
+                OtherPlayers=other_players,
+                SwapID=swap_id
+            )
+
+            # Create and send a text to every Available Player
+            msg = f"{player.Mobile} {sub_offer}"
+            to_number = '13122961817'  # Hardcoded for now, but future will be Mobile of the Available Player
+            message = client.messages.create(from_='+18449472599', body=msg, to=to_number)
             mID = message.sid
+
+            # Insert a row into Log table for every text sent
+            Log.objects.create(
+                SentDate=timezone.now(),
+                Type="Sub Offer Sent",
+                MessageID=mID,
+                RequestDate=gDate,
+                OfferID=player_id,
+                ReceiveID=player.id,
+                RefID=swap_id,
+                Msg=sub_offer,
+                To_number=to_number
+            )
     else:
-        print("Twilio is off")
-    
-    twilio_messages= "blank for now"
-       
+        to_number = player.Mobile
+
+        # Insert initial Sub Offer into Log
+        Log.objects.create(
+            SentDate=timezone.now(),
+            Type="Sub Offer",
+            MessageID='fake mID',
+            RequestDate=gDate,
+            OfferID=player_id,
+            RefID=swap_id,
+            Msg=sub_offer,
+            To_number=to_number
+        )
+
+        # Create an insert in SubSwap table for every player in the Available Players list
+        for player in available_players:
+            SubSwap.objects.create(
+                RequestDate=timezone.now(),
+                PID=player,
+                TeeTimeIndID_id=tt_id,
+                Type="Sub Offer Sent",
+                Status="Sub Open",
+                Msg=sub_offer,
+                OtherPlayers=other_players,
+                SwapID=swap_id
+            )
+
+            to_number = player.Mobile
+
+            # Insert a row into Log table for every Available Player
+            Log.objects.create(
+                SentDate=timezone.now(),
+                Type="Sub Offer Sent",
+                MessageID='fake mID',
+                RequestDate=gDate,
+                OfferID=player_id,
+                ReceiveID=player.id,
+                RefID=swap_id,
+                Msg=sub_offer,
+                To_number=to_number
+            )
+
     # Pass data to the template
     context = {
-        'date': date_raw,
+        'date': gDate_str,
         'sub_offer': sub_offer,
         'available_players': available_players,
-        'twilio_messages': twilio_messages,
     }
     return render(request, 'GRPR/subrequestsent.html', context)
+
+
+@login_required
+def store_subaccept_data_view(request):
+    swap_id = request.GET.get('swap_id')
+
+    # Fetch the SubSwap instance
+    sub_offer = get_object_or_404(SubSwap, SwapID=swap_id, Type='Sub Offer', Status='Sub Open')
+
+    # Fetch the TeeTimeInd instance
+    teetime = sub_offer.TeeTimeIndID
+    gDate = teetime.gDate
+    course = teetime.CourseID
+    course_name = course.courseName
+    course_time_slot = course.courseTimeSlot
+
+    # Fetch the offer player details
+    offer_player = sub_offer.PID
+    offer_player_first_name = offer_player.FirstName
+    offer_player_last_name = offer_player.LastName
+
+    # Fetch other players
+    other_players = sub_offer.OtherPlayers
+
+    # Store necessary data in the session
+    request.session['swap_id'] = swap_id
+    request.session['gDate'] = gDate.strftime('%Y-%m-%d')
+    request.session['course_name'] = course_name
+    request.session['course_time_slot'] = course_time_slot
+    request.session['offer_player_first_name'] = offer_player_first_name
+    request.session['offer_player_last_name'] = offer_player_last_name
+    request.session['other_players'] = other_players
+
+    return redirect('subaccept_view')
+
+
+@login_required
+def subaccept_view(request):
+    # Retrieve data from the session
+    swap_id = request.session.pop('swap_id', None)
+    gDate = request.session.pop('gDate', None)
+    course_name = request.session.pop('course_name', None)
+    course_time_slot = request.session.pop('course_time_slot', None)
+    offer_player_first_name = request.session.pop('offer_player_first_name', None)
+    offer_player_last_name = request.session.pop('offer_player_last_name', None)
+    other_players = request.session.pop('other_players', None)
+
+    if not swap_id or not gDate or not course_name or not course_time_slot or not offer_player_first_name or not offer_player_last_name or not other_players:
+        return HttpResponseBadRequest("Required data is missing. - subaccept_view")
+
+    # Format the date for display
+    gDate_display = datetime.strptime(gDate, '%Y-%m-%d').strftime('%B %d, %Y')
+
+    # Pass data to the template
+    context = {
+        'swap_id': swap_id,
+        'gDate': gDate_display,
+        'course_name': course_name,
+        'course_time_slot': course_time_slot,
+        'offer_player_first_name': offer_player_first_name,
+        'offer_player_last_name': offer_player_last_name,
+        'other_players': other_players,
+        'first_name': request.user.first_name, # for nav bar
+        'last_name': request.user.last_name, # for nav bar
+    }
+    return render(request, 'GRPR/subaccept.html', context)
+
+
+@login_required
+def store_subfinal_data_view(request):
+    if request.method == "GET":
+        swap_id = request.GET.get('swap_id')
+
+        # Fetch the SubSwap instance
+        sub_offer = get_object_or_404(SubSwap, SwapID=swap_id, Type='Sub Offer', Status='Sub Open')
+
+        # Fetch the TeeTimeInd instance
+        teetime = sub_offer.TeeTimeIndID
+        gDate = teetime.gDate
+        course = teetime.CourseID
+        course_name = course.courseName
+        course_time_slot = course.courseTimeSlot
+
+        # Fetch the offer player details
+        offer_player = sub_offer.PID
+        offer_player_first_name = offer_player.FirstName
+        offer_player_last_name = offer_player.LastName
+        offer_player_mobile = offer_player.Mobile
+        offer_player_id = offer_player.id
+
+        # Fetch other players
+        other_players = sub_offer.OtherPlayers
+
+        # Fetch the Player ID associated with the logged-in user
+        user_id = request.user.id
+        first_name = request.user.first_name
+        last_name = request.user.last_name
+
+        player = get_object_or_404(Players, user_id=user_id)
+        player_id = player.id
+        player_mobile = player.Mobile
+
+        print('store_subfinal_data_view')
+        print('swap_id', swap_id)
+        print('gDate', gDate)   
+        print('course_name', course_name)   
+        print('course_time_slot', course_time_slot) 
+        print('offer_player_first_name', offer_player_first_name)   
+        print('offer_player_last_name', offer_player_last_name) 
+        print('offer_player_mobile', offer_player_mobile)
+        print('offer_player_id', offer_player_id)
+        print('other_players', other_players)
+        print('first_name', first_name)
+        print('last_name', last_name)
+        print('player_id', player_id)
+        print('player_mobile', player_mobile)
+
+
+        # Store necessary data in the session
+        request.session['swap_id'] = swap_id
+        request.session['tt_id'] = teetime.id
+        request.session['gDate'] = gDate.strftime('%Y-%m-%d')
+        request.session['course_name'] = course_name
+        request.session['course_time_slot'] = course_time_slot
+        request.session['offer_player_first_name'] = offer_player_first_name
+        request.session['offer_player_last_name'] = offer_player_last_name
+        request.session['offer_player_mobile'] = offer_player_mobile
+        request.session['offer_player_id'] = offer_player_id
+        request.session['other_players'] = other_players
+        request.session['first_name'] = first_name
+        request.session['last_name'] = last_name
+        request.session['player_id'] = player_id
+        request.session['player_mobile'] = player_mobile
+
+        return redirect('subfinal_view')
+    else:
+        return HttpResponseBadRequest("Invalid request.")
+    
+
+@login_required
+def subfinal_view(request):
+    # Retrieve data from the session
+    swap_id = request.session.pop('swap_id', None)
+    tt_id = request.session.pop('tt_id', None)
+    gDate = request.session.pop('gDate', None)
+    course_name = request.session.pop('course_name', None)
+    course_time_slot = request.session.pop('course_time_slot', None)
+    offer_player_first_name = request.session.pop('offer_player_first_name', None)
+    offer_player_last_name = request.session.pop('offer_player_last_name', None)
+    offer_player_mobile = request.session.pop('offer_player_mobile', None)
+    offer_player_id = request.session.pop('offer_player_id', None)
+    other_players = request.session.pop('other_players', None)
+    first_name = request.session.pop('first_name', None)
+    last_name = request.session.pop('last_name', None)
+    player_id = request.session.pop('player_id', None)
+    player_mobile = request.session.pop('player_mobile', None)
+
+    print('subfinal_view')
+    print('swap_id', swap_id)
+    print('gDate', gDate)   
+    print('course_name', course_name)   
+    print('course_time_slot', course_time_slot) 
+    print('offer_player_first_name', offer_player_first_name)   
+    print('offer_player_last_name', offer_player_last_name) 
+    print('offer_player_mobile', offer_player_mobile)
+    print('offer_player_id', offer_player_id)
+    print('other_players', other_players)
+    print('first_name', first_name)
+    print('last_name', last_name)
+    print('player_id', player_id)
+    print('player_mobile', player_mobile)
+
+    if not swap_id or not tt_id or not gDate or not course_name or not course_time_slot or not offer_player_first_name or not offer_player_last_name or not offer_player_mobile or not offer_player_id or not other_players or not first_name or not last_name or not player_id or not player_mobile:
+        return HttpResponseBadRequest("Required data is missing. - subfinal_view")
+
+    # Update SubSwap table
+    # updates the row for the user who took the sub
+    SubSwap.objects.filter(
+        SwapID=swap_id,
+        Status='Sub Open',
+        Type='Sub Offer Sent',
+        PID=player_id
+    ).update(Status='Sub Closed', Type='Sub Accepted')
+
+    #closes all the other sub offer rows that equal this swap_id
+    SubSwap.objects.filter(
+        SwapID=swap_id,
+        Status='Sub Open'
+    ).update(Status='Sub Closed')
+
+    #closes any swap counters that could be open and offered by the original owner of the offered Sub tee time
+    SubSwap.objects.filter(
+        TeeTimeIndID=tt_id,
+        Status='Swap Open'
+    ).update(Status='Swap Closed Other')
+
+    # Check if Twilio is enabled
+    if settings.TWILIO_ENABLED:
+        account_sid = settings.TWILIO_ACCOUNT_SID
+        auth_token = settings.TWILIO_AUTH_TOKEN
+        client = Client(account_sid, auth_token)
+
+        # hard code to Prouty mobile for now
+        offer_player_mobile = '13122961817'
+
+        # Send text to the Sub Offer Player
+        offer_msg = f"Sub Accepted: {first_name} {last_name} is taking your tee time on {gDate} at {course_name} {course_time_slot}."
+        to_number = offer_player_mobile
+        message = client.messages.create(from_='+18449472599', body=offer_msg, to=to_number)
+        offer_mID = message.sid
+
+        # Insert row into Log for offer player
+        Log.objects.create(
+            SentDate=timezone.now(),
+            Type="Sub Given",
+            MessageID=offer_mID,
+            RequestDate=gDate,
+            OfferID=offer_player_id,
+            ReceiveID=player_id,
+            RefID=swap_id,
+            Msg=offer_msg,
+            To_number=to_number
+        )
+
+        # hard code to Prouty mobile for now
+        player_mobile = '13122961817'
+
+        # Send text to the Sub Accept Player
+        accept_msg = f"Sub Accepted: You are taking {offer_player_first_name} {offer_player_last_name}'s tee time on {gDate} at {course_name} {course_time_slot}."
+        to_number = player_mobile
+        message = client.messages.create(from_='+18449472599', body=accept_msg, to=to_number)
+        accept_mID = message.sid
+
+        # Insert row into Log for Sub Accept Player
+        Log.objects.create(
+            SentDate=timezone.now(),
+            Type="Sub Received",
+            MessageID=accept_mID,
+            RequestDate=gDate,
+            OfferID=offer_player_id,
+            ReceiveID=player_id,
+            RefID=swap_id,
+            Msg=accept_msg,
+            To_number=to_number
+        )
+    else:
+        offer_msg = f"Sub Accepted: {first_name} {last_name} is taking your tee time on {gDate} at {course_name} {course_time_slot}."
+        to_number = offer_player_mobile
+
+        # Insert row into Log for offer player
+        Log.objects.create(
+            SentDate=timezone.now(),
+            Type="Sub Given",
+            MessageID='fake mID',
+            RequestDate=gDate,
+            OfferID=offer_player_id,
+            ReceiveID=player_id,
+            RefID=swap_id,
+            Msg=offer_msg,
+            To_number=to_number
+        )
+
+        accept_msg = f"Sub Accepted: You are taking {offer_player_first_name} {offer_player_last_name}'s tee time on {gDate} at {course_name} {course_time_slot}."
+        to_number = player_mobile
+
+        # Insert row into Log for Sub Accept Player
+        Log.objects.create(
+            SentDate=timezone.now(),
+            Type="Sub Received",
+            MessageID='fake mID',
+            RequestDate=gDate,
+            OfferID=offer_player_id,
+            ReceiveID=player_id,
+            RefID=swap_id,
+            Msg=accept_msg,
+            To_number=to_number
+        )
+
+    # Update TeeTimesInd table
+    TeeTimesInd.objects.filter(id=tt_id).update(PID=player_id)
+
+    # Pass data to the template
+    context = {
+        'first_name': first_name,
+        'last_name': last_name,
+        'accept_msg': accept_msg,
+    }
+    return render(request, 'GRPR/subfinal.html', context)
+
+
 
 # this view is used to store session data for the swap request
 @login_required
@@ -634,12 +1124,6 @@ def swaprequestsent_view(request):
 
     # Check if Twilio is enabled
     if settings.TWILIO_ENABLED:
-
-        # Initialize the Twilio client
-        # COMMENTED OUT BC I THINK I DO NOT NEED IT SINCE THIS WAS ENABLED ABOVE IN A PRIOR IF ENABLED SECTION
-        # account_sid = settings.TWILIO_ACCOUNT_SID
-        # auth_token = settings.TWILIO_AUTH_TOKEN
-        # client = Client(account_sid, auth_token)
 
         for player in available_players:
             SubSwap.objects.create(

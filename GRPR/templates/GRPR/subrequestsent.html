@@ -30,6 +30,11 @@
                         <a href="#" class="nav-link" role="button">{{ first_name }} {{ last_name }}</a>
                     </li>
                 </ul>
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a href="#" class="nav-link" role="button">{{ first_name }} {{ last_name }}</a>
+                    </li>
+                </ul>
             </div>
         </div>
     </nav>
@@ -37,6 +42,8 @@
     <!-- Sub Request Sent Content -->
     <div class="container my-4">
         <h1>Sub Request Sent to all Available Players</h1>
+        <p>
+            Your Sub Request has been sent to all available players.  You will be notified when a player accepts your offer.
         <p>
             Message:  {{ sub_offer }}
         </p>
@@ -59,12 +66,6 @@
                 {% endfor %}
             </tbody>
         </table>
-        <h2>Twilio Message Code</h2>
-        <pre>
-            {% for message in twilio_messages %}
-                {{ message }}
-            {% endfor %}
-        </pre>
     </div>
 </body>
 </html>

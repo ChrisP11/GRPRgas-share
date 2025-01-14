@@ -37,6 +37,7 @@
     <!-- Sub Request Content -->
     <div class="container my-4">
         <h1>Sub Request</h1>
+        <h2>tt_id {{ tt_id }}</h2>
         <p>
             Please review and confirm the following Sub Request for <strong>{{ date }}</strong>. 
         </p>
@@ -47,7 +48,7 @@
             
         </blockquote>
         <div class="mt-4">
-            <a href="{% url 'subrequestsent_view' %}?date={{ date }}&sub_offer={{ user_name }} is offering his tee time on {{ date }} at {{ course }} {{ time_slot }} to play with {{ other_players }} to the first person who wants it." class="btn btn-primary">Confirm</a>
+            <a href="{% url 'store_sub_request_sent_data_view' %}?tt_id={{ tt_id }}" class="btn btn-primary btn-sm">Confirm</a>
             <a href="{% url 'subswap_view' %}" class="btn btn-secondary-custom">Cancel the Sub Request</a>
         </div>
     </div>

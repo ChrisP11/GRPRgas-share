@@ -79,6 +79,46 @@
             </tbody>
         </table>
 
+        {% if available_subs_data %}
+        <br>
+        <h1>Available Subs</h1>
+
+        <!-- Available Subs Table -->
+
+        <table class="table table-striped">
+
+            <thead>
+
+                <tr>
+                    <th>Date</th>
+                    <th>Course</th>
+                    <th>Time Slot</th>
+                    <th>Current Foursome</th>
+                    <th>Actions</th>
+
+                </tr>
+
+            </thead>
+
+            <tbody>
+                {% for sub in available_subs_data %}
+                <tr>
+                    <td>{{ sub.date }}</td>
+                    <td>{{ sub.course }}</td>
+                    <td>{{ sub.time_slot }}</td>
+                    <td>{{ sub.other_players }}</td>
+                    <td>
+
+                        <a href="{% url 'store_subaccept_data_view' %}?swap_id={{ sub.swapID }}" class="btn btn-primary">Accept</a>
+                        
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+        
+        
         {% if available_swaps_data %}
         <br>
         <h1>Available Swaps</h1>
