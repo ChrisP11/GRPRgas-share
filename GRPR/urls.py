@@ -12,6 +12,7 @@ urlpatterns = [
     path('tee_sheet/', views.teesheet_view, name='teesheet_view'),
     path('schedule/', views.schedule_view, name='schedule_view'),
     path('subswap/', views.subswap_view, name='subswap_view'), 
+    path('store_sub_request_data/', views.store_sub_request_data_view, name='store_sub_request_data_view'), 
     path('subrequest/', views.subrequest_view, name='subrequest_view'),
     path('subrequestsent/', views.subrequestsent_view, name='subrequestsent_view'),
     path('store_swap_data/', views.store_swap_data_view, name='store_swap_data_view'),

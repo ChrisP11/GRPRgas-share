@@ -5,8 +5,8 @@ from django.http import HttpResponse
 from django.http import HttpResponseBadRequest
 from django.utils import timezone
 from GRPR.models import Courses, TeeTimesInd, Players, SubSwap, Log
-from django.db import connection
-from GRPR.forms import DateForm
+# from django.db import connection
+# from GRPR.forms import DateForm
 from datetime import datetime
 from dateutil import parser
 from dateutil.parser import ParserError
@@ -280,24 +280,77 @@ def subswap_view(request):
 
     return render(request, 'GRPR/subswap.html', context)
 
+
+@login_required
+def store_sub_request_data_view(request):
+    tt_id = request.GET.get('tt_id')
+
+    # Fetch the Player ID associated with the logged-in user
+    user_id = request.user.id
+    # user = get_object_or_404(User, id=user_id)
+    first_name = request.user.first_name
+    last_name = request.user.last_name
+
+    player = get_object_or_404(Players, user_id=user_id)
+    player_id = player.id
+
+    # Fetch the TeeTimeInd instance
+    teetime = get_object_or_404(TeeTimesInd, id=tt_id)
+    gDate = teetime.gDate
+    course = teetime.CourseID
+    course_name = course.courseName
+    course_time_slot = course.courseTimeSlot
+
+    print('gDate', gDate)
+
+    # Fetch other players
+    other_players_qs = TeeTimesInd.objects.filter(
+        CourseID=course,
+        gDate=gDate,
+        CourseID__courseTimeSlot=course_time_slot
+    ).exclude(PID=player_id).select_related('PID')
+
+    other_players = ', '.join([f"{entry.PID.FirstName} {entry.PID.LastName}" for entry in other_players_qs])
+
+    # Store necessary data in the session
+    request.session['first_name'] = first_name
+    request.session['last_name'] = last_name
+    request.session['gDate'] = gDate.strftime('%Y-%m-%d')
+    request.session['course_name'] = course_name
+    request.session['course_time_slot'] = course_time_slot
+    request.session['other_players'] = other_players
+
+    return redirect('subrequest_view')
+
+
 @login_required
 def subrequest_view(request):
-    # Get data passed via query parameters
-    user_name = request.GET.get('user_name', 'User')
-    date = request.GET.get('date', 'Unknown date')
-    course = request.GET.get('course', 'Unknown course')
-    time_slot = request.GET.get('time_slot', 'Unknown time slot')
-    other_players = request.GET.get('other_players', 'No other players')
+    # Retrieve data from the session
+    first_name = request.session.pop('first_name', 'User')
+    last_name = request.session.pop('last_name', 'User')
+    gDate = request.session.pop('gDate', 'Unknown date')
+    course_name = request.session.pop('course_name', 'Unknown course')
+    course_time_slot = request.session.pop('course_time_slot', 'Unknown time slot')
+    other_players = request.session.pop('other_players', 'No other players')
+
+    # Convert the date string back to a datetime object
+    gDate_str = datetime.strptime(gDate, '%Y-%m-%d')
+
+    # Format the date for display in the msg on subrequest.html
+    gDate_display = gDate_str.strftime('%B %d, %Y')
 
     # Pass data to the template
     context = {
-        'user_name': user_name,
-        'date': date,
-        'course': course,
-        'time_slot': time_slot,
+        'first_name': first_name,
+        'last_name': last_name,
+        'gDate': gDate,
+        'gDate_display': gDate_display,
+        'course_name': course_name,
+        'course_time_slot': course_time_slot,
         'other_players': other_players,
     }
     return render(request, 'GRPR/subrequest.html', context)
+
 
 @login_required
 def subrequestsent_view(request):
@@ -361,7 +414,7 @@ def swaprequest_view(request):
     # Retrieve data from the session
     swap_tt_id = request.session.pop('swap_tt_id', None)
     user_id = request.session.pop('user_id', None)
-    print('swaprequeset_view')
+    print('swaprequest_view')
     print('swap_tt_id', swap_tt_id)
     print('user_id', user_id)
 
@@ -441,12 +494,6 @@ def store_swaprequestsent_data_view(request):
             gDate = parser.parse(date_raw).strftime("%Y-%m-%d")
         except (ParserError, TypeError):
             return HttpResponse("Invalid date format.", status=400)
-
-        # Fetch the Player ID associated with the logged-in user
-        # player = Players.objects.filter(user_id=user_id).first()
-        # if not player:
-        #     return HttpResponseBadRequest("Player not found for the logged-in user.")
-        # player_id = player.id
 
         # Find all players playing on the requested date
         players_on_requested_date = TeeTimesInd.objects.filter(gDate=gDate).values_list('PID_id', flat=True)
@@ -1009,9 +1056,6 @@ def swapcounteraccept_view(request):
     if not original_offer_date or not offer_other_players or not proposed_swap_date or not swap_other_players or not swap_id or not counter_ttid or not player_id or not player_first_name or not player_last_name or not counter_first_name or not counter_last_name:
         return HttpResponseBadRequest("Required data is missing. - swapcounteraccept_view")
 
-    # Fetch the counter player instance
-    # counter_player = get_object_or_404(Players, pk=player_id)
-
     context = {
         'original_offer_date': original_offer_date,
         'offer_other_players': offer_other_players,
@@ -1036,17 +1080,10 @@ def store_swapfinal_data_view(request):
         counter_ttid = request.GET.get('counter_ttid')
         swap_id = request.GET.get('swap_id')
 
-        # # Fetch the Player ID associated with the logged-in user
-        # player = Players.objects.filter(user_id=player_id).first()
-        # if not player:
-        #     return HttpResponseBadRequest("Player not found for the logged-in user.")
-        # player_id = player.id
-
         print('store_swapfinal_data_view')
         print('player_id', player_id)
         print('counter_ttid', counter_ttid)
         print('swap_id', swap_id)
-
 
         # Store necessary data in the session
         request.session['player_id'] = player_id
@@ -1067,7 +1104,7 @@ def swapfinal_view(request):
 
     print('swapfinal_view')
     print('player_id', player_id)
-    print('counter_ttid', counter_ttid)
+    print('counter_ttid', counter_ttid, 'THIS ONE')
     print('swap_id', swap_id)
 
 
@@ -1119,9 +1156,18 @@ def swapfinal_view(request):
         Status='Swap Open'
     ).update(Status='Swap Closed')
 
+    # This bit closes any row in the SubSwap table related to the counter_tt_id that just changed ownership
+    # For example, if the counter player currently had a Sub or Swap request live for this counter date, those would now be closed
+    SubSwap.objects.filter(
+        TeeTimeIndID=counter_ttid,
+        Status='Swap Open'
+    ).update(Status='Swap Closed Other')
+
     # Update TeeTimesInd table
     TeeTimesInd.objects.filter(id=offer_ttid).update(PID=counter_user_id)
     TeeTimesInd.objects.filter(id=counter_ttid).update(PID=player_id)
+    print('TeeTimesInd updated.  offer_ttid', offer_ttid, '  and counter_user_id:', counter_user_id)
+    print('TeeTimesInd updated.  counter_ttid', counter_ttid, '  and player_id:', player_id)
 
     # create the msgs that will be sent via text to the players + be entered into the Log table
     offer_msg = f"Tee Time Swap Accepted. You are now playing {counter_gDate} at {counter_Course} at {counter_TimeSlot}am. {counter_name} will play {offer_gDate} at {offer_Course} at {offer_TimeSlot}am."
@@ -1310,7 +1356,7 @@ def swapcancel_view(request):
         return HttpResponseBadRequest("Required data is missing. - swapcancel_view")
     
     # Parse the gDate to ensure it is in the correct format
-    # Have to use two different filers since some months are abbreviated and some are not
+    # Have to use two different filters since some months are abbreviated and some are not
     try:
         gDate_parsed = datetime.strptime(gDate, '%B %d, %Y').strftime('%Y-%m-%d')
     except ValueError:
@@ -1318,8 +1364,6 @@ def swapcancel_view(request):
             gDate_parsed = datetime.strptime(gDate, '%b. %d, %Y').strftime('%Y-%m-%d')
         except ValueError:
             return HttpResponseBadRequest("Invalid date format. {gDate} - swapcancel_view")
-    
-    print('gDate_parsed', gDate_parsed)
 
     # Fetch the Player ID associated with the logged-in user
     user_id = request.user.id

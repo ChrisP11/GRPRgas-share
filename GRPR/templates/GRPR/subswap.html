@@ -40,11 +40,12 @@
 
 
     <div class="container mt-4">
-        <p>{{ user_name }} </p>
-        <p>User ID {{ user_id }} </p>
-        <p>Player ID {{ player_id }} </p>
+        <h4>Swaps Available: 4   Subs Available:  2  Counter Offers:  5</h4>
         <br>
-        <h1>Current Schedule</h1>
+        <h4><strong>Swap</strong> - Request a future Tee Time for one of your current Tee Times</h4>
+        <h4><strong>Sub</strong> - Offer one of your current Tee Times for anyone to take</h4>
+        <br>
+        <h1>Current Schedule for {{ first_name }} {{ last_name }}</h1>
         
         <!-- Schedule Table -->
         <table class="table table-striped">
@@ -69,7 +70,7 @@
                             <button class="btn btn-primary btn-sm" disabled>Sub</button>
                             <button class="btn btn-secondary-custom btn-sm" disabled>Swap</button>
                         {% else %}
-                            <a href="{% url 'subrequest_view' %}?user_name={{ user_name }}&user_id={{ user_id|urlencode }}&date={{ entry.date }}&course={{ entry.course }}&time_slot={{ entry.time_slot }}&other_players={{ entry.other_players }}&tt_id={{ entry.tt_id|urlencode }}" class="btn btn-primary btn-sm">Sub</a>
+                            <a href="{% url 'store_sub_request_data_view' %}?tt_id={{ entry.tt_id }}" class="btn btn-primary btn-sm">Sub</a>
                             <a href="{% url 'store_swap_data_view' %}?tt_id={{ entry.tt_id }}" class="btn btn-sm btn-secondary-custom">Swap</a>
                         {% endif %}
                     </td>
@@ -81,7 +82,7 @@
         {% if available_swaps_data %}
         <br>
         <h1>Available Swaps</h1>
-        <h7> (requires swapping one of your future dates for the date below)</h7>
+        <h7> Tee Times available for trade with one of your Tee Times</h7>
 
         <!-- Available Swaps Table -->
 

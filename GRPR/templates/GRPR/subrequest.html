@@ -25,6 +25,11 @@
                         <a href="{% url 'logout' %}" class="nav-link" role="button">Logout</a>
                     </li>
                 </ul>
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a href="#" class="nav-link" role="button">{{ first_name }} {{ last_name }}</a>
+                    </li>
+                </ul>
             </div>
         </div>
     </nav>
@@ -36,8 +41,8 @@
             Please review and confirm the following Sub Request for <strong>{{ date }}</strong>. 
         </p>
         <blockquote class="blockquote">
-            {{ user_name }} is offering his tee time on <strong>{{ date }}</strong> at <strong>{{ course }}</strong> 
-            <strong>{{ time_slot }}</strong> to play with <strong>{{ other_players }}</strong> to the first person who wants it. 
+            {{ first_name }} {{ last_name }} is offering his tee time on <strong>{{ gDate_display }}</strong> at <strong>{{ course_name }}</strong> 
+            <strong>{{ course_time_slot }}</strong> to play with <strong>{{ other_players }}</strong> to the first person who wants it. 
             <br>
             
         </blockquote>
