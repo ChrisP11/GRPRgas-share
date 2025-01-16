@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>No Available Players for a Swap</title>
+    <title>Cancel Offered Sub</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="{% static 'css/styles.css' %}">
 </head>
@@ -34,13 +34,15 @@
     </nav>
 
     <div class="container mt-4">
-        <h1>No one has future dates available to Swap</h1>
-        <h4>It is probably late in the season and there are very few dates left</h4>
+        <h1>Cancel Offered Sub</h1>
+        <h4>Please confirm you would like to cancel the following Offered Sub and keep the Tee Time.</h4>
         <br>
-        <h4>Would you prefer to make a Sub request instead?</h4>
+        <h5><strong> Tee Time Details </strong>  {{ gDate }} {{ course_name }} {{ course_time_slot }}am</h5>
+        <br>
+        <h3 style="color: red;">Clicking the Cancel Offered Sub button cancels your Sub Request</h3>
         <div class="d-flex justify-content-start">
-            <a href="{% url 'store_sub_request_data_view' %}?tt_id={{ tt_id }}" class="btn btn-primary btn-sm">Sub Request</a>
-            <a href="{% url 'subswap_view' %}" class="btn btn-secondary btn-sm ms-2">Cancel</a>
+            <a href="{% url 'store_subcancel_data_view' %}?swap_id={{ swap_id }}" class="btn btn-danger btn-sm">Cancel Offered Swap</a>
+            <a href="{% url 'subswap_view' %}" class="btn btn-secondary btn-sm ms-2">Go Back</a>
         </div>
     </div>
 </body>

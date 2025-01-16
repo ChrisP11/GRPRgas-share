@@ -132,7 +132,7 @@
               </ul>
               <ul class="navbar-nav ms-auto">
                 <li class="nav-item">
-                    <a href="#" class="nav-link" role="button">{{ first_name }} {{ last_name }}</a>
+                    <a href="{% url 'profile_view' %}" class="nav-link" role="button">{{ first_name }} {{ last_name }}</a>
                 </li>
               </ul>
             </div>
@@ -205,9 +205,10 @@
   <div class="d-grid gap-2">
     <a href="{% url 'teesheet_view' %}?gDate=2024-07-13" class="btn btn-primary" role="button">Tee Sheet</a>
     <a href="{% url 'schedule_view' %}" class="btn btn-secondary-custom" role="button">Schedule</a>
-    <button class="btn btn-primary" type="button">Games</button>
+    <!-- <button class="btn btn-primary" type="button">Games</button> -->
     <a href="{% url 'subswap_view' %}" class="btn btn-primary" role="button">Sub / Swap</a>
-    <button class="btn btn-primary" type="button">Data</button>
+    <a href="{% url 'statistics_view' %}" class="btn btn-primary" role="button">Data</a>
+    <a href="{% url 'profile_view' %}" class="btn btn-primary" role="button">Profile</a>
   </div>
 </div>
 

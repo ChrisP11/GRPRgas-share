@@ -26,7 +26,7 @@
                 </ul>
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
-                        <a href="#" class="nav-link" role="button">{{ first_name }} {{ last_name }}</a>
+                        <a href="{% url 'profile_view' %}" class="nav-link" role="button">{{ first_name }} {{ last_name }}</a>
                     </li>
                 </ul>
             </div>
@@ -37,7 +37,7 @@
         <h1>Cancel Offered Swap</h1>
         <h4>Please confirm you would like to cancel the following Offered Swap and keep the Tee Time.</h4>
         <br>
-        <h5><strong> Time Details </strong>  {{ gDate }} {{ courseName }} {{ courseTimeSlot }}am</h5>
+        <h5><strong> Tee Time Details </strong>  {{ gDate }} {{ courseName }} {{ courseTimeSlot }}am</h5>
         <br>
         <h3 style="color: red;">Clicking the Cancel Offered Swap button cancels your Offered Swap</h3>
         <div class="d-flex justify-content-start">

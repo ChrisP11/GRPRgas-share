@@ -1,7 +1,7 @@
 from django.urls import path
 from GRPR import views
 from django.contrib.auth import views as auth_views
-from GRPR.views import CustomLoginView, register
+from GRPR.views import CustomLoginView, register, CustomPasswordChangeView
 
 urlpatterns = [
     path('login/', CustomLoginView.as_view(), name='login'),
@@ -20,6 +20,10 @@ urlpatterns = [
     path('subaccept/', views.subaccept_view, name='subaccept_view'),
     path('store_subfinal_data/', views.store_subfinal_data_view, name='store_subfinal_data_view'),
     path('subfinal/', views.subfinal_view, name='subfinal_view'),
+    path('store_subcancelconfirm_data/', views.store_subcancelconfirm_data_view, name='store_subcancelconfirm_data_view'),
+    path('subcancelconfirm/', views.subcancelconfirm_view, name='subcancelconfirm_view'),
+    path('store_subcancel_data/', views.store_subcancel_data_view, name='store_subcancel_data_view'),
+    path('subcancel/', views.subcancel_view, name='subcancel_view'),
     path('store_swap_data/', views.store_swap_data_view, name='store_swap_data_view'),
     path('swaprequest/', views.swaprequest_view, name='swaprequest_view'),
     path('store_swaprequestsent_data/', views.store_swaprequestsent_data_view, name='store_swaprequestsent_data_view'),
@@ -37,4 +41,13 @@ urlpatterns = [
     path('store_swapcancel_data/', views.store_swapcancel_data_view, name='store_swapcancel_data_view'),
     path('swapcancel/', views.swapcancel_view, name='swapcancel_view'),
     path('swapnoneavail/', views.swapnoneavail_view, name='swapnoneavail_view'),
+    path('statistics/', views.statistics_view, name='statistics_view'),
+    path('profile/', views.profile_view, name='profile_view'),
+    path('password_change/', CustomPasswordChangeView.as_view(), name='password_change'),  
+    path('password_change/done/', auth_views.PasswordChangeDoneView.as_view(template_name='GRPR/password_change_done.html'), name='password_change_done'),
+    path('password_reset/', auth_views.PasswordResetView.as_view(template_name='GRPR/password_reset_form.html'), name='password_reset'),
+    path('password_reset/done/', auth_views.PasswordResetDoneView.as_view(template_name='GRPR/password_reset_done.html'), name='password_reset_done'),
+    path('reset/<uidb64>/<token>/', auth_views.PasswordResetConfirmView.as_view(template_name='GRPR/password_reset_confirm.html'), name='password_reset_confirm'),
+    path('reset/done/', auth_views.PasswordResetCompleteView.as_view(template_name='GRPR/password_reset_complete.html'), name='password_reset_complete'),
+
 ]

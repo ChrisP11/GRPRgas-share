@@ -135,7 +135,8 @@ SESSION_COOKIE_SAMESITE = 'Lax'  # Set the SameSite attribute for session cookie
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+# Set the time zone to Central Standard Time (CST)
+TIME_ZONE = 'America/Chicago'
 
 USE_I18N = True
 
@@ -160,3 +161,14 @@ TWILIO_ENABLED = False
 # Twilio credentials
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
+
+# Email backend configuration
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
+
+# Default from email address
+DEFAULT_FROM_EMAIL = os.environ.get('EMAIL_HOST_USER')

@@ -14,6 +14,10 @@ from django.conf import settings  # Import settings
 from django.contrib.auth.views import LoginView # added for secure login page creation
 from django.contrib.auth.forms import UserCreationForm # added for secure login page creation
 from django.contrib.auth.decorators import login_required # added to require certified login to view any page
+from django.db.models import Q, F
+from django.contrib.auth.views import PasswordChangeView
+from django.urls import reverse_lazy
+from .forms import CustomPasswordChangeForm
 
 # Import the Twilio client
 from twilio.rest import Client
@@ -21,6 +25,12 @@ from twilio.rest import Client
 # added for secure login page creation
 class CustomLoginView(LoginView):
     template_name = 'GRPR/login.html'
+
+# added to allow users tp change their password
+class CustomPasswordChangeView(PasswordChangeView):
+    form_class = CustomPasswordChangeForm
+    success_url = reverse_lazy('password_change_done')
+    template_name = 'GRPR/password_change.html'
 
 
 # Create your views here.
@@ -165,6 +175,7 @@ def subswap_view(request):
                 f"{player.PID.FirstName} {player.PID.LastName}" for player in other_players
             ])
         })
+    
     # Fetch available subs for the player
     available_subs = SubSwap.objects.filter(
         Type='Sub Offer Sent',
@@ -280,6 +291,23 @@ def subswap_view(request):
                         'swap_ttid': proposed_swap.TeeTimeIndID.id,
                     })
     
+    # Query for Subs Proposed Table
+    subs_proposed = SubSwap.objects.filter(
+        Type='Sub Offer',
+        Status='Sub Open',
+        PID=player_id
+    ).select_related('TeeTimeIndID', 'TeeTimeIndID__CourseID')
+
+    subs_proposed_data = []
+    for sub in subs_proposed:
+        subs_proposed_data.append({
+            'request_date': sub.RequestDate,
+            'playing_date': sub.TeeTimeIndID.gDate,
+            'course': sub.TeeTimeIndID.CourseID.courseName,
+            'tee_time': sub.TeeTimeIndID.CourseID.courseTimeSlot,
+            'swap_id': sub.id
+        })
+    
     # Query for Swaps Proposed
     swaps_proposed = SubSwap.objects.filter(
         Type='Swap Offer',
@@ -318,6 +346,7 @@ def subswap_view(request):
         'available_subs_data': available_subs_data,
         'available_swaps_data': available_swaps_data,
         'counter_offers_data': counter_offers_data,
+        'subs_proposed_data': subs_proposed_data, 
         'swaps_proposed_data': swaps_proposed_data,
         'offered_tee_time_ids': offered_tee_time_ids,
         'first_name': request.user.first_name,  # Add the first name of the logged-in user
@@ -880,6 +909,163 @@ def subfinal_view(request):
     }
     return render(request, 'GRPR/subfinal.html', context)
 
+
+@login_required
+def store_subcancelconfirm_data_view(request):
+    if request.method == "GET":
+        swap_id = request.GET.get('swap_id')
+
+        # Fetch the SubSwap instance
+        sub_offer = get_object_or_404(SubSwap, SwapID=swap_id, Type='Sub Offer', Status='Sub Open')
+
+        # Fetch the TeeTimeInd instance
+        teetime = sub_offer.TeeTimeIndID
+        gDate = teetime.gDate
+        course = teetime.CourseID
+        course_name = course.courseName
+        course_time_slot = course.courseTimeSlot
+
+        print('store_SUBcancelconfirm_data_view')
+        print('gDate', gDate)
+        print('course_name', course_name) 
+        print('course_time_slot', course_time_slot) 
+        print('swap_id', swap_id)
+
+        # Store necessary data in the session
+        request.session['gDate'] = gDate.strftime('%Y-%m-%d')
+        request.session['course_name'] = course_name
+        request.session['course_time_slot'] = course_time_slot
+        request.session['swap_id'] = swap_id
+
+        return redirect('subcancelconfirm_view')
+    else:
+        return HttpResponseBadRequest("Invalid request.")
+    
+
+@login_required
+def subcancelconfirm_view(request):
+    # Retrieve data from the session
+    gDate = request.session.pop('gDate', None)
+    course_name = request.session.pop('course_name', None)
+    course_time_slot = request.session.pop('course_time_slot', None)
+    swap_id = request.session.pop('swap_id', None)
+
+    print('SUBcancelconfirm_view')
+    print('gDate', gDate)
+    print('course_name', course_name) 
+    print('course_time_slot', course_time_slot) 
+    print('swap_id', swap_id)
+
+    if not gDate or not course_name or not course_time_slot or not swap_id:
+        return HttpResponseBadRequest("Required data is missing. - SUBcancelconfirm_view")
+    
+    # Convert the date string back to a datetime object
+    gDate = datetime.strptime(gDate, '%Y-%m-%d')
+
+    # Format the date for display
+    gDate_display = gDate.strftime('%B %d, %Y')
+    
+    # Fetch the offer player instance for nav bar
+    first_name = request.user.first_name
+    last_name = request.user.last_name
+
+    context = {
+        'gDate': gDate_display,
+        'course_name': course_name,
+        'course_time_slot': course_time_slot,
+        'swap_id': swap_id,
+        'first_name': first_name,
+        'last_name': last_name,
+    }
+    return render(request, 'GRPR/subcancelconfirm.html', context)
+
+
+@login_required
+def store_subcancel_data_view(request):
+    if request.method == "GET":
+        swap_id = request.GET.get('swap_id')
+
+        # Fetch the SubSwap instance
+        sub_offer = get_object_or_404(SubSwap, SwapID=swap_id, Type='Sub Offer', Status='Sub Open')
+
+        # Fetch the TeeTimeInd instance
+        teetime = sub_offer.TeeTimeIndID
+        gDate = teetime.gDate
+        course = teetime.CourseID
+        course_name = course.courseName
+        course_time_slot = course.courseTimeSlot
+
+        print('store_SUBcancel_data_view')
+        print('gDate', gDate)
+        print('course_name', course_name) 
+        print('course_time_slot', course_time_slot) 
+        print('swap_id', swap_id)
+
+        # Store necessary data in the session
+        request.session['gDate'] = gDate.strftime('%Y-%m-%d')
+        request.session['course_name'] = course_name
+        request.session['course_time_slot'] = course_time_slot
+        request.session['swap_id'] = swap_id
+
+        return redirect('subcancel_view')
+    else:
+        return HttpResponseBadRequest("Invalid request.")
+
+
+@login_required
+def subcancel_view(request):
+    # Retrieve data from the session
+    swap_id = request.session.pop('swap_id', None)
+    course_name = request.session.pop('course_name', None)
+    course_time_slot = request.session.pop('course_time_slot', None)
+    gDate = request.session.pop('gDate', None)
+
+    print('SUBcancel_view')
+    print('gDate', gDate)
+    print('swap_id', swap_id)
+    print('course_name', course_name)
+    print('course_time_slot', course_time_slot)
+
+    if not swap_id or not course_name or not course_time_slot or not gDate:
+        return HttpResponseBadRequest("Required data is missing. - SUBcancel_view")
+    
+    # Convert the date string back to a datetime object
+    gDate = datetime.strptime(gDate, '%Y-%m-%d')
+
+    # Format the date for display
+    gDate_display = gDate.strftime('%B %d, %Y')
+    
+    # Fetch the offer player instance for nav bar
+    first_name = request.user.first_name
+    last_name = request.user.last_name
+    user_id = request.user.id
+    player = Players.objects.filter(user_id=user_id).first()
+    if not player:
+        return HttpResponseBadRequest("Player not found for the logged-in user.")
+    player_id = player.id
+
+    # Update SubSwap table
+    SubSwap.objects.filter(SwapID=swap_id, Status='Sub Open').update(Status='Sub Cancelled')
+
+    # Insert a row into Log table
+    Log.objects.create(
+        SentDate=timezone.now(),
+        Type='Sub Cancelled',
+        MessageID='No text sent',
+        RequestDate=gDate,
+        OfferID=player_id,
+        RefID=swap_id,
+        Msg=f'Sub Cancelled by {first_name} {last_name}'
+    )
+
+    context = {
+        'gDate': gDate_display,
+        'course_name': course_name,
+        'course_time_slot': course_time_slot,
+        'first_name': first_name,
+        'last_name': last_name,
+    }
+    return render(request, 'GRPR/subcancel.html', context)
 
 
 # this view is used to store session data for the swap request
@@ -1881,26 +2067,65 @@ def swapcancel_view(request):
 @login_required
 def swapnoneavail_view(request):
     # Retrieve data from the session
-    date_raw = request.session.get('date_raw')
-    course = request.session.get('course')
-    time_slot = request.session.get('time_slot')
-    user_name = request.session.get('user_name')
     first_name = request.session.get('first_name')
     last_name = request.session.get('last_name')
-    other_players = request.session.get('other_players')
     swap_tt_id = request.session.get('swap_tt_id')
-    user_id = request.session.get('user_id')
 
     context = {
-        'date_raw': date_raw,
-        'course': course,
-        'time_slot': time_slot,
-        'user_name': user_name,
+        
         'first_name': first_name,
         'last_name': last_name,
-        'other_players': other_players,
-        'swap_tt_id': swap_tt_id,
-        'user_id': user_id,
+        'tt_id': swap_tt_id,
     }
     return render(request, 'GRPR/swapnoneavail.html', context)
 
+
+@login_required
+def statistics_view(request):
+
+    actions = []
+
+    statistics_query = Log.objects.filter(
+    Q(Type='Swap Offer Accept') |
+    Q(Type='Swap Counter Accept') |
+    Q(Type='Sub Received') |
+    Q(Type='Sub Given') |
+    Q(Type='Sub Offer') |
+    Q(Type='Swap Offer') |
+    Q(Type='Sub Cancelled') |
+    Q(Type='Swap Cancelled')
+    ).order_by('-SentDate')[:25]
+
+    for row in statistics_query:
+
+        actions.append({
+            "lDate": row.SentDate,  
+            'type': row.Type,
+            "rDate": row.RequestDate.strftime('%B %d, %Y'),
+            "ref_id": row.RefID,
+            "msg": row.Msg,
+            'offer_id': row.OfferID,
+        })
+    
+    context = {
+        "actions": actions,
+        "first_name": request.user.first_name,  # Add the first name of the logged-in user
+        "last_name": request.user.last_name, # Add the last name of the logged-in user
+    }
+
+    return render(request, 'GRPR/statistics.html', context)
+
+
+@login_required
+def profile_view(request):
+    user = request.user
+    player = Players.objects.get(user_id=user.id)
+
+    context = {
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+        'user_name': user.username,
+        'email_address': player.Email,
+        'mobile': player.Mobile,
+    }
+    return render(request, 'GRPR/profile.html', context)

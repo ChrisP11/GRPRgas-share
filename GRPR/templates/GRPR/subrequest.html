@@ -27,7 +27,7 @@
                 </ul>
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
-                        <a href="#" class="nav-link" role="button">{{ first_name }} {{ last_name }}</a>
+                        <a href="{% url 'profile_view' %}" class="nav-link" role="button">{{ first_name }} {{ last_name }}</a>
                     </li>
                 </ul>
             </div>
@@ -37,7 +37,6 @@
     <!-- Sub Request Content -->
     <div class="container my-4">
         <h1>Sub Request</h1>
-        <h2>tt_id {{ tt_id }}</h2>
         <p>
             Please review and confirm the following Sub Request for <strong>{{ date }}</strong>. 
         </p>

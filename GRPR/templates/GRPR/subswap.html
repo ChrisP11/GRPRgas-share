@@ -31,7 +31,7 @@
                 </ul>
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
-                        <a href="#" class="nav-link" role="button">{{ first_name }} {{ last_name }}</a>
+                        <a href="{% url 'profile_view' %}" class="nav-link" role="button">{{ first_name }} {{ last_name }}</a>
                     </li>
                 </ul>
             </div>
@@ -189,6 +189,38 @@
         </table>
         {% endif %}
 
+    <!-- Subs Proposed Table -->
+    {% if subs_proposed_data %}
+    <br>
+    <h1>Subs Offered</h1>
+    <h7>Tee Times you have requested a Sub for</h7>
+
+    <table class="table table-striped mt-4">
+        <thead>
+            <tr>
+                <th>Date Sub Requested</th>
+                <th>Playing Date</th>
+                <th>Course</th>
+                <th>Tee Time</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for sub in subs_proposed_data %}
+            <tr>
+                <td>{{ sub.request_date }}</td>
+                <td>{{ sub.playing_date }}</td>
+                <td>{{ sub.course }}</td>
+                <td>{{ sub.tee_time }}</td>
+                <td>
+                    <a href="{% url 'store_subcancelconfirm_data_view' %}?swap_id={{ sub.swap_id }}" class="btn btn-danger btn-sm">Cancel Sub</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+    
     <!-- Swaps Proposed Table -->
     {% if swaps_proposed_data %}
     <br>
