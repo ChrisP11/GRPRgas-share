@@ -618,6 +618,8 @@ def subrequestsent_view(request):
         'date': gDate_str,
         'sub_offer': sub_offer,
         'available_players': available_players,
+        # 'first_name' = first_name,
+        # 'last_name' = last_name,
     }
     return render(request, 'GRPR/subrequestsent.html', context)
 
@@ -2093,7 +2095,8 @@ def statistics_view(request):
     Q(Type='Sub Offer') |
     Q(Type='Swap Offer') |
     Q(Type='Sub Cancelled') |
-    Q(Type='Swap Cancelled')
+    Q(Type='Swap Cancelled') |
+    Q(Type='Swap Counter')
     ).order_by('-SentDate')[:25]
 
     for row in statistics_query:

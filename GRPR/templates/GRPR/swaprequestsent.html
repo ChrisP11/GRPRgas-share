@@ -1,70 +1,40 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Swap Request Sent</title>
-    {% load static %}
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
-</head>
-<body>
-    <!-- Nav bar -->
-    <nav class="navbar navbar-expand-lg navbar-light bg-light">
-        <div class="container">
-            <a class="navbar-brand">GAS Golf</a>
-            <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarSupportedContent">
-                <ul class="navbar-nav mr-auto">
-                    <li class="nav-item active">
-                        <a href="{% url 'home_page' %}" class="nav-link">Home</a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="{% url 'logout' %}" class="nav-link" role="button">Logout</a>
-                    </li>
-                </ul>
-                <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a href="#" class="nav-link" role="button">{{ player.FirstName }} {{ player.LastName }}</a>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </nav>
+{% extends 'base.html' %}
 
-    <!-- Swap Request Sent Content -->
-    <div class="container my-4">
-        <h1>Swap Request Sent to all Available Players</h1>
-        <p>
-            Message:  {{ swap_offer }}
-        </p>
-        <h2>Available Players</h2>
-        <table class="table table-striped">
-            <thead>
+{% block title %}Swap Request Sent{% endblock %}
+
+{% block content %}
+
+
+<!-- Swap Request Sent Content -->
+<div class="container my-4">
+    <h1>Swap Request Sent to all Available Players</h1>
+    <p>
+        Message:  {{ swap_offer }}
+    </p>
+    <h2>Available Players</h2>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>First Name</th>
+                <th>Last Name</th>
+                <th>Mobile</th>
+                <th>Available Swap Dates</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for player in available_players %}
                 <tr>
-                    <th>First Name</th>
-                    <th>Last Name</th>
-                    <th>Mobile</th>
-                    <th>Available Swap Dates</th>
+                    <td>{{ player.FirstName }}</td>
+                    <td>{{ player.LastName }}</td>
+                    <td>{{ player.Mobile }}</td>
+                    <td>
+                        {% for date, id in player.swap_dates %}
+                            {{ date }} <br>
+                        {% endfor %}
+                    </td>
                 </tr>
-            </thead>
-            <tbody>
-                {% for player in available_players %}
-                    <tr>
-                        <td>{{ player.FirstName }}</td>
-                        <td>{{ player.LastName }}</td>
-                        <td>{{ player.Mobile }}</td>
-                        <td>
-                            {% for date, id in player.swap_dates %}
-                                {{ date }} <br>
-                            {% endfor %}
-                        </td>
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

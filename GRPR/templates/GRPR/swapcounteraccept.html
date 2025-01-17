@@ -1,53 +1,23 @@
-<!DOCTYPE html>
-<html lang="en">
-{% load static %}
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Proposed Swap</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-light bg-light">
-        <div class="container">
-            <a class="navbar-brand">GAS Golf</a>
-            <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav">
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'home_page' %}">Home</a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="{% url 'logout' %}" class="nav-link" role="button">Logout</a>
-                    </li>
-                </ul>
-                <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a href="{% url 'profile_view' %}" class="nav-link" role="button">{{ first_name }} {{ last_name }}</a>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </nav>
+{% extends 'base.html' %}
 
-    <div class="container mt-4">
-        <h1>Proposed Swap</h1>
-        <h4>Please review & <strong>Confirm</strong> the proposed swap details below</h4>
-        <br>
-        <h4>Your Offer Details</h4>
-        <h5><strong>{{ original_offer_date }}</strong>  playing with <strong>{{ offer_other_players }}</strong> </h5>
-        <br>
-        <h4>Counter Offer Details</h4>
-        <h5><strong>{{ counter_first_name }} {{ counter_last_name }}</strong> is offering <strong>{{ proposed_swap_date }}</strong> playing with {{ swap_other_players }}</h5>
-        <br>
-        <h3 style="color: red; font-weight: bold;">Clicking the Confirm button switches the tee times</h3>
-        <br>
+{% block title %}Swap Counter Accept{% endblock %}
 
-        <a href="{% url 'store_swapfinal_data_view' %}?player_id={{ player_id }}&counter_ttid={{ counter_ttid }}&swap_id={{ swap_id }}" class="btn btn-primary btn-sm">Confirm Tee Time Swap</a>
-        <a href="{% url 'subswap_view' %}" class="btn btn-secondary">Cancel</a>
-    </div>
-</body>
-</html>
+{% block content %}
+
+<div class="container mt-4">
+    <h1>Proposed Swap</h1>
+    <h4>Please review & <strong>Confirm</strong> the proposed swap details below</h4>
+    <br>
+    <h4>Your Offer Details</h4>
+    <h5><strong>{{ original_offer_date }}</strong>  playing with <strong>{{ offer_other_players }}</strong> </h5>
+    <br>
+    <h4>Counter Offer Details</h4>
+    <h5><strong>{{ counter_first_name }} {{ counter_last_name }}</strong> is offering <strong>{{ proposed_swap_date }}</strong> playing with {{ swap_other_players }}</h5>
+    <br>
+    <h3 style="color: red; font-weight: bold;">Clicking the Confirm button switches the tee times</h3>
+    <br>
+
+    <a href="{% url 'store_swapfinal_data_view' %}?player_id={{ player_id }}&counter_ttid={{ counter_ttid }}&swap_id={{ swap_id }}" class="btn btn-primary btn-sm">Confirm Tee Time Swap</a>
+    <a href="{% url 'subswap_view' %}" class="btn btn-secondary">Cancel</a>
+</div>
+{% endblock %}
