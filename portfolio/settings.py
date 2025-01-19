@@ -26,11 +26,13 @@ STATICFILES_DIRS = [BASE_DIR / "GRPR/static"]
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-o5-ky!1&76#6g+u&ur7hy8#+8*sj^l54k$fz8tl$!xzafju0rg'
+# SECRET_KEY = os.environ.get('SECRET_KEY', 'your-secret-key')
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# Set DEBUG to False for production
+DEBUG = False
 
-ALLOWED_HOSTS = []
+# Allow all host headers
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -88,6 +90,10 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
+# DATABASES = {
+#     'default': dj_database_url.config(default=os.environ.get('DATABASE_URL'))
+# }
 
 
 # Password validation
