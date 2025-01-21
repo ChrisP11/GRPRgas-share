@@ -12,24 +12,30 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 from pathlib import Path
 import os
+import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-STATIC_URL = '/static/'
+# static file settings
+STATIC_URL = '/static/' # see below for another slightly different entry on this
 STATICFILES_DIRS = [BASE_DIR / "GRPR/static"]
+STATIC_ROOT = BASE_DIR / "staticfiles" # added as part of port to Postgres
 
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-o5-ky!1&76#6g+u&ur7hy8#+8*sj^l54k$fz8tl$!xzafju0rg'
-# SECRET_KEY = os.environ.get('SECRET_KEY', 'your-secret-key')
-
 # Set DEBUG to False for production
 DEBUG = False
+
+# SECURITY WARNING: keep the secret key used in production secret!
+
+# Security settings
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'your_secret_key')
+# print(f"SECRET_KEY: {SECRET_KEY}")
+# SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
+
 
 # Allow all host headers
 ALLOWED_HOSTS = ['*']
@@ -50,6 +56,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware', # added as part of port to Postgres
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -63,9 +70,11 @@ ROOT_URLCONF = 'portfolio.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [
-            BASE_DIR /  'GRPR/templates',
-                ],
+        # 'DIRS': [
+        #     BASE_DIR /  'GRPR/templates',
+        #         ],
+         'DIRS': [os.path.join(BASE_DIR, 'templates')], # added as part of port to Postgres
+        
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -81,13 +90,23 @@ TEMPLATES = [
 WSGI_APPLICATION = 'portfolio.wsgi.application'
 
 
-# Database
-# https://docs.djangoproject.com/en/4.2/ref/settings/#databases
+## Database config for SQLite   # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
 
+# Database configuration for PostgreSQL
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'grpr_db',
+        'USER': os.getenv('POSTGRES_USER'),
+        'PASSWORD': os.getenv('POSTGRES_PASSWORD'), 
+        'HOST': 'localhost',
+        'PORT': '',
     }
 }
 
@@ -146,13 +165,14 @@ TIME_ZONE = 'America/Chicago'
 
 USE_I18N = True
 
+# Use timezone-aware datetimes
 USE_TZ = True
 
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
-STATIC_URL = 'static/'
+# STATIC_URL = 'static/'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
