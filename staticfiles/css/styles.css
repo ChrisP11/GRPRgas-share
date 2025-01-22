@@ -1,0 +1,41 @@
+.btn {
+    background-color: #008e70 !important; /* Green primary color */
+    border-color: #008e70 !important;
+    color: white !important;
+    padding: 0.375rem 0.75rem; /* Standard padding for consistent size */
+    font-size: 1rem;           /* Standard font size */
+    border-width: 1px;         /* Ensure border width is consistent */
+}
+
+.btn:hover {
+    background-color: #006a54 !important; /* Slightly darker green for hover */
+    border-color: #006a54 !important;
+}
+
+/* Custom Secondary Button */
+.btn-secondary-custom {
+    background-color: white !important;      /* White background */
+    color: #008e70 !important;               /* Text color (same as your primary button) */
+    border: 1px solid #008e70 !important;    /* Border with the same color as the text */
+    padding: 0.375rem 0.75rem;               /* Match primary button padding */
+    font-size: 1rem;                         /* Match primary button font size */
+    border-width: 1px;                       /* Ensure border width matches */
+}
+
+.btn-secondary-custom:hover {
+    background-color: #f8f9fa !important;    /* Slightly gray on hover */
+    color: #005f47 !important;               /* Darker text color on hover */
+    border-color: #005f47 !important;        /* Darker border color */
+}
+
+.btn-secondary-custom:focus {
+    outline: none !important;                /* Remove outline on focus */
+    box-shadow: 0 0 0 0.2rem rgba(0, 0, 0, 0.1) !important; /* Optional: add focus shadow */
+}
+
+/* Ensure both buttons are small when using btn-sm */
+.btn-sm {
+    padding: 0.25rem 0.5rem !important; /* Match size for both buttons */
+    font-size: 0.875rem !important;     /* Ensure consistent font size for small buttons */
+    border-radius: 0.2rem;              /* Ensure consistent border radius */
+}

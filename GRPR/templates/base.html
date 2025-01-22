@@ -27,6 +27,11 @@
                     <li class="nav-item">
                         <a href="{% url 'logout' %}" class="nav-link" role="button">Logout</a>
                     </li>
+                    {% if user.is_authenticated and user.username == 'cprouty' %}
+                    <li class="nav-item">
+                        <a href="{% url 'admin_page' %}" class="nav-link" role="button">Admin</a>
+                    </li>
+                    {% endif %}
                 </ul>
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item">

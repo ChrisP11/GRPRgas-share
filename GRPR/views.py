@@ -5,8 +5,6 @@ from django.http import HttpResponse
 from django.http import HttpResponseBadRequest
 from django.utils import timezone
 from GRPR.models import Courses, TeeTimesInd, Players, SubSwap, Log
-# from django.db import connection
-# from GRPR.forms import DateForm
 from datetime import datetime
 from dateutil import parser
 from dateutil.parser import ParserError
@@ -18,6 +16,8 @@ from django.db.models import Q, F
 from django.contrib.auth.views import PasswordChangeView
 from django.urls import reverse_lazy
 from .forms import CustomPasswordChangeForm
+from django.core.mail import send_mail
+
 
 # Import the Twilio client
 from twilio.rest import Client
@@ -55,6 +55,26 @@ def home_page(request):
         'last_name': request.user.last_name,
     }
     return render(request, 'GRPR/index.html', context)
+
+
+@login_required
+def admin_view(request):
+    if request.user.username != 'cprouty':
+        return redirect('home_page')  # Redirect to home if the user is not cprouty
+    return render(request, 'admin_view.html')
+
+# to trigger the test email:  http://localhost:8000/send-test-email/ 
+def send_test_email(request):
+    subject = 'Test Email'
+    message = 'This is a test email to verify email settings.'
+    from_email = settings.EMAIL_HOST_USER
+    recipient_list = ['cprouty@gmail.com']
+    
+    try:
+        send_mail(subject, message, from_email, recipient_list)
+        return HttpResponse('Test email sent successfully.')
+    except Exception as e:
+        return HttpResponse(f'Error sending test email: {e}')
 
 
 @login_required

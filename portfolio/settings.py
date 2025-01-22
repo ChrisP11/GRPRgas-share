@@ -18,16 +18,18 @@ import dj_database_url
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # static file settings
-STATIC_URL = '/static/' # see below for another slightly different entry on this
+# Development: Static files are served from GRPR/GRPR/static/css/styles.css.
+# Production: Static files are collected into GRPR/GRPR/staticfiles and served from there.
+STATIC_URL = '/static/' 
 STATICFILES_DIRS = [BASE_DIR / "GRPR/static"]
 STATIC_ROOT = BASE_DIR / "staticfiles" # added as part of port to Postgres
-
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 # Set DEBUG to False for production
-DEBUG = False
+# DEBUG = False
+DEBUG = True
 
 # SECURITY WARNING: keep the secret key used in production secret!
 
@@ -70,11 +72,7 @@ ROOT_URLCONF = 'portfolio.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        # 'DIRS': [
-        #     BASE_DIR /  'GRPR/templates',
-        #         ],
-         'DIRS': [os.path.join(BASE_DIR, 'templates')], # added as part of port to Postgres
-        
+        'DIRS': [BASE_DIR / 'GRPR/templates/GRPR'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -99,26 +97,21 @@ WSGI_APPLICATION = 'portfolio.wsgi.application'
 # }
 
 # Database configuration for PostgreSQL
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': 'grpr_db',
-#         'USER': os.getenv('POSTGRES_USER'),
-#         'PASSWORD': os.getenv('POSTGRES_PASSWORD'), 
-#         'HOST': 'localhost',
-#         'PORT': '',
-#     }
-# }
-
-# Database configuration for PostgreSQL
-# DATABASES = {
-#     'default': dj_database_url.config(default=os.environ.get('DATABASE_URL'))
-# }
-
-# Database configuration for PostgreSQL
 DATABASES = {
-    'default': dj_database_url.config(conn_max_age=600, ssl_require=True)
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'grpr_db',
+        'USER': os.getenv('POSTGRES_USER'),
+        'PASSWORD': os.getenv('POSTGRES_PASSWORD'), 
+        'HOST': 'localhost',
+        'PORT': '',
+    }
 }
+
+# Database configuration for PostgreSQL
+# DATABASES = {
+#     'default': dj_database_url.config(conn_max_age=600, ssl_require=True)
+# }
 
 
 # Password validation
@@ -178,7 +171,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
-# STATIC_URL = 'static/'
+
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
