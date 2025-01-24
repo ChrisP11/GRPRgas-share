@@ -28,8 +28,8 @@ STATIC_ROOT = BASE_DIR / "staticfiles" # added as part of port to Postgres
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 # Set DEBUG to False for production
-# DEBUG = False
-DEBUG = True
+DEBUG = False
+# DEBUG = True
 
 # SECURITY WARNING: keep the secret key used in production secret!
 
@@ -97,19 +97,19 @@ WSGI_APPLICATION = 'portfolio.wsgi.application'
 # }
 
 # Database configuration for PostgreSQL
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'grpr_db',
-        'USER': os.getenv('POSTGRES_USER'),
-        'PASSWORD': os.getenv('POSTGRES_PASSWORD'), 
-        'HOST': 'localhost',
-        'PORT': '',
-    }
-}
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': 'grpr_db',
+#         'USER': os.getenv('POSTGRES_USER'),
+#         'PASSWORD': os.getenv('POSTGRES_PASSWORD'), 
+#         'HOST': 'localhost',
+#         'PORT': '',
+#     }
+# }
 
 # Database configuration for PostgreSQL
-# DATABASES = {'default': dj_database_url.config(conn_max_age=600, ssl_require=True)}
+DATABASES = {'default': dj_database_url.config(conn_max_age=600, ssl_require=True)}
 
 
 # Password validation
