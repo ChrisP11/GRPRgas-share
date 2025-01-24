@@ -4,15 +4,17 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpResponse
 from django.http import HttpResponseBadRequest
 from django.utils import timezone
-from GRPR.models import Courses, TeeTimesInd, Players, SubSwap, Log
+from GRPR.models import Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity
 from datetime import datetime
 from dateutil import parser
 from dateutil.parser import ParserError
 from django.conf import settings  # Import settings
 from django.contrib.auth.views import LoginView # added for secure login page creation
-from django.contrib.auth.forms import UserCreationForm # added for secure login page creation
+from django.contrib.auth.forms import UserCreationForm, AuthenticationForm # added for secure login page creation
 from django.contrib.auth.decorators import login_required # added to require certified login to view any page
-from django.db.models import Q, F
+from django.contrib.auth.models import User # for user activity tracking on Admin page
+from django.contrib.auth import login as auth_login # for user activity tracking on Admin page
+from django.db.models import Q, Count
 from django.contrib.auth.views import PasswordChangeView
 from django.urls import reverse_lazy
 from .forms import CustomPasswordChangeForm
@@ -25,6 +27,20 @@ from twilio.rest import Client
 # added for secure login page creation
 class CustomLoginView(LoginView):
     template_name = 'GRPR/login.html'
+
+    def form_valid(self, form):
+        user = form.get_user()
+        auth_login(self.request, user)
+        print(f"User {user.username} authenticated")
+        
+        # Log the login event
+        try:
+            LoginActivity.objects.create(user=user)
+            print(f"LoginActivity created for user: {user.username}")
+        except Exception as e:
+            print(f"Error creating LoginActivity: {e}")
+        
+        return redirect('home_page')
 
 # added to allow users tp change their password
 class CustomPasswordChangeView(PasswordChangeView):
@@ -45,6 +61,36 @@ def register(request):
         form = UserCreationForm()
     return render(request, 'register.html', {'form': form})
 
+
+def login_view(request):
+    print("login_view called")
+    
+    if request.method == 'POST':
+        print("POST request received")
+        
+        form = AuthenticationForm(request, data=request.POST)
+        if form.is_valid():
+            print("Form is valid")
+            
+            user = form.get_user()
+            auth_login(request, user)
+            print(f"User {user.username} authenticated")
+            
+            # Log the login event
+            try:
+                LoginActivity.objects.create(user=user)
+                print(f"LoginActivity created for user: {user.username}")
+            except Exception as e:
+                print(f"Error creating LoginActivity: {e}")
+            return redirect('home_page')
+        else:
+            print("Form is not valid")
+    else:
+        print("GET request received")
+        
+        form = AuthenticationForm()
+    return render(request, 'login.html', {'form': form})
+
 # Initial home page
 @login_required
 def home_page(request):
@@ -57,11 +103,22 @@ def home_page(request):
     return render(request, 'GRPR/index.html', context)
 
 
+# Admin page, just user logins so far
 @login_required
 def admin_view(request):
     if request.user.username != 'cprouty':
         return redirect('home_page')  # Redirect to home if the user is not cprouty
-    return render(request, 'admin_view.html')
+    
+    # Fetch user activity
+    users = User.objects.all().values('username', 'date_joined', 'last_login').order_by('-last_login')
+    login_activities = LoginActivity.objects.values('user__username').annotate(login_count=Count('id'))
+    
+    context = {
+        'users': users,
+        'login_activities': login_activities,
+    }
+    return render(request, 'admin_view.html', context)
+
 
 # to trigger the test email:  http://localhost:8000/send-test-email/ 
 def send_test_email(request):
@@ -87,7 +144,7 @@ def teesheet_view(request):
         if not gDate:
             return HttpResponseBadRequest("Date is required.")
 
-        # Query the database
+        # Query the database for the tee sheet cards
         queryset = TeeTimesInd.objects.filter(gDate=gDate).select_related('PID', 'CourseID')
 
         # Construct the cards dictionary
@@ -110,11 +167,34 @@ def teesheet_view(request):
                 "firstName": player.FirstName,
                 "lastName": player.LastName
             })
+        
+        # Query the database for the schedule table
+        schedule_queryset = TeeTimesInd.objects.filter(gDate__gt='2025-01-01').select_related('PID', 'CourseID')
+
+        # Construct the schedule dictionary
+        schedule_dict = {}
+        for teetime in schedule_queryset:
+            key = (teetime.gDate, teetime.CourseID.courseName, teetime.CourseID.courseTimeSlot)
+            if key not in schedule_dict:
+                schedule_dict[key] = {
+                    "date": teetime.gDate,
+                    "course": teetime.CourseID.courseName,
+                    "time_slot": teetime.CourseID.courseTimeSlot,
+                    "players": []
+                }
+            schedule_dict[key]["players"].append(f"{teetime.PID.FirstName} {teetime.PID.LastName}")
+
+        # Convert the schedule dictionary to a list
+        schedule = []
+        for key, value in schedule_dict.items():
+            value["players"] = ", ".join(value["players"])
+            schedule.append(value)
 
         # Pass data to the template
         context = {
             "cards": cards,
             "gDate": gDate,  # Add the chosen date to the context
+            "schedule": schedule,  # Add the schedule data to the context
             "first_name": request.user.first_name,  # Add the first name of the logged-in user
             "last_name": request.user.last_name, # Add the last name of the logged-in user
         }
@@ -2105,6 +2185,46 @@ def swapnoneavail_view(request):
 @login_required
 def statistics_view(request):
 
+    # For the distro heatmap chart:
+    players = Players.objects.exclude(id=25)
+
+    # Initialize the chart data
+    chart_data = []
+    max_count = 0
+
+    for player_a in players:
+        row = []
+        for player_b in players:
+            if player_a.id == player_b.id:
+                row.append(None)  # Leave the cell blank if the players are the same
+            else:
+                count = TeeTimesInd.objects.filter(
+                    PID=player_a.id,
+                    gDate__gt='2025-01-01'  # Add date filter
+                ).filter(
+                    gDate__in=TeeTimesInd.objects.filter(
+                        PID=player_b.id,
+                        gDate__gt='2025-01-01'  # Add date filter
+                    ).values('gDate')
+                ).count()
+                row.append(count)
+                if count > max_count:
+                    max_count = count
+        chart_data.append(row)
+
+    # Normalize the values
+    normalized_chart_data = []
+    for row in chart_data:
+        normalized_row = [None if cell is None else cell / max_count for cell in row]
+        normalized_chart_data.append(normalized_row)
+
+    # Zip the players, chart_data, and normalized_chart_data for easy iteration in the template
+    zipped_data = [
+        (player_a, list(zip(row, normalized_row)))
+        for player_a, row, normalized_row in zip(players, chart_data, normalized_chart_data)
+    ]
+
+    # for the User Activity feed:
     actions = []
 
     statistics_query = Log.objects.filter(
@@ -2131,6 +2251,8 @@ def statistics_view(request):
         })
     
     context = {
+        'players': players,
+        'zipped_data': zipped_data,
         "actions": actions,
         "first_name": request.user.first_name,  # Add the first name of the logged-in user
         "last_name": request.user.last_name, # Add the last name of the logged-in user
@@ -2152,3 +2274,5 @@ def profile_view(request):
         'mobile': player.Mobile,
     }
     return render(request, 'GRPR/profile.html', context)
+
+

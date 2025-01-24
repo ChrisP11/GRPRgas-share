@@ -5,6 +5,7 @@
 {% block content %}
 
 <div class="container my-4">
+
     <h1 class="mb-4">Activity Feed</h1>
 
     <!-- Log Table Activity -->
@@ -30,6 +31,36 @@
             </tbody>
         </table>
     {% endif %}
+    <br>
+    <br>
+
+    <h1>Partner Heatmap</h1>
+    <table class="table">
+        <thead>
+            <tr>
+                <th></th>
+                {% for player in players %}
+                    <th class="rotate"><div>{{ player.FirstName }} {{ player.LastName }}</div></th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for player_a, row in zipped_data %}
+                <tr>
+                    <th>{{ player_a.FirstName }} {{ player_a.LastName }}</th>
+                    {% for cell, normalized_cell in row %}
+                        {% if cell is not None %}
+                            <td class="heatmap-cell" style="background-color: rgba(0, 142, 112, {{ normalized_cell }});">
+                                {{ cell }}
+                            </td>
+                        {% else %}
+                            <td class="heatmap-cell"></td>
+                        {% endif %}
+                    {% endfor %}
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
 
 {% endblock %}

@@ -8,11 +8,9 @@ django.setup()
 from GRPR.models import Players
 
 # Query the Players table and print FirstName and LastName
-players = Players.objects.exclude(id=25)
+players = Players.objects.exclude(id=25).exclude(SplitPartner__in=[2, 4, 20])
 for player in players:
-    # print(f"{player.id} {player.FirstName} {player.LastName}")
-    # pName = player.FirstName, " ", player.LastName
-    pName = (f"{player.FirstName} {player.LastName}")
-    print(pName)
+	pID = player.id
+	print(pID)
 
-    # preRandomGolfers.append({player.FirstName},{player.LastName})
+

@@ -19,18 +19,6 @@ class Crews(models.Model):
     class Meta:
         db_table = "Crews"
 
-class TeeTimes(models.Model):
-    CrewID = models.IntegerField()
-    gDate = models.DateField()
-    CourseID = models.IntegerField()
-    P1ID = models.IntegerField()
-    P2ID = models.IntegerField()
-    P3ID = models.IntegerField()
-    P4ID = models.IntegerField()
-
-    class Meta:
-        db_table = "TeeTimes"
-
 
 class TeeTimesInd(models.Model):
     CrewID = models.IntegerField()
@@ -67,11 +55,6 @@ class SubSwap(models.Model):
 
     class Meta:
         db_table = "SubSwap"
-    
-    # This is usable to help make tables human readable in the Django admin interface
-    # I am not using it for now, though recommended by C.  May come back to it later
-    # def __str__(self):
-    #     return f"SubSwap {self.id} - {self.Type} - {self.Status}"
 
 
 class Log(models.Model):
@@ -90,3 +73,12 @@ class Log(models.Model):
         db_table = "Log"
 
 
+class LoginActivity(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    login_time = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.username} logged in at {self.login_time}"
+    
+    class Meta:
+        db_table = "LoginActivity"

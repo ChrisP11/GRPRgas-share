@@ -217,6 +217,7 @@ teetimes = [{'date': '2024-04-20'}, {'date': '2024-04-27'}, {'date': '2024-05-04
 			, {'date': '2024-06-15'}, {'date': '2024-06-22'}, {'date': '2024-06-29'}, {'date': '2024-07-06'}
 			, {'date': '2024-07-13'}, {'date': '2024-08-03'}, {'date': '2024-08-10'}, {'date': '2024-08-17'}
 			, {'date': '2024-08-24'}, {'date': '2024-08-31'}]
+			
 courses = [{'name': 'Maple Meadows'}, {'name': 'The Preserve850'}, {'name': 'The Preserve900'}]
 
 # dates requested off by the player

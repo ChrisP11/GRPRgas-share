@@ -16,6 +16,14 @@
 
 import math    # used to round up to integers
 import random  # used to randomize the golfer order
+import os
+import django
+
+# Set up the Django environment
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'portfolio.settings')
+django.setup()
+# import needdd tables
+from GRPR.models import Players, Courses, TeeTimesInd
 
 def seed_process():
 	# Randomize the order of the golfers - needed because some orders of golfers can result in some players not getting enough rounds
@@ -83,43 +91,42 @@ def create_foursomes(maxRounds, maxPerCourse):
 					# check if that player is playing the current date (Hard)
 					player = golfers[i]
 					if date in dateGolferDict and player in dateGolferDict[date]:
-					    pass # print(f"{player} is already playing {date}, they cannot be chosen.")
+						pass # print(f"{player} is already playing {date}, they cannot be chosen.")
 					else:
 						# check the players Requested Off dates
 						if player in exDatesDict and date in exDatesDict[player]:
 							pass # print(f'{player} has requested {date} off and is removed from consideration.')
 						else:
-						    # check if the player has played the max number of plays allowed (Hard)
-						    slotsPlayed = golferSlotsDict[player]
-						    if slotsPlayed >= maxRounds:
-						    	pass # print(f"{player} has played the maximum number of rounds available and can no longer be chosen")
-						    else:
+							# check if the player has played the max number of plays allowed (Hard)
+							slotsPlayed = golferSlotsDict[player]
+							if slotsPlayed >= maxRounds:
+								pass # print(f"{player} has played the maximum number of rounds available and can no longer be chosen")
+							else:
 						    	# see if the player has hit maximum number of plays on the course
-						    	coursePlayed = courseGolferDict[korse][player]
-						    	if coursePlayed >= maxPerCourse:
-						    		pass # print(f"{player} has played this {korse} the max number ({courseGolferDict[korse][player]}) already.")
-						    	else:
-						    		# now we create the basket and fill it with the players who can play and give them a score.
-						    		# slotsPlayed + coursePlayed + dcScore (times played with people already in the 4some)
-						    		# the higher the score, the less likely they will be picked
-						    		# the IF statements check the current size of the 4some
-						    		if len(foursomes[date][korse]) == 0:
-						    			dcScore = 0 # no other players in the 4some, dcScore is zero
-						    		if len(foursomes[date][korse]) == 1:
-						    			p1 = foursomes[date][korse][0]
-						    			dcScore = danceCard[player][p1]
-						    		if len(foursomes[date][korse]) == 2:
-						    			p1 = foursomes[date][korse][0]
-						    			p2 = foursomes[date][korse][1]
-						    			dcScore = danceCard[player][p1] + danceCard[player][p2]
-						    		if len(foursomes[date][korse]) == 3:
-						    			p1 = foursomes[date][korse][0]
-						    			p2 = foursomes[date][korse][1]
-						    			p3 = foursomes[date][korse][2]
-						    			dcScore = danceCard[player][p1] + danceCard[player][p2] + danceCard[player][p3]
-
-						    		# player added to the basket here:
-						    		basket[player] = slotsPlayed + coursePlayed + dcScore
+								coursePlayed = courseGolferDict[korse][player]
+								if coursePlayed >= maxPerCourse:
+									pass # print(f"{player} has played this {korse} the max number ({courseGolferDict[korse][player]}) already.")
+								else:
+									# now we create the basket and fill it with the players who can play and give them a score.
+									# slotsPlayed + coursePlayed + dcScore (times played with people already in the 4some)
+									# the higher the score, the less likely they will be picked
+									# the IF statements check the current size of the 4some
+									if len(foursomes[date][korse]) == 0:
+										dcScore = 0 # no other players in the 4some, dcScore is zero
+									if len(foursomes[date][korse]) == 1:
+										p1 = foursomes[date][korse][0]
+										dcScore = danceCard[player][p1]
+									if len(foursomes[date][korse]) == 2:
+										p1 = foursomes[date][korse][0]
+										p2 = foursomes[date][korse][1]
+										dcScore = danceCard[player][p1] + danceCard[player][p2]
+									if len(foursomes[date][korse]) == 3:
+										p1 = foursomes[date][korse][0]
+										p2 = foursomes[date][korse][1]
+										p3 = foursomes[date][korse][2]
+										dcScore = danceCard[player][p1] + danceCard[player][p2] + danceCard[player][p3]
+									# player added to the basket here:
+									basket[player] = slotsPlayed + coursePlayed + dcScore
 
 				# get the player with the lowest (best) value from the basket
 				minValue = min(basket.values())
@@ -162,64 +169,69 @@ def results():
 		date = teetimes[i]['date']
 		for j in range(0, len(courses)):
 			korse = courses[j]['name']
-			print(date,",", korse, ", time, ",foursomes[date][korse][0], ",",foursomes[date][korse][1], ",",foursomes[date][korse][2], ",",foursomes[date][korse][3])
+			print(date,",", korse, foursomes[date][korse][0], ",",foursomes[date][korse][1], ",",foursomes[date][korse][2], ",",foursomes[date][korse][3])
+			plyr1 = Players.objects.get(id=foursomes[date][korse][0])
+			plyr2 = Players.objects.get(id=foursomes[date][korse][1])
+			plyr3 = Players.objects.get(id=foursomes[date][korse][2])
+			plyr4 = Players.objects.get(id=foursomes[date][korse][3])
+			korseObj = Courses.objects.get(id=korse)
+			
+			new_teetime_insert = TeeTimesInd(CrewID=1, gDate=date, CourseID=korseObj, PID=plyr1)
+			new_teetime_insert.save()
+			new_teetime_insert = TeeTimesInd(CrewID=1, gDate=date, CourseID=korseObj, PID=plyr2)
+			new_teetime_insert.save()
+			new_teetime_insert = TeeTimesInd(CrewID=1, gDate=date, CourseID=korseObj, PID=plyr3)
+			new_teetime_insert.save()
+			new_teetime_insert = TeeTimesInd(CrewID=1, gDate=date, CourseID=korseObj, PID=plyr4)
+			new_teetime_insert.save()
 	print()
 
+# Query the Players table and get PIDs
+preRandomGolfers = []
+# hard coded OUT the second split player - see below in the results() function where this needs to be copied
+players = Players.objects.exclude(id=25).exclude(SplitPartner__in=[1, 2, 4, 20])
+for player in players:
+	pID = player.id
+	preRandomGolfers.append(pID)
 
-# lists/dicts with pre loaded data
-preRandomGolfers = [
-	'Mark Brown'
-	,'Chris English John Kane'
-	,'Mike May Pete Birmingham'
-	,'Chris Coogan'
-	,'Mike Ewell'
-	,'John Griffin'
-	,'Brad Hunter'
-	,'Mike Peterson'
-	,'John Mcilwain'
-	,'Chris Marzec'
-	,'Chris Prouty'
-	,'Jaime Santana'
-	,'Ed Sloan'
-	,'Mike Stutz'
-	,'Kelly Taira'
-	,'Paul Deutsch'
-	,'Mike DeHaan'
-	,'John Sullivan Chris Lynn'
-	,'Keith Huizinga'
-	,'Mike Ryan'
-	,'Tom Canepa'
-]
-# Ryder Cup is 7/20 & 7/27
-teetimes = [{'date': '2024-04-20'}, {'date': '2024-04-27'}, {'date': '2024-05-04'}, {'date': '2024-05-11'}
-			, {'date': '2024-05-18'}, {'date': '2024-05-25'}, {'date': '2024-06-01'}, {'date': '2024-06-08'}
-			, {'date': '2024-06-15'}, {'date': '2024-06-22'}, {'date': '2024-06-29'}, {'date': '2024-07-06'}
-			, {'date': '2024-07-13'}, {'date': '2024-08-03'}, {'date': '2024-08-10'}, {'date': '2024-08-17'}
-			, {'date': '2024-08-24'}, {'date': '2024-08-31'}]
-courses = [{'name': 'Maple Meadows'}, {'name': 'The Preserve850'}, {'name': 'The Preserve900'}]
 
-# dates requested off by the player
+
+courses = []
+korses = Courses.objects.filter(crewID=1)
+for korse in korses:
+	cID = korse.id
+	courses.append({'name': cID})
+
+
+# 2025 dates, # Ryder Cup is 7/19 & 7/26
+# will have to update later if we keep MM and it has a shortened season - not here but elsewhere
+teetimes = [{'date': '2025-04-19'}, {'date': '2025-04-26'}, {'date': '2025-05-03'}, {'date': '2025-05-10'}
+			, {'date': '2025-05-17'}, {'date': '2025-05-24'}, {'date': '2025-05-31'}, {'date': '2025-06-07'}
+			, {'date': '2025-06-14'}, {'date': '2025-06-21'}, {'date': '2025-06-28'}, {'date': '2025-07-05'}
+			, {'date': '2025-07-12'}, {'date': '2025-08-02'}, {'date': '2025-08-09'}, {'date': '2025-08-16'}
+			, {'date': '2025-08-23'}, {'date': '2025-08-30'}]
+
+
 exDatesDict = {
-	'Mark Brown': ['2024-06-29', '2024-07-06', '2024-08-17']
-	,'Chris English John Kane': ['2024-08-17', '2024-08-24', '2024-08-31']
-	,'Mike May Pete Birmingham': ['2024-05-18', '2024-06-08', '2024-08-31']
-	,'Chris Coogan': ['2024-04-27', '2024-06-15', '2024-08-17']
-	,'Mike Ewell': ['2024-04-20', '2024-04-27', '2024-05-04', '2024-05-11', '2024-05-18', '2024-05-25', '2024-06-01', '2024-06-08', '2024-06-15', '2024-07-13', '2024-08-10']
-	,'John Griffin': ['2024-05-11', '2024-05-18', '2024-05-25']
-	,'Brad Hunter': ['2024-04-20', '2024-07-06', '2024-08-31']
-	,'Chris Marzec': ['2024-07-20', '2024-08-17']
-	,'John Mcilwain': ['2024-05-11', '2024-07-06', '2024-07-20']
-	,'Mike Peterson': ['2024-05-11', '2024-06-29', '2024-07-13']
-	,'Chris Prouty': ['2024-04-27', '2024-06-08', '2024-06-15']
-	,'Ed Sloan': ['2024-05-04', '2024-05-25', '2024-06-29']
-	,'Mike Stutz': ['2024-06-01', '2024-06-15', '2024-06-29']
-	,'Kelly Taira': ['2024-05-11', '2024-06-22']
-	,'Paul Deutsch': ['2024-05-25', '2024-06-08']
-	,'Mike DeHaan': ['2024-06-15', '2024-07-06', '2024-08-31']
-	,'John Sullivan Chris Lynn': ['2024-04-27', '2024-08-17']
-	,'Keith Huizinga': ['2024-04-20', '2024-05-11', '2024-05-18']
-	,'Mike Ryan': ['2024-07-06']
-	,'Tom Canepa': ['2024-05-18', '2024-06-01', '2024-06-08']
+	1 : ['2025-06-28', '2025-07-05', '2025-08-16']
+	,2 : ['2025-08-16', '2025-08-23', '2025-08-30']
+	,4 : ['2025-04-26', '2025-06-14', '2025-08-16']
+	,7 : ['2025-04-19', '2025-04-26', '2025-05-03', '2025-05-10', '2025-05-17', '2025-05-24', '2025-06-07', '2025-06-14', '2025-07-1', '2025-08-09']
+	,6 : ['2025-05-10', '2025-05-17', '2025-05-24']
+	,7 : ['2025-04-19', '2025-07-05', '2025-08-30']
+	,8 : ['2025-07-19', '2025-08-16']
+	,9 : ['2025-05-10', '2025-07-05', '2025-07-19']
+	,10 : ['2025-05-10', '2025-06-28', '2025-07-12']
+	,11 : ['2025-04-26', '2025-06-07', '2025-06-14']
+	,12 : ['2025-05-03', '2025-05-24', '2025-06-28']
+	,13 : ['2025-06-14', '2025-06-28']
+	,14 : ['2025-05-10', '2025-06-21']
+	,15 : ['2025-05-24', '2025-06-07']
+	,16 : ['2025-06-14', '2025-07-05', '2025-08-30']
+	,17 : ['2025-04-26', '2025-08-16']
+	,18 : ['2025-04-19', '2025-05-10', '2025-05-17']
+	,19 : ['2025-07-05']
+	,20 : ['2025-05-17', '2025-06-07']
 }
 
 
@@ -242,20 +254,43 @@ while resultsGood == 0:
 	# run the seed process - preps the data capture dicts
 	seed_process()
 	golfers = seed_process()
-	print(golfers)
+	print('golfers in randomized order:', golfers)
 
 	# create the foursomes
 	create_foursomes(maxRounds, maxPerCourse)
 
 	# check to see if someone got shorted
 	# special section to cover Mike Ewell and his short summer
-	del golferSlotsDict['Mike Ewell']
+	# del golferSlotsDict['Mike Ewell']
+	del golferSlotsDict[7]
 	minSlots = min(golferSlotsDict.values())
 	print()
 	if minSlots < maxRounds - 1:
 		print('someone is being shorted - Max Rounds', maxRounds, 'Min Slot', minSlots, 'run it again!')
+		# Clear out the data that was just entered into TeeTimesInd using gDate is more recent than 2025-01-01
+		TeeTimesInd.objects.filter(gDate__gt='2025-01-01').delete()
 	else:
 		print('everyone gets to play enough Max Rounds', maxRounds, 'Min Slot', minSlots,)
+		from GRPR.models import TeeTimesInd, Players
+		
+		prds = [1,2,4,20] # hard coded list of players that need to be split
+		for p in prds:
+			print()
+			splitPartnerTeeTimes = TeeTimesInd.objects.filter(PID_id=p, gDate__gt='2025-01-01').values('id')
+			splitID = Players.objects.get(SplitPartner=p)
+			trn = 0
+			for tt in splitPartnerTeeTimes:
+				tt_id = tt['id']
+				if trn == 0:
+					trn = 1
+					print(tt_id, 'stays with original player')
+				else:
+					# give this tee time to the split partner
+					TeeTimesInd.objects.filter(id=tt_id).update(
+						PID=splitID
+					)
+					print(tt_id, 'changed to', splitID)
+					trn = 0
 		resultsGood = 1
 
 # print the results 
@@ -263,18 +298,9 @@ results()
 print()
 
 # this nugget is for the prima donna Brad Hunter - basically I re-ran the dmn thing until I knew he would not bitch
-print('Brad slots', golferSlotsDict['Brad Hunter'])
-print('me slots', golferSlotsDict['Chris Prouty'])
-print('Brad at MM', courseGolferDict['Maple Meadows']['Brad Hunter'])
-print('Me at MM', courseGolferDict['Maple Meadows']['Chris Prouty'])
-
-
-
-
-
-
-
-
-
+print('Brad slots', golferSlotsDict[9])
+# print('me slots', golferSlotsDict['Chris Prouty'])
+print('Brad at MM', courseGolferDict[1][9])
+# print('Me at MM', courseGolferDict['Maple Meadows']['Chris Prouty'])
 
 

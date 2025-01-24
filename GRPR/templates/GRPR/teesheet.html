@@ -38,4 +38,27 @@
         </div>
     {% endfor %}
 </div>
+<br>
+<!-- Schedule Table -->
+<h2 class="mt-5">Full Schedule</h2>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th>Course</th>
+            <th>Tee Time</th>
+            <th>Players</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in schedule %}
+            <tr>
+                <td>{{ item.date }}</td>
+                <td>{{ item.course }}</td>
+                <td>{{ item.time_slot }}</td>
+                <td>{{ item.players }}</td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
 {% endblock %}

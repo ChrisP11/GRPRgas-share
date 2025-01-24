@@ -39,3 +39,17 @@
     font-size: 0.875rem !important;     /* Ensure consistent font size for small buttons */
     border-radius: 0.2rem;              /* Ensure consistent border radius */
 }
+
+/* Rotate text for table headers */
+.rotate {
+    transform: rotate(-90deg);
+    transform-origin: left bottom;
+    white-space: nowrap;
+    vertical-align: bottom;
+    height: 150px; /* Adjust as needed */
+    width: 30px; /* Adjust as needed */
+}
+
+.rotate th {
+    padding: 5px;
+}
