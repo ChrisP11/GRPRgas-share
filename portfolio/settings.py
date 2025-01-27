@@ -178,8 +178,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
 # Add this setting to control Twilio functionality
-# TWILIO_ENABLED = True
-TWILIO_ENABLED = False
+TWILIO_ENABLED = True
+# TWILIO_ENABLED = False
 
 # Twilio credentials
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
