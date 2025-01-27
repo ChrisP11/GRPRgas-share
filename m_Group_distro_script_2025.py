@@ -1,17 +1,9 @@
 ######################################################################################################################
-### 21 March 2024                                                                                                  ###
-### Big revamp from prior years                                                                                    ###
-### version 1 had 3 major changes:                                                                                 ###
-### 1. The first slot in every foursome was filled first, then the second slot etc.                                ###
-### 2. For every slot, all available players put in a basket, then weighted according to plays, dance card, etc    ###
-###   the result being the least weighted is chosen                                                                ###
-### 3. Exception dates have been added - thus Golfers can be named and assigned in the code                        ###
-### This worked much better than the prior version, but there is a condition for players later in the list         ###
-### where they can get 'shorted' on total number of rounds (2 or more short of the max).                           ###
-### This is caused by a combo of bad luck in terms of order and exception dates chosen for late in the year.       ###
-### Version 1.1 resolved this by randomizing the golfer order AND checking to see if anyone gets shorted.          ###
-### If some gets shorted (again, 2 or more less than max), the script gets run again until no one is shorted       ###
-### (I did have to hard code in an exception for this rule for Mike Ewell)                                          ###
+### January 2025                                                                                                   ###
+### see prior version for big revamp notes from last year                                                          ###
+### This version utilizes grpr db in the djnago enviro to get players, ex dates, and course data                   ###
+### still hard coded on dates and split partners                                                                   ###
+### this version also checks for 2025 dates already existing and does not run if that is the case                  ###
 ######################################################################################################################
 
 import math    # used to round up to integers
@@ -23,7 +15,7 @@ import django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'portfolio.settings')
 django.setup()
 # import needdd tables
-from GRPR.models import Players, Courses, TeeTimesInd
+from GRPR.models import Players, Courses, TeeTimesInd, Xdates
 
 def seed_process():
 	# Randomize the order of the golfers - needed because some orders of golfers can result in some players not getting enough rounds
@@ -128,6 +120,7 @@ def create_foursomes(maxRounds, maxPerCourse):
 									# player added to the basket here:
 									basket[player] = slotsPlayed + coursePlayed + dcScore
 
+				# print(date, korse, 'basket = ', basket)
 				# get the player with the lowest (best) value from the basket
 				minValue = min(basket.values())
 				# reverse engineer to get the key (which is the player name) for the lowest value
@@ -186,9 +179,31 @@ def results():
 			new_teetime_insert.save()
 	print()
 
+def split_partners_distro():
+	prds = [1,2,4,20] # hard coded list of players that need to be split
+	for p in prds:
+		print()
+		splitPartnerTeeTimes = TeeTimesInd.objects.filter(PID_id=p, gDate__gt='2025-01-01').values('id')
+		splitID = Players.objects.get(SplitPartner=p)
+		trn = 0
+		for tt in splitPartnerTeeTimes:
+			tt_id = tt['id']
+			print(tt_id)
+			if trn == 0:
+				trn = 1
+				print(tt_id, 'stays with original player')
+			else:
+				# give this tee time to the split partner
+				TeeTimesInd.objects.filter(id=tt_id).update(
+					PID=splitID
+				)
+				print(tt_id, 'changed to', splitID)
+				trn = 0
+
+
 # Query the Players table and get PIDs
 preRandomGolfers = []
-# hard coded OUT the second split player - see below in the results() function where this needs to be copied
+# hard coded OUT the second split player - see below in the results() function where this needs to
 players = Players.objects.exclude(id=25).exclude(SplitPartner__in=[1, 2, 4, 20])
 for player in players:
 	pID = player.id
@@ -272,35 +287,26 @@ while resultsGood == 0:
 	else:
 		print('everyone gets to play enough Max Rounds', maxRounds, 'Min Slot', minSlots,)
 		from GRPR.models import TeeTimesInd, Players
-		
-		prds = [1,2,4,20] # hard coded list of players that need to be split
-		for p in prds:
-			print()
-			splitPartnerTeeTimes = TeeTimesInd.objects.filter(PID_id=p, gDate__gt='2025-01-01').values('id')
-			splitID = Players.objects.get(SplitPartner=p)
-			trn = 0
-			for tt in splitPartnerTeeTimes:
-				tt_id = tt['id']
-				if trn == 0:
-					trn = 1
-					print(tt_id, 'stays with original player')
-				else:
-					# give this tee time to the split partner
-					TeeTimesInd.objects.filter(id=tt_id).update(
-						PID=splitID
-					)
-					print(tt_id, 'changed to', splitID)
-					trn = 0
 		resultsGood = 1
 
-# print the results 
-results()
-print()
+# get count for number of tee times are in 2025, this will prevent running for 2025 dates when it has already been done
+post2025_teetimes=TeeTimesInd.objects.filter(gDate__gt='2025-01-01').count()
 
-# this nugget is for the prima donna Brad Hunter - basically I re-ran the dmn thing until I knew he would not bitch
-print('Brad slots', golferSlotsDict[9])
-# print('me slots', golferSlotsDict['Chris Prouty'])
-print('Brad at MM', courseGolferDict[1][9])
-# print('Me at MM', courseGolferDict['Maple Meadows']['Chris Prouty'])
+if post2025_teetimes == 0:
+	# run the initial teetimes creation, will print results 
+	results()
+	# update teetimes to alternate teetimes bt split partners
+	split_partners_distro()
+	print()
+	# this nugget is for the prima donna Brad Hunter - basically I re-ran the dmn thing until I knew he would not bitch
+	print('Brad slots', golferSlotsDict[9])
+	# print('me slots', golferSlotsDict['Chris Prouty'])
+	print('Brad at MM', courseGolferDict[1][9])
+	# print('Me at MM', courseGolferDict['Maple Meadows']['Chris Prouty'])
+else:
+	print('Tee Times already created for 2025')
+
+
+
 
 

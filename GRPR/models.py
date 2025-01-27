@@ -82,3 +82,14 @@ class LoginActivity(models.Model):
     
     class Meta:
         db_table = "LoginActivity"
+
+
+class Xdates(models.Model):
+    CrewID = models.IntegerField()
+    PID = models.ForeignKey('Players', on_delete=models.CASCADE)  # Links to Players table
+    xDate = models.DateField() # date requested to be off
+    rDate = models.DateField() # date request was made
+
+    class Meta:
+        db_table = "Xdates"
+
