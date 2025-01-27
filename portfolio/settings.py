@@ -28,8 +28,8 @@ STATIC_ROOT = BASE_DIR / "staticfiles" # added as part of port to Postgres
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 # Set DEBUG to False for production
-DEBUG = False
-# DEBUG = True
+# DEBUG = False
+DEBUG = True
 
 # SECURITY WARNING: keep the secret key used in production secret!
 
@@ -150,6 +150,9 @@ SESSION_EXPIRE_AT_BROWSER_CLOSE = True  # Expire session when the browser is clo
 SESSION_COOKIE_SECURE = True  # Ensure session cookies are only sent over HTTPS
 SESSION_COOKIE_HTTPONLY = True  # Ensure session cookies are inaccessible to JavaScript
 SESSION_COOKIE_SAMESITE = 'Lax'  # Set the SameSite attribute for session cookies
+CSRF_COOKIE_SECURE = True  # Ensure CSRF cookies are only sent over HTTPS
+# Set the secure proxy header
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 
 # Internationalization
