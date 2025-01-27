@@ -65,6 +65,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'GRPR.middleware.SSLRedirectMiddleware',  # Add this line to force using https
 ]
 
 ROOT_URLCONF = 'portfolio.urls'
@@ -154,6 +155,12 @@ CSRF_COOKIE_SECURE = True  # Ensure CSRF cookies are only sent over HTTPS
 # Set the secure proxy header
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 CSRF_TRUSTED_ORIGINS = ['https://gasgolf.org', 'https://www.gasgolf.org']
+
+# Add Security Middleware
+SECURE_SSL_REDIRECT = True
+SECURE_HSTS_SECONDS = 31536000
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True
 
 
 # Internationalization
