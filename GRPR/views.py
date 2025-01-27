@@ -49,8 +49,7 @@ class CustomPasswordChangeView(PasswordChangeView):
     template_name = 'GRPR/password_change.html'
 
 
-# Create your views here.
-# login page?
+# login page
 def register(request):
     if request.method == 'POST':
         form = UserCreationForm(request.POST)
@@ -91,19 +90,36 @@ def login_view(request):
         form = AuthenticationForm()
     return render(request, 'login.html', {'form': form})
 
-# Initial home page
+
+# Home page
 @login_required
 def home_page(request):
+    # Get today's date
+    current_datetime = datetime.now()
+
+    # Query the next closest future date in the TeeTimesInd table
+    next_closest_date = TeeTimesInd.objects.filter(gDate__gte=current_datetime).order_by('gDate').values('gDate').first()
+    # last_date will provide the last date in the TeeTimesInd table if the season is over and done.  Prevents the teesheet page from failing
+    last_date = TeeTimesInd.objects.filter(gDate__lt=current_datetime).order_by('gDate').values('gDate').last()
+    
+
+    # Format the date to be in YYYY-MM-DD format
+    if next_closest_date:
+        next_closest_date = next_closest_date['gDate'].strftime('%Y-%m-%d')
+    else:
+        next_closest_date = last_date['gDate'].strftime('%Y-%m-%d')
+
     context = {
         'userid': request.user.id,
         'username': request.user.username,
         'first_name': request.user.first_name,
         'last_name': request.user.last_name,
+        'next_closest_date': next_closest_date,  
     }
     return render(request, 'GRPR/index.html', context)
 
 
-# Admin page, just user logins so far
+# Admin page
 @login_required
 def admin_view(request):
     if request.user.username != 'cprouty':
@@ -136,6 +152,15 @@ def send_test_email(request):
 
 @login_required
 def teesheet_view(request):
+    # get today's date
+    current_datetime = datetime.now()
+
+    # Query distinct dates from TeeTimesInd that are more recent than today's date
+    distinct_dates = TeeTimesInd.objects.filter(gDate__gt=current_datetime).values('gDate').distinct().order_by('gDate')
+
+    # Format the dates to be in YYYY-MM-DD format
+    distinct_dates = [{'gDate': date['gDate'].strftime('%Y-%m-%d')} for date in distinct_dates]
+
     # Check if the form was submitted
     if request.method == "GET" and "gDate" in request.GET:
         gDate = request.GET["gDate"]
@@ -169,7 +194,7 @@ def teesheet_view(request):
             })
         
         # Query the database for the schedule table
-        schedule_queryset = TeeTimesInd.objects.filter(gDate__gt='2025-01-01').select_related('PID', 'CourseID')
+        schedule_queryset = TeeTimesInd.objects.filter(gDate__gt=current_datetime).select_related('PID', 'CourseID')
 
         # Construct the schedule dictionary
         schedule_dict = {}
@@ -195,16 +220,25 @@ def teesheet_view(request):
             "cards": cards,
             "gDate": gDate,  # Add the chosen date to the context
             "schedule": schedule,  # Add the schedule data to the context
+            "distinct_dates": distinct_dates,  # Add the distinct dates to the context
             "first_name": request.user.first_name,  # Add the first name of the logged-in user
             "last_name": request.user.last_name, # Add the last name of the logged-in user
         }
         return render(request, "GRPR/teesheet.html", context)
     else:
-        return HttpResponseBadRequest("Invalid request.")
+        # Pass the distinct dates to the template even if the form is not submitted
+        context = {
+        "distinct_dates": distinct_dates,
+            "first_name": request.user.first_name,  # Add the first name of the logged-in user
+            "last_name": request.user.last_name,  # Add the last name of the logged-in user
+        }
+        return render(request, "GRPR/teesheet.html", context)
 
 @login_required
 def schedule_view(request):
     players = Players.objects.all().order_by('LastName', 'FirstName')
+
+    current_datetime = datetime.now()
 
     # Fetch the logged-in user's player ID
     logged_in_user_id = request.user.id
@@ -218,7 +252,7 @@ def schedule_view(request):
         player_id = request.GET.get("player_id", logged_in_player.id if logged_in_player else None)
         if player_id:
             selected_player = Players.objects.filter(id=player_id).first()
-            schedule_query = TeeTimesInd.objects.filter(PID=player_id).select_related('CourseID').order_by('gDate')
+            schedule_query = TeeTimesInd.objects.filter(PID=player_id, gDate__gte=current_datetime).select_related('CourseID').order_by('gDate')
             for teetime in schedule_query:
                 # Collect the names of other players in the group
                 group_players = TeeTimesInd.objects.filter(
@@ -250,6 +284,8 @@ def subswap_view(request):
     user_id = request.user.id
     user_name = f"{request.user.first_name} {request.user.last_name}"
 
+    current_datetime = datetime.now()
+
     # Fetch the Player ID associated with the logged-in user
     player = Players.objects.filter(user_id=user_id).first()
     if not player:
@@ -257,7 +293,7 @@ def subswap_view(request):
     player_id = player.id
 
     # Fetch the schedule for the player
-    schedule = TeeTimesInd.objects.filter(PID=player_id).select_related('CourseID').order_by('gDate')
+    schedule = TeeTimesInd.objects.filter(PID=player_id, gDate__gte=current_datetime).select_related('CourseID').order_by('gDate')
 
     # Prepare the data for the schedule table
     schedule_data = []
@@ -2259,6 +2295,37 @@ def statistics_view(request):
     }
 
     return render(request, 'GRPR/statistics.html', context)
+
+
+@login_required
+def players_view(request):
+    # Get today's date
+    current_datetime = datetime.now()
+
+    # Query all players
+    players = Players.objects.exclude(id=25).order_by('LastName', 'FirstName')
+
+    # Prepare the data for the table
+    players_data = []
+    for player in players:
+        rounds_played = TeeTimesInd.objects.filter(PID=player.id, gDate__lt=current_datetime).count()
+        rounds_scheduled = TeeTimesInd.objects.filter(PID=player.id, gDate__gte=current_datetime).count()
+        players_data.append({
+            'first_name': player.FirstName,
+            'last_name': player.LastName,
+            'mobile': player.Mobile,
+            'email': player.Email,
+            'rounds_played': rounds_played,
+            'rounds_scheduled': rounds_scheduled,
+        })
+
+    # Pass data to the template
+    context = {
+        'players_data': players_data,
+        'first_name': request.user.first_name,  # Add the first name of the logged-in user
+        'last_name': request.user.last_name,  # Add the last name of the logged-in user
+    }
+    return render(request, 'GRPR/players.html', context)
 
 
 @login_required

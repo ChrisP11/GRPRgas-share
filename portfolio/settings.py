@@ -40,8 +40,8 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'your_secret_key')
 
 
 # Allow all host headers
-# ALLOWED_HOSTS = ['*']
-ALLOWED_HOSTS = ['gasgolf.org', 'www.gasgolf.org', 'grpr.herokuapp.com']
+ALLOWED_HOSTS = ['*']
+# ALLOWED_HOSTS = ['gasgolf.org', 'www.gasgolf.org', 'grpr.herokuapp.com']
 
 # Application definition
 
@@ -97,19 +97,19 @@ WSGI_APPLICATION = 'portfolio.wsgi.application'
 # }
 
 # Database configuration for PostgreSQL
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': 'grpr_db',
-#         'USER': os.getenv('POSTGRES_USER'),
-#         'PASSWORD': os.getenv('POSTGRES_PASSWORD'), 
-#         'HOST': 'localhost',
-#         'PORT': '',
-#     }
-# }
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'grpr_db',
+        'USER': os.getenv('POSTGRES_USER'),
+        'PASSWORD': os.getenv('POSTGRES_PASSWORD'), 
+        'HOST': 'localhost',
+        'PORT': '',
+    }
+}
 
 # Database configuration for PostgreSQL
-DATABASES = {'default': dj_database_url.config(conn_max_age=600, ssl_require=True)}
+# DATABASES = {'default': dj_database_url.config(conn_max_age=600, ssl_require=True)}
 
 
 # Password validation

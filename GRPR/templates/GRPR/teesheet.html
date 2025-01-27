@@ -8,7 +8,12 @@
 <!-- Narrow Date Picker Form -->
 <form method="get" action="{% url 'teesheet_view' %}" class="mb-4">
     <div class="d-flex" style="max-width: 300px;">
-        <input type="date" name="gDate" class="form-control" required>
+        <select name="gDate" class="form-control" required>
+            <option value="" disabled selected>Select a date</option>
+            {% for date in distinct_dates %}
+                <option value="{{ date.gDate }}">{{ date.gDate }}</option>
+            {% endfor %}
+        </select>
         <button type="submit" class="btn btn-primary ms-2">View</button>
     </div>
 </form>

@@ -5,12 +5,13 @@
 {% block content %}
 <div class="col-lg-6 col-xxl-4 my-5 mx-auto">
   <div class="d-grid gap-2">
-    <a href="{% url 'teesheet_view' %}?gDate=2024-07-13" class="btn btn-primary" role="button">Tee Sheet</a>
+    <!-- <a href="{% url 'teesheet_view' %}?gDate=2024-07-13" class="btn btn-primary" role="button">Tee Sheet</a> -->
+    <a href="{% url 'teesheet_view' %}?gDate={{ next_closest_date }}" class="btn btn-primary" role="button">Tee Sheet</a>
     <a href="{% url 'schedule_view' %}" class="btn btn-secondary-custom" role="button">Schedule</a>
     <!-- <button class="btn btn-primary" type="button">Games</button> -->
     <a href="{% url 'subswap_view' %}" class="btn btn-primary" role="button">Sub / Swap</a>
     <a href="{% url 'statistics_view' %}" class="btn btn-primary" role="button">Data</a>
-    <a href="{% url 'profile_view' %}" class="btn btn-primary" role="button">Profile</a>
+    <a href="{% url 'players_view' %}" class="btn btn-primary" role="button">Players</a>
   </div>
 </div>
 {% endblock %}
