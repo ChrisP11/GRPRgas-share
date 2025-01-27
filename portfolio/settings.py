@@ -40,8 +40,8 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'your_secret_key')
 
 
 # Allow all host headers
-ALLOWED_HOSTS = ['*']
-
+# ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ['gasgolf.org', 'www.gasgolf.org', 'grpr.herokuapp.com']
 
 # Application definition
 
