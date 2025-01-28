@@ -25,20 +25,21 @@ print('Debug', DEBUG)
 # Allow all host headers
 ALLOWED_HOSTS = ['*'] if DEBUG else ['gasgolf.org', 'www.gasgolf.org', 'grpr.herokuapp.com']
 
-# Database configuration for PostgreSQL
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': 'grpr_db',
-#         'USER': os.getenv('POSTGRES_USER'),
-#         'PASSWORD': os.getenv('POSTGRES_PASSWORD'), 
-#         'HOST': 'localhost',
-#         'PORT': '',
-#     }
-# }
+# Database configuration.  If in Dev enviro (DEBUG env var is True), use Postgres
+if DEBUG:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': 'grpr_db',
+            'USER': os.getenv('POSTGRES_USER'),
+            'PASSWORD': os.getenv('POSTGRES_PASSWORD'), 
+            'HOST': 'localhost',
+            'PORT': '',
+        }
+    }
+else:
+    DATABASES = {'default': dj_database_url.config(conn_max_age=600, ssl_require=True)}
 
-# Database configuration for PostgreSQL
-DATABASES = {'default': dj_database_url.config(conn_max_age=600, ssl_require=True)}
 
 ## Database config for SQLite   # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 # DATABASES = {
