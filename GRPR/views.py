@@ -473,6 +473,11 @@ def subswap_view(request):
 
     for sub_offer in open_sub_offers:
         offered_tee_time_ids.add(sub_offer.TeeTimeIndID.id)
+    
+    # Calculate the count of rows in key tables
+    available_swaps_data_count = len(available_swaps_data)
+    available_subs_data_count = len(available_subs_data)
+    counter_offers_data_count = len(counter_offers_data)
 
     context = {
         'user_name': user_name,  # Use the logged-in user's name
@@ -487,6 +492,9 @@ def subswap_view(request):
         'offered_tee_time_ids': offered_tee_time_ids,
         'first_name': request.user.first_name,  # Add the first name of the logged-in user
         'last_name': request.user.last_name, # Add the last name of the logged-in user
+        'available_swaps_data_count': available_swaps_data_count,   
+        'available_subs_data_count': available_subs_data_count,
+        'counter_offers_data_count': counter_offers_data_count,
     }
 
     return render(request, 'GRPR/subswap.html', context)
@@ -1367,6 +1375,10 @@ def swaprequestsent_view(request):
     swap_tt_id = request.session.pop('swap_tt_id', None)
     user_id = request.session.pop('user_id', None)
 
+    print('swaprequestsent_view')
+    print('first_name', first_name)
+    print('last_name', last_name)
+
     if not date_raw or not course or not time_slot or not user_name or not other_players or not swap_tt_id or not user_id or not first_name or not last_name:
         return HttpResponseBadRequest("Required data is missing. - swaprequestsent_view")
 
@@ -1529,6 +1541,8 @@ def swaprequestsent_view(request):
     context = {
         'swap_offer': swap_offer,
         'available_players': filtered_players,
+        'first_name': first_name,
+        'last_name': last_name,
     }
     return render(request, 'GRPR/swaprequestsent.html', context)
 
@@ -1615,6 +1629,8 @@ def swapoffer_view(request):
         'user_id': user_id,
         'swap_id': swap_id,
         'player_id': player_id,  # Include player_id in the context if needed
+        'first_name': request.user.first_name,
+        'last_name': request.user.last_name,
     }
     return render(request, 'GRPR/swapoffer.html', context)
 
@@ -1770,6 +1786,8 @@ def swapcounter_view(request):
         'available_dates': selected_dates,
         'offer_player_first_name': offer_player_first_name,
         'offer_player_last_name': offer_player_last_name,
+        'first_name': request.user.first_name,
+        'last_name': request.user.last_name,
     }
     return render(request, 'GRPR/swapcounter.html', context)
 
@@ -2064,6 +2082,8 @@ def swapfinal_view(request):
         'offer_gDate': offer_gDate,
         'offer_Course': offer_Course,
         'offer_TimeSlot': offer_TimeSlot,
+        'first_name': request.user.first_name,
+        'last_name': request.user.last_name,
     }
     return render(request, 'GRPR/swapfinal.html', context)
 
@@ -2220,45 +2240,55 @@ def swapnoneavail_view(request):
 
 @login_required
 def statistics_view(request):
-
     # For the distro heatmap chart:
-    players = Players.objects.exclude(id=25)
+    players = Players.objects.exclude(id=25).order_by('LastName')
 
     # Initialize the chart data
-    chart_data = []
+    chart_data = {}
     max_count = 0
 
     for player_a in players:
-        row = []
-        for player_b in players:
-            if player_a.id == player_b.id:
-                row.append(None)  # Leave the cell blank if the players are the same
-            else:
-                count = TeeTimesInd.objects.filter(
-                    PID=player_a.id,
-                    gDate__gt='2025-01-01'  # Add date filter
-                ).filter(
-                    gDate__in=TeeTimesInd.objects.filter(
-                        PID=player_b.id,
-                        gDate__gt='2025-01-01'  # Add date filter
-                    ).values('gDate')
-                ).count()
-                row.append(count)
-                if count > max_count:
-                    max_count = count
-        chart_data.append(row)
+        distinct_counts = {}
+        for p_id in players:
+            distinct_counts[p_id.id] = 0
+        ttis = TeeTimesInd.objects.filter(PID=player_a.id, gDate__gt='2025-01-01')
+        for tt in ttis:
+            tDate = tt.gDate
+            cID = tt.CourseID
+            partners = TeeTimesInd.objects.filter(gDate=tDate, CourseID=cID).exclude(PID=player_a.id)
+            for p in partners:
+                pID = p.PID_id
+                if pID in distinct_counts:
+                    distinct_counts[pID] += 1
+                # else:
+                #     distinct_counts[pID] = 1
+        chart_data[player_a.id] = distinct_counts
+
+    for c in chart_data:
+        print(c)
+    print('chart_data', chart_data) 
+    print()
+    print(chart_data[13]) 
+
+    # Find the maximum count for normalization
+    max_count = max(max(distinct_counts.values()) for distinct_counts in chart_data.values())
+    print('max_count', max_count)
 
     # Normalize the values
-    normalized_chart_data = []
-    for row in chart_data:
-        normalized_row = [None if cell is None else cell / max_count for cell in row]
-        normalized_chart_data.append(normalized_row)
+    normalized_chart_data = {}
+    for player_a_id, counts in chart_data.items():
+        normalized_counts = {player_id: count / max_count for player_id, count in counts.items()}
+        normalized_chart_data[player_a_id] = normalized_counts
+    
+    # print('normalized_chart_data', normalized_chart_data)
 
     # Zip the players, chart_data, and normalized_chart_data for easy iteration in the template
     zipped_data = [
-        (player_a, list(zip(row, normalized_row)))
-        for player_a, row, normalized_row in zip(players, chart_data, normalized_chart_data)
+        (player_a, [(player_b, chart_data[player_a.id].get(player_b.id, None), normalized_chart_data[player_a.id].get(player_b.id, None)) for player_b in players])
+        for player_a in players
     ]
+
+    # print('zipped_data', zipped_data)
 
     # for the User Activity feed:
     actions = []

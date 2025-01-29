@@ -15,7 +15,7 @@
                 <tr>
                     <th>Log Date</th>
                     <th>Type</th>
-                    <th>Tee Time Date</th>
+                    <th>Tee Time</th>
                     <th>Msg</th>
                 </tr>
             </thead>
@@ -48,7 +48,7 @@
             {% for player_a, row in zipped_data %}
                 <tr>
                     <th>{{ player_a.FirstName }} {{ player_a.LastName }}</th>
-                    {% for cell, normalized_cell in row %}
+                    {% for player_b, cell, normalized_cell in row %}
                         {% if cell is not None %}
                             <td class="heatmap-cell" style="background-color: rgba(0, 142, 112, {{ normalized_cell }});">
                                 {{ cell }}

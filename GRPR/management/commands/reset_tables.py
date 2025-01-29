@@ -1,9 +1,9 @@
 from django.core.management.base import BaseCommand
 from django.db import connection
-from GRPR.models import Log, SubSwap
+from GRPR.models import Log, SubSwap, LoginActivity
 
 class Command(BaseCommand):
-    help = 'Delete all data from the Log and SubSwap tables and reset the primary key counters'
+    help = 'Delete all data from the Log, SubSwap, and LoginActivity tables and reset the primary key counters'
 
     def handle(self, *args, **kwargs):
         # Delete all data from the Log table
@@ -12,9 +12,13 @@ class Command(BaseCommand):
         # Delete all data from the SubSwap table
         SubSwap.objects.all().delete()
 
-        # Reset the primary key counters
-        with connection.cursor() as cursor:
-            cursor.execute("DELETE FROM sqlite_sequence WHERE name='Log';")
-            cursor.execute("DELETE FROM sqlite_sequence WHERE name='SubSwap';")
+        # Delete all data from the LoginActivity table
+        LoginActivity.objects.all().delete()
 
-        self.stdout.write(self.style.SUCCESS('Successfully reset the Log and SubSwap tables'))
+        # Reset the primary key counters for PostgreSQL
+        with connection.cursor() as cursor:
+            cursor.execute('ALTER SEQUENCE "Log_id_seq" RESTART WITH 1;')
+            cursor.execute('ALTER SEQUENCE "SubSwap_id_seq" RESTART WITH 1;')
+            cursor.execute('ALTER SEQUENCE "LoginActivity_id_seq" RESTART WITH 1;')
+
+        self.stdout.write(self.style.SUCCESS('Successfully reset the Log, SubSwap, and LoginActivity tables'))

@@ -11,7 +11,7 @@
     <h4><strong>Last Name&nbsp;&nbsp;&nbsp;&nbsp;</strong> {{ last_name }}</h4>
     <h4><strong>Username&nbsp;&nbsp;&nbsp;&nbsp;</strong> {{ user_name }}</h4>
     <h4><strong>Email Address&nbsp;&nbsp;&nbsp;&nbsp;</strong> {{ email_address }}</h4>
-    <h4><strong>Mobile&nbsp;&nbsp;&nbsp;&nbsp;</strong> {{ mobile }}</h4>
+    <h4><strong>Mobile&nbsp;&nbsp;&nbsp;&nbsp;</strong> {{ mobile|slice:"1:4" }}-{{ mobile|slice:"4:7" }}-{{ mobile|slice:"7:11" }}</h4>
     <h4><strong>Index&nbsp;&nbsp;&nbsp;&nbsp;</strong> </h4>
     <h4><strong>GHIN&nbsp;&nbsp;&nbsp;&nbsp;</strong> </h4>
     <br>
