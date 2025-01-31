@@ -5,10 +5,24 @@
 {% block content %}
 
 <div class="container mt-4">
-    <h4>Swaps Available: {{ available_swaps_data_count }} &nbsp;&nbsp; Subs Available:  {{ available_subs_data_count }} &nbsp;&nbsp; Counter Offers:  {{ counter_offers_data_count }}</h4>
     <br>
     <h4><strong>Swap</strong> - Request a future Tee Time for one of your current Tee Times</h4>
     <h4><strong>Sub</strong> - Offer one of your current Tee Times for anyone to take</h4>
+    <br>
+    <!-- <h4>Swaps Available: {{ available_swaps_data_count }} &nbsp;&nbsp; Subs Available:  {{ available_subs_data_count }} &nbsp;&nbsp; Counter Offers:  {{ counter_offers_data_count }}</h4> -->
+    <table class="table table-striped">
+        <tbody>
+            <tr>
+                <td>Swaps Available</td>
+                <td>{{ available_swaps_data_count }}</td>
+                <td>Subs Available</td>
+                <td>{{ available_subs_data_count }}</td>
+                <td>Counter Offers</td>
+                <td>{{ counter_offers_data_count }}</td>
+            </tr>
+        </tbody>
+    </table>
+
     <br>
     <h1>Current Schedule for {{ first_name }} {{ last_name }}</h1>
     
