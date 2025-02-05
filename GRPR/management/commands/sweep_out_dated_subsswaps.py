@@ -15,8 +15,13 @@ class Command(BaseCommand):
 
     def handle(self, *args, **kwargs):
 
+        # Check if today is Sunday, the only day we want to run this job
+        if timezone.now().weekday() != 6:  # 0 = Monday, 1 = Tuesday, 2 = Wednesday, 3 = Thursday, 4 = Friday, 5 = Saturday, 6 = Sunday
+            self.stdout.write(self.style.WARNING('Today is not the scheduled day for sending reminders.'))
+            return
+
         # Define the date for filtering
-        filter_date = date(2025, 5, 4)
+        filter_date = date(2025, 5, 4) # hard coded.  I *think* we can use current_datetime for this instead, but need to test / verify
         current_datetime = timezone.now()
 
         # Perform the query

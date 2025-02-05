@@ -6,8 +6,17 @@
 
 <div class="container my-4">
 
-    <h1 class="mb-4">Activity Feed</h1>
+        <!-- Navigation Links -->
+        <div class="nav-links">
+            <a href="#activity-feed">Activity Feed</a> |
+            <a href="#course-heatmap">Course Heatmap</a> |
+            <a href="#partner-heatmap">Partner Heatmap</a>
+        </div>
+    
+    <br>
+    <br>
 
+    <h1 id="activity-feed" class="mb-4">Activity Feed</h1>
     <!-- Log Table Activity -->
     {% if actions %}
         <table class="table table-striped">
@@ -34,7 +43,41 @@
     <br>
     <br>
 
-    <h1>Partner Heatmap</h1>
+
+    <h1 id="course-heatmap" class="mb-4">Course Heatmap</h1>
+    <!-- Course HeatMap Table -->
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Player</th>
+                {% for course in course_names %}
+                    <th>{{ course }}</th>
+                {% endfor %}
+                <th>Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for player_id, courses in korse_chart_data.items %}
+                <tr>
+                    <td>
+                        {% for player in players %}
+                            {% if player.id == player_id %}
+                                {{ player.FirstName }} {{ player.LastName }}
+                            {% endif %}
+                        {% endfor %}
+                    </td>
+                    {% for course_id, count in courses.items %}
+                        <td>{{ count }}</td>
+                    {% endfor %}
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <br>
+    <br>
+
+    <h1 id="partner-heatmap">Partner Heatmap</h1>
     <table class="table">
         <thead>
             <tr>

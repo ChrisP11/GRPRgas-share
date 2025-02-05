@@ -20,7 +20,6 @@ from django.urls import reverse_lazy
 from .forms import CustomPasswordChangeForm
 from django.core.mail import send_mail
 
-
 # Import the Twilio client
 from twilio.rest import Client
 
@@ -135,19 +134,59 @@ def admin_view(request):
     }
     return render(request, 'admin_view.html', context)
 
+# Email test page
+@login_required
+def email_test_view(request):
+    if request.user.username != 'cprouty':
+        return redirect('home_page')  # Redirect to home if the user is not cprouty
 
-# to trigger the test email:  http://localhost:8000/send-test-email/ 
-def send_test_email(request):
-    subject = 'Test Email'
-    message = 'This is a test email to verify email settings.'
-    from_email = settings.EMAIL_HOST_USER
-    recipient_list = ['cprouty@gmail.com']
-    
-    try:
-        send_mail(subject, message, from_email, recipient_list)
-        return HttpResponse('Test email sent successfully.')
-    except Exception as e:
-        return HttpResponse(f'Error sending test email: {e}')
+    if request.method == 'POST':
+        email = request.POST.get('email')
+        subject = request.POST.get('subject')
+        message = request.POST.get('message')
+        from_email = os.environ.get('EMAIL_HOST_USER')
+
+        try:
+            send_mail(subject, message, from_email, [email])
+            success_message = 'Test email sent successfully.'
+            return render(request, 'email_test.html', {'success_message': success_message})
+        except Exception as e:
+            error_message = f'Error sending test email: {e}'
+            return render(request, 'email_test.html', {'error_message': error_message})
+
+    return render(request, 'email_test.html')
+
+
+@login_required
+def text_test_view(request):
+    if request.user.username != 'cprouty':
+        return redirect('home_page')  # Redirect to home if the user is not cprouty
+
+    if request.method == 'POST':
+        player_ids = request.POST.getlist('players')
+        message = request.POST.get('message')
+        twilio_account_sid = os.environ.get('TWILIO_ACCOUNT_SID')
+        twilio_auth_token = os.environ.get('TWILIO_AUTH_TOKEN')
+        twilio_phone_number = '+18449472599'
+
+        client = Client(twilio_account_sid, twilio_auth_token)
+
+        try:
+            for player_id in player_ids:
+                player = Players.objects.get(id=player_id)
+                cell_number = player.Mobile
+                client.messages.create(
+                    body=message,
+                    from_=twilio_phone_number,
+                    to=cell_number
+                )
+            success_message = 'Test text message sent successfully.'
+            return render(request, 'text_test.html', {'success_message': success_message, 'players': Players.objects.all()})
+        except Exception as e:
+            error_message = f'Error sending test text message: {e}'
+            return render(request, 'text_test.html', {'error_message': error_message, 'players': Players.objects.all()})
+
+    return render(request, 'text_test.html', {'players': Players.objects.all()})
 
 
 @login_required
@@ -1781,6 +1820,10 @@ def swapcounter_view(request):
             TeeTimeIndID_id=date['tt_id']
         )
 
+    # Update SubSwap table.  Change status on the offer row to the counter player to 'Swap Kountered'.  
+    # This prevents the same offer showing up in the Counter Players 'Available Swaps' list on subswap.html
+    SubSwap.objects.filter(SwapID=swap_id, Type='Swap Offer Sent', Status='Swap Open', PID_id=player).update(Status='Swap Kountered')
+
     context = {
         'offer_msg': orig_offer_msg,
         'available_dates': selected_dates,
@@ -2240,10 +2283,27 @@ def swapnoneavail_view(request):
 
 @login_required
 def statistics_view(request):
-    # For the distro heatmap chart:
+    # for course dustro chart:
+    courses = Courses.objects.all()
     players = Players.objects.exclude(id=25).order_by('LastName')
 
-    # Initialize the chart data
+    course_names= []
+    for course in courses:
+        name_slot = f"{course.courseName} {course.courseTimeSlot}am"
+        course_names.append(name_slot)
+
+    korse_chart_data = {}
+
+    for player_a in players:
+        korse_per = {}
+        for korse in courses:
+            korse_count = TeeTimesInd.objects.filter(PID=player_a.id, CourseID=korse.id, gDate__gt='2025-01-01').count()
+            korse_per[korse.id] = korse_count
+        total_count = sum(korse_per.values())
+        korse_per['total'] = total_count
+        korse_chart_data[player_a.id] = korse_per
+
+    # For the player heatmap chart:
     chart_data = {}
     max_count = 0
 
@@ -2264,15 +2324,9 @@ def statistics_view(request):
                 #     distinct_counts[pID] = 1
         chart_data[player_a.id] = distinct_counts
 
-    for c in chart_data:
-        print(c)
-    print('chart_data', chart_data) 
-    print()
-    print(chart_data[13]) 
-
     # Find the maximum count for normalization
     max_count = max(max(distinct_counts.values()) for distinct_counts in chart_data.values())
-    print('max_count', max_count)
+    
 
     # Normalize the values
     normalized_chart_data = {}
@@ -2318,6 +2372,8 @@ def statistics_view(request):
     
     context = {
         'players': players,
+        'korse_chart_data': korse_chart_data,
+        'course_names': course_names,
         'zipped_data': zipped_data,
         "actions": actions,
         "first_name": request.user.first_name,  # Add the first name of the logged-in user

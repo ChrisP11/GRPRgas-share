@@ -21,7 +21,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **kwargs):
         # Check if today is Tuesday (or any other day you prefer)
-        if timezone.now().weekday() != 4:  # 0 = Monday, 1 = Tuesday, 2 = Wednesday, 3 = Thursday, 4 = Friday, 5 = Saturday, 6 = Sunday
+        if timezone.now().weekday() != 1:  # 0 = Monday, 1 = Tuesday, 2 = Wednesday, 3 = Thursday, 4 = Friday, 5 = Saturday, 6 = Sunday
             self.stdout.write(self.style.WARNING('Today is not the scheduled day for sending reminders.'))
             return
 
