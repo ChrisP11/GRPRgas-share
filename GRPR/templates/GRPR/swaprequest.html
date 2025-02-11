@@ -18,7 +18,8 @@
 
         <!-- Action Buttons -->
         <div class="d-flex">
-            <a href="{% url 'store_swaprequestsent_data_view' %}?date={{ date }}&course={{ course }}&time_slot={{ time_slot }}&user_name={{ user_name }}&other_players={{ other_players|urlencode }}&swap_tt_id={{ swap_tt_id }}&user_id={{ user_id }}&first_name={{ first_name }}&last_name={{ last_name }}" class="btn btn-primary">Confirm</a>
+            <a href="{% url 'store_swaprequestsent_data_view' %}?swap_tt_id={{ swap_tt_id }}" class="btn btn-primary">Confirm</a>
+            <!-- <a href="{% url 'store_swaprequestsent_data_view' %}?date={{ date }}&course={{ course }}&time_slot={{ time_slot }}&user_name={{ user_name }}&other_players={{ other_players|urlencode }}&swap_tt_id={{ swap_tt_id }}&user_id={{ user_id }}&first_name={{ first_name }}&last_name={{ last_name }}" class="btn btn-primary">Confirm</a> -->
             <a href="{% url 'subswap_view' %}" class="btn btn-secondary-custom">Cancel the Swap Request</a>
         </div>
     </div>
