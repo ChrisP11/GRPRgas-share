@@ -54,5 +54,6 @@ urlpatterns = [
     path('admin_page/', views.admin_view, name='admin_page'),
     path('email_test/', views.email_test_view, name='email_test_view'),
     path('text_test/', views.text_test_view, name='text_test_view'),
+    path('error_message/<str:error_msg>/', views.error_message_view, name='error_message_view'),
 
 ]
