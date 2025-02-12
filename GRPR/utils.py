@@ -3,7 +3,7 @@ from .models import SubSwap, TeeTimesInd, Players
 
 # function to verify there is an open subswap offer for a given swap_id adn return it
 def get_open_subswap_or_error(swap_id, error_msg, request):
-    sub_offer = SubSwap.objects.filter(SwapID=swap_id, nType='Sub', SubType='Offer', nStatus='Open')
+    sub_offer = SubSwap.objects.filter(SwapID=swap_id, SubType='Offer', nStatus='Open')
     if not sub_offer.exists():
         return render(request, 'GRPR/error_msg.html', {'error_msg': error_msg})
     return sub_offer.first()
@@ -24,6 +24,7 @@ def get_tee_time_details(tt_id, player_id):
     tt_pid = teetime.PID.id
     course_name = course.courseName
     course_time_slot = course.courseTimeSlot
+    gDate_display = gDate.strftime('%B %d, %Y')
 
     other_players_qs = TeeTimesInd.objects.filter(
         CourseID=course,
@@ -35,6 +36,7 @@ def get_tee_time_details(tt_id, player_id):
 
     return {
         'gDate': gDate,
+        'gDate_display': gDate_display,
         'course': course,
         'tt_pid': tt_pid,
         'course_name': course_name,

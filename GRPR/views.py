@@ -6,23 +6,21 @@ from django.http import HttpResponseBadRequest
 from django.utils import timezone
 from GRPR.models import Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity
 from datetime import datetime
-from dateutil import parser
-from dateutil.parser import ParserError
+# from dateutil import parser
+# from dateutil.parser import ParserError
 from django.conf import settings  # Import settings
 from django.contrib.auth.views import LoginView # added for secure login page creation
+from django.contrib.auth.views import PasswordChangeView
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm # added for secure login page creation
+from .forms import CustomPasswordChangeForm
 from django.contrib.auth.decorators import login_required # added to require certified login to view any page
 from django.contrib.auth.models import User # for user activity tracking on Admin page
 from django.contrib.auth import login as auth_login # for user activity tracking on Admin page
 from django.db.models import Q, Count
-from django.contrib.auth.views import PasswordChangeView
 from django.urls import reverse_lazy
-from .forms import CustomPasswordChangeForm
 from django.core.mail import send_mail
 from GRPR.utils import get_open_subswap_or_error, check_player_availability, get_tee_time_details
-
-# Import the Twilio client
-from twilio.rest import Client
+from twilio.rest import Client # Import the Twilio client
 
 # added for secure login page creation
 class CustomLoginView(LoginView):
@@ -494,8 +492,11 @@ def subswap_view(request):
     
     # Query for Swaps Proposed
     swaps_proposed = SubSwap.objects.filter(
-        Type='Swap Offer',
-        Status='Swap Open',
+        Type='Swap Offer', # Delete once cutover is complete
+        Status='Swap Open', # Delete once cutover is complete
+        nType='Swap',
+        SubType='Offer',
+        nStatus='Open',
         PID=player_id
     ).select_related('TeeTimeIndID', 'TeeTimeIndID__CourseID')
 
@@ -552,6 +553,15 @@ def subswap_view(request):
 def store_sub_request_data_view(request):
     tt_id = request.GET.get('tt_id')
 
+    request.session['tt_id'] = tt_id
+
+    return redirect('subrequest_view')
+
+
+@login_required
+def subrequest_view(request):
+    tt_id = request.session.pop('tt_id', None)
+
     # Fetch the Player ID associated with the logged-in user
     user_id = request.user.id
     first_name = request.user.first_name
@@ -567,41 +577,12 @@ def store_sub_request_data_view(request):
     course_time_slot = tee_time_details['course_time_slot']
     other_players = tee_time_details['other_players']
 
-    # Store necessary data in the session
-    request.session['first_name'] = first_name
-    request.session['last_name'] = last_name
-    request.session['gDate'] = gDate.strftime('%Y-%m-%d')
-    request.session['course_name'] = course_name
-    request.session['course_time_slot'] = course_time_slot
-    request.session['other_players'] = other_players
-    request.session['tt_id'] = tt_id
-
-    return redirect('subrequest_view')
-
-
-@login_required
-def subrequest_view(request):
-    # Retrieve data from the session
-    first_name = request.session.pop('first_name', 'User')
-    last_name = request.session.pop('last_name', 'User')
-    gDate = request.session.pop('gDate', 'Unknown date')
-    course_name = request.session.pop('course_name', 'Unknown course')
-    course_time_slot = request.session.pop('course_time_slot', 'Unknown time slot')
-    other_players = request.session.pop('other_players', 'No other players')
-    tt_id = request.session.pop('tt_id', None)
-
-    # Convert the date string back to a datetime object
-    gDate_str = datetime.strptime(gDate, '%Y-%m-%d')
-
-    # Format the date for display in the msg on subrequest.html
-    gDate_display = gDate_str.strftime('%B %d, %Y')
-
     # Pass data to the template
     context = {
         'first_name': first_name,
         'last_name': last_name,
         'gDate': gDate,
-        'gDate_display': gDate_display,
+        'gDate_display': gDate,
         'course_name': course_name,
         'course_time_slot': course_time_slot,
         'other_players': other_players,
@@ -613,6 +594,15 @@ def subrequest_view(request):
 @login_required
 def store_sub_request_sent_data_view(request):
     tt_id = request.GET.get('tt_id')
+
+    request.session['tt_id'] = tt_id
+
+    return redirect('subrequestsent_view')
+
+
+@login_required
+def subrequestsent_view(request):
+    tt_id = request.session.pop('tt_id', None)
 
     # Fetch the Player ID associated with the logged-in user
     user_id = request.user.id
@@ -630,45 +620,24 @@ def store_sub_request_sent_data_view(request):
     course_time_slot = tee_time_details['course_time_slot']
     other_players = tee_time_details['other_players']
 
+    print(f"tt_pid: {tt_pid}, player_id: {player_id}, tt_id: {tt_id}")
+    print(f"first_name: {first_name}, last_name: {last_name}")
+    print(f"gDate: {gDate}, course_name: {course_name}, course_time_slot: {course_time_slot}")
+    print(f"other_players: {other_players}")
+
+
     # GATE: Verify the logged in user owns this tee time (abundance of caution here)
     if tt_pid != player_id:
         error_msg = 'It appears you are not the owner of this tee time.  Please return to the Sub Swap page and try again.'
         return render(request, 'GRPR/error_msg.html', {'error_msg': error_msg})
-
-
-    # Store necessary data in the session
-    request.session['first_name'] = first_name
-    request.session['last_name'] = last_name
-    request.session['player_id'] = player_id
-    request.session['gDate'] = gDate.strftime('%Y-%m-%d')
-    request.session['course_name'] = course_name
-    request.session['course_time_slot'] = course_time_slot
-    request.session['other_players'] = other_players
-    request.session['tt_id'] = tt_id
-
-    return redirect('subrequestsent_view')
-
-
-@login_required
-def subrequestsent_view(request):
-    # Retrieve data from the session
-    first_name = request.session.pop('first_name', 'User')
-    last_name = request.session.pop('last_name', 'User')
-    player_id = request.session.pop('player_id', None)
-    gDate_str = request.session.pop('gDate', 'Unknown date')
-    course_name = request.session.pop('course_name', 'Unknown course')
-    course_time_slot = request.session.pop('course_time_slot', 'Unknown time slot')
-    other_players = request.session.pop('other_players', 'No other players')
-    tt_id = request.session.pop('tt_id', None)
-
-    # Convert the date string back to a datetime object
-    gDate = datetime.strptime(gDate_str, '%Y-%m-%d')
-
-    # get Sub Offer Player details, mostly for Mobile
-    player = get_object_or_404(Players, id=player_id)
+    
+    # GATE: Verify the user has not offered this tt_id already - prevents 'back' button abuse
+    if SubSwap.objects.filter(TeeTimeIndID_id=tt_id, nType='Sub', SubType = 'Offer', nStatus = 'Open').exists():
+        error_msg = 'It appears you have already offered this tee time and it is still available.  Please return to the Sub Swap page and try again.'
+        return render(request, 'GRPR/error_msg.html', {'error_msg': error_msg})
 
     # Create the sub_offer message
-    sub_offer = f"{first_name} {last_name} is offering his tee time on {gDate_str} at {course_name} {course_time_slot} to play with {other_players} to the first person who wants it."
+    sub_offer = f"{first_name} {last_name} is offering his tee time on {gDate} at {course_name} {course_time_slot} to play with {other_players} to the first person who wants it."
 
     # Insert the initial Sub Offer into SubSwap
     initial_sub = SubSwap.objects.create(
@@ -803,7 +772,7 @@ def subrequestsent_view(request):
 
     # Pass data to the template
     context = {
-        'date': gDate_str,
+        'date': gDate,
         'sub_offer': sub_offer,
         'available_players': available_players,
     }
@@ -1196,14 +1165,14 @@ def subcancelconfirm_view(request):
     course_time_slot = request.session.pop('course_time_slot', None)
     swap_id = request.session.pop('swap_id', None)
 
-    print('SUBcancelconfirm_view')
-    print('gDate', gDate)
-    print('course_name', course_name) 
-    print('course_time_slot', course_time_slot) 
-    print('swap_id', swap_id)
-
     if not gDate or not course_name or not course_time_slot or not swap_id:
         return HttpResponseBadRequest("Required data is missing. - SUBcancelconfirm_view")
+    
+    # GATE: Verify Sub is still open - prevents back button abuse
+    error_msg = 'The requested Sub is no longer available.  Please review the available Subs on the Sub Swap page and try again.'
+    sub_offer = get_open_subswap_or_error(swap_id, error_msg, request)
+    if isinstance(sub_offer, HttpResponse):
+        return sub_offer
     
     # Convert the date string back to a datetime object
     gDate = datetime.strptime(gDate, '%Y-%m-%d')
@@ -1244,12 +1213,6 @@ def store_subcancel_data_view(request):
         course_name = course.courseName
         course_time_slot = course.courseTimeSlot
 
-        print('store_SUBcancel_data_view')
-        print('gDate', gDate)
-        print('course_name', course_name) 
-        print('course_time_slot', course_time_slot) 
-        print('swap_id', swap_id)
-
         # Store necessary data in the session
         request.session['gDate'] = gDate.strftime('%Y-%m-%d')
         request.session['course_name'] = course_name
@@ -1268,12 +1231,6 @@ def subcancel_view(request):
     course_name = request.session.pop('course_name', None)
     course_time_slot = request.session.pop('course_time_slot', None)
     gDate = request.session.pop('gDate', None)
-
-    print('SUBcancel_view')
-    print('gDate', gDate)
-    print('swap_id', swap_id)
-    print('course_name', course_name)
-    print('course_time_slot', course_time_slot)
 
     if not swap_id or not course_name or not course_time_slot or not gDate:
         return HttpResponseBadRequest("Required data is missing. - SUBcancel_view")
@@ -1294,7 +1251,7 @@ def subcancel_view(request):
     player_id = player.id
 
     # Update SubSwap table
-    SubSwap.objects.filter(SwapID=swap_id, Status='Sub Open').update(Status='Sub Cancelled')
+    SubSwap.objects.filter(SwapID=swap_id, nStatus='Open').update(Status='Sub Cancelled', nStatus='Closed', SubStatus='Cancelled')
 
     # Insert a row into Log table
     Log.objects.create(
@@ -1349,6 +1306,7 @@ def swaprequest_view(request):
     # Fetch the TeeTimeInd instance and other players using the utility function
     tee_time_details = get_tee_time_details(swap_tt_id, player_id)
     gDate = tee_time_details['gDate']
+    gDate_display = tee_time_details['gDate_display']
     course_name = tee_time_details['course_name']
     time_slot = tee_time_details['course_time_slot']
     other_players = tee_time_details['other_players']
@@ -1357,6 +1315,7 @@ def swaprequest_view(request):
         'swap_tt_id': swap_tt_id,
         'user_id': user_id,
         'date': gDate,
+        'date_display': gDate_display,
         'course': course_name,
         'time_slot': time_slot,
         'other_players': other_players,
@@ -1405,6 +1364,7 @@ def swaprequestsent_view(request):
     # Fetch the TeeTimeInd instance and other players using the utility function
     tee_time_details = get_tee_time_details(swap_tt_id, player_id)
     gDate = tee_time_details['gDate']
+    gDate_display = tee_time_details['gDate_display']
     tt_pid = tee_time_details['tt_pid']
     course = tee_time_details['course_name']
     time_slot = tee_time_details['course_time_slot']
@@ -1414,9 +1374,14 @@ def swaprequestsent_view(request):
     if tt_pid != player_id:
         error_msg = 'It appears you are not the owner of this tee time.  Please return to the Sub Swap page and try again.'
         return render(request, 'GRPR/error_msg.html', {'error_msg': error_msg})
+    
+    # GATE: Verify the user has not offered this tt_id already - prevents 'back' button abuse
+    if SubSwap.objects.filter(TeeTimeIndID_id=swap_tt_id, nType='Swap', SubType = 'Offer', nStatus = 'Open').exists():
+        error_msg = 'It appears you have already offered this tee time as a Swap and it is still available.  Please return to the Sub Swap page and review.'
+        return render(request, 'GRPR/error_msg.html', {'error_msg': error_msg})
 
     # Message to display at the top of the page
-    swap_offer = f"{first_name} {last_name} would like to swap his tee time on {gDate} at {course} {time_slot} (playing with {other_players}) with one of your tee times."
+    swap_offer = f"{first_name} {last_name} would like to swap his tee time on {gDate_display} at {course} {time_slot} (playing with {other_players}) with one of your tee times."
 
     # Fetch the tee time instance
     tee_time_instance = get_object_or_404(TeeTimesInd, pk=swap_tt_id)
@@ -1587,26 +1552,9 @@ def swaprequestsent_view(request):
 @login_required
 def store_swapoffer_data_view(request):
     if request.method == "GET":
-        user_id = request.GET.get('userid')
         swap_id = request.GET.get('swapID')
-        msg = request.GET.get('Msg')
-        request_date = request.GET.get('RequestDate')
-        offer_id = request.GET.get('OfferID')
 
-        # Debugging: Print the retrieved values
-        print('store_swapoffer_data_view')
-        print('user_id:', user_id)
-        print('swap_id:', swap_id)
-        print('msg:', msg)
-        print('request_date:', request_date)
-        print('offer_id:', offer_id)
-
-        # Store necessary data in the session
-        request.session['user_id'] = user_id
         request.session['swap_id'] = swap_id
-        request.session['msg'] = msg
-        request.session['request_date'] = request_date
-        request.session['offer_id'] = offer_id
 
         return redirect('swapoffer_view')
     else:
@@ -1616,28 +1564,48 @@ def store_swapoffer_data_view(request):
 @login_required
 def swapoffer_view(request):
     # Retrieve data from the session
-    user_id = request.session.pop('user_id', None)
     swap_id = request.session.pop('swap_id', None)
-    msg = request.session.pop('msg', None)
-    request_date = request.session.pop('request_date', None)
-    offer_id = request.session.pop('offer_id', None)
 
-    if not user_id or not swap_id or not msg or not request_date or not offer_id:
+    if not swap_id :
         return HttpResponseBadRequest("Required data is missing. - swapoffer_view")
-
-    # Fetch the Player ID associated with the logged-in user 
-    player = Players.objects.filter(user_id=user_id).first()
-    if not player:
-        return HttpResponseBadRequest("Player not found for the logged-in user. - swapoffer_view")
-    player_id = player.id  # Get the player_id from the player object
     
+    # Fetch the tt_id assoc with the swap_id
+    subswap_row = get_object_or_404(SubSwap, id=swap_id, SubType='Offer')
+    tt_id = subswap_row.TeeTimeIndID_id
+    offer_id = subswap_row.PID_id
+
     # Fetch the offer player instance
     offer_player = get_object_or_404(Players, pk=offer_id)
+    offer_player_first_name = offer_player.FirstName
+    offer_player_last_name = offer_player.LastName
+    
+    # Fetch the Player ID associated with the logged-in user
+    user_id = request.user.id
+    first_name = request.user.first_name
+    last_name = request.user.last_name
+
+    player = get_object_or_404(Players, user_id=user_id)
+    player_id = player.id
+
+    # GATE: maybe not needed?
+    if SubSwap.objects.filter(SwapID=swap_id, PID_id=player_id, SubType = 'Kountered', nStatus = 'Open').exists():
+        error_msg = 'It appears you have already made a counter offer for this tee time.  Please return to the Sub Swap page and review.'
+        return render(request, 'GRPR/error_msg.html', {'error_msg': error_msg})
+
+    # Fetch the TeeTimeInd instance and other players using the utility function (in utils.py)
+    tee_time_details = get_tee_time_details(tt_id, player_id)
+    gDate = tee_time_details['gDate']
+    gDate_display = tee_time_details['gDate_display']
+    course_name = tee_time_details['course_name']
+    course_time_slot = tee_time_details['course_time_slot']
+    other_players = tee_time_details['other_players']
+
+    msg = f"{offer_player_first_name} {offer_player_last_name} would like to swap his tee time on {gDate_display} at {course_name} {course_time_slot} (playing with {other_players}) with one of your tee times."
 
     # Fetch available dates for the user
     available_dates = TeeTimesInd.objects.filter(
         PID=player_id,
-        gDate__gt=request_date
+        gDate__gt=gDate
     ).exclude(
         gDate__in=TeeTimesInd.objects.filter(PID=offer_player).values_list('gDate', flat=True)
     ).select_related('CourseID').order_by('gDate')
@@ -1663,11 +1631,9 @@ def swapoffer_view(request):
     context = {
         'msg': msg,
         'available_dates': available_dates_data,
-        'user_id': user_id,
         'swap_id': swap_id,
-        'player_id': player_id,  # Include player_id in the context if needed
-        'first_name': request.user.first_name,
-        'last_name': request.user.last_name,
+        'first_name': first_name,
+        'last_name': last_name,
     }
     return render(request, 'GRPR/swapoffer.html', context)
 
@@ -1707,6 +1673,26 @@ def swapcounter_view(request):
 
     if not selected_dates or not swap_id or not orig_offer_msg or not player_id:
         return HttpResponseBadRequest("Required data is missing. - swapcounter_view")
+    
+    # GATE: Verify Swap is still open
+    error_msg = 'The requested Swap is no longer available.  Please review the available Swaps on the Sub Swap page and try again.'
+    swap_offer = get_open_subswap_or_error(swap_id, error_msg, request)
+    if isinstance(swap_offer, HttpResponse):
+        return swap_offer
+
+    # GATE: Check if the logged-in user is still available to play the Swap gDate on offer
+    gDate = swap_offer.TeeTimeIndID.gDate
+    print('gDate', gDate)
+    availability_error = check_player_availability(player_id, gDate, request)
+    if availability_error:
+        return availability_error
+    
+    # GATE: prevents back button abuse
+    print('swap_id', swap_id)   
+    print('player_id', player_id)
+    if SubSwap.objects.filter(SwapID=swap_id, PID_id=player_id, SubType = 'Kountered', nStatus = 'Open').exists():
+        error_msg = 'It appears you have already made a counter offer for this tee time.  Please return to the Sub Swap page and review.'
+        return render(request, 'GRPR/error_msg.html', {'error_msg': error_msg})
 
     selected_dates = json.loads(selected_dates)
 
@@ -1720,8 +1706,6 @@ def swapcounter_view(request):
     # Fetch the mobile numbers
     offer_mobile = offer_player.Mobile
     counter_mobile = player.Mobile
-    print('offer_mobile', offer_mobile)
-    print('counter_mobile', counter_mobile)
 
     # Fetch the original offer details
     offer_date = swap_offer.TeeTimeIndID.gDate
@@ -1812,6 +1796,9 @@ def swapcounter_view(request):
             PID=player,
             Type='Swap Counter',
             Status='Swap Open',
+            nType='Swap',
+            nStatus='Open',
+            SubType='Counter',
             Msg=counter_msg,
             OtherPlayers=date['other_players'],
             SwapID=swap_id,
@@ -1820,7 +1807,7 @@ def swapcounter_view(request):
 
     # Update SubSwap table.  Change status on the offer row to the counter player to 'Swap Kountered'.  
     # This prevents the same offer showing up in the Counter Players 'Available Swaps' list on subswap.html
-    SubSwap.objects.filter(SwapID=swap_id, Type='Swap Offer Sent', Status='Swap Open', PID_id=player).update(Status='Swap Kountered')
+    SubSwap.objects.filter(SwapID=swap_id, Type='Swap Offer Sent', Status='Swap Open', PID_id=player).update(Status='Swap Kountered', SubType='Kountered')
 
     context = {
         'offer_msg': orig_offer_msg,
@@ -2074,8 +2061,8 @@ def swapfinal_view(request):
     print('TeeTimesInd updated.  counter_ttid', counter_ttid, '  and player_id:', player_id)
 
     # create the msgs that will be sent via text to the players + be entered into the Log table
-    offer_msg = f"Tee Time Swap Accepted. You are now playing {counter_gDate} at {counter_Course} at {counter_TimeSlot}am. {counter_name} will play {offer_gDate} at {offer_Course} at {offer_TimeSlot}am."
-    counter_msg = f"Tee Time Swap Accepted. You are now playing {offer_gDate} at {offer_Course} at {offer_TimeSlot}am. {offer_name} will play {counter_gDate} at {counter_Course} at {counter_TimeSlot}am."
+    offer_msg = f"Tee Time Swap Accepted. {offer_name} is now playing {counter_gDate} at {counter_Course} at {counter_TimeSlot}am. {counter_name} will play {offer_gDate} at {offer_Course} at {offer_TimeSlot}am."
+    counter_msg = f"Tee Time Swap Accepted. {counter_name} is now playing {offer_gDate} at {offer_Course} at {offer_TimeSlot}am. {offer_name} will play {counter_gDate} at {counter_Course} at {counter_TimeSlot}am."
     
 
     # Send texts via Twilio
@@ -2169,21 +2156,8 @@ def swapfinal_view(request):
 @login_required
 def store_swapcancelconfirm_data_view(request):
     if request.method == "GET":
-        gDate = request.GET.get('gDate')
-        courseName = request.GET.get('courseName')
-        courseTimeSlot = request.GET.get('courseTimeSlot')
         swap_id = request.GET.get('swap_id')
 
-        print('store_swapcancelconfirm_data_view')
-        print('gDate', gDate)
-        print('courseName', courseName) 
-        print('courseTimeSlot', courseTimeSlot) 
-        print('swap_id', swap_id)
-
-        # Store necessary data in the session
-        request.session['gDate'] = gDate
-        request.session['courseName'] = courseName
-        request.session['courseTimeSlot'] = courseTimeSlot
         request.session['swap_id'] = swap_id
 
         return redirect('swapcancelconfirm_view')
@@ -2193,29 +2167,33 @@ def store_swapcancelconfirm_data_view(request):
 
 @login_required
 def swapcancelconfirm_view(request):
-    # Retrieve data from the session
-    gDate = request.session.pop('gDate', None)
-    courseName = request.session.pop('courseName', None)
-    courseTimeSlot = request.session.pop('courseTimeSlot', None)
     swap_id = request.session.pop('swap_id', None)
 
-    print('swapcancelconfirm_view')
-    print('gDate', gDate)
-    print('courseName', courseName) 
-    print('courseTimeSlot', courseTimeSlot) 
-    print('swap_id', swap_id)
-
-    if not gDate or not courseName or not courseTimeSlot or not swap_id:
+    if not swap_id:
         return HttpResponseBadRequest("Required data is missing. - swapcancelconfirm_view")
     
-    # Fetch the offer player instance for nav bar
+    # Fetch the tt_id assoc with the swap_id
+    subswap_row = get_object_or_404(SubSwap, id=swap_id)
+    tt_id = subswap_row.TeeTimeIndID_id
+    
+    # Fetch the Player ID associated with the logged-in user
+    user_id = request.user.id
     first_name = request.user.first_name
     last_name = request.user.last_name
 
+    player = get_object_or_404(Players, user_id=user_id)
+    player_id = player.id
+
+    # Fetch the TeeTimeInd instance and other players using the utility function (in utils.py)
+    tee_time_details = get_tee_time_details(tt_id, player_id)
+    gDate = tee_time_details['gDate']
+    course_name = tee_time_details['course_name']
+    course_time_slot = tee_time_details['course_time_slot']
+
     context = {
         'gDate': gDate,
-        'courseName': courseName,
-        'courseTimeSlot': courseTimeSlot,
+        'courseName': course_name,
+        'courseTimeSlot': course_time_slot,
         'swap_id': swap_id,
         'first_name': first_name,
         'last_name': last_name,
@@ -2227,19 +2205,9 @@ def swapcancelconfirm_view(request):
 def store_swapcancel_data_view(request):
     if request.method == "GET":
         swap_id = request.GET.get('swap_id')
-        first_name = request.GET.get('first_name')
-        last_name = request.GET.get('last_name')
-        gDate = request.GET.get('gDate')
-
-        print('store_swapcancel_data_view')
-        print('gDate', gDate)
-        print('swap_id', swap_id)
 
         # Store necessary data in the session
         request.session['swap_id'] = swap_id
-        request.session['first_name'] = first_name
-        request.session['last_name'] = last_name
-        request.session['gDate'] = gDate
 
         return redirect('swapcancel_view')
     else:
@@ -2250,43 +2218,46 @@ def store_swapcancel_data_view(request):
 def swapcancel_view(request):
     # Retrieve data from the session
     swap_id = request.session.pop('swap_id', None)
-    first_name = request.session.pop('first_name', None)
-    last_name = request.session.pop('last_name', None)
-    gDate = request.session.pop('gDate', None)
 
-    print('swapcancel_view')
-    print('gDate', gDate)
-    print('swap_id', swap_id)
-
-    if not swap_id or not first_name or not last_name or not gDate:
+    if not swap_id:
         return HttpResponseBadRequest("Required data is missing. - swapcancel_view")
     
-    # Parse the gDate to ensure it is in the correct format
-    # Have to use two different filters since some months are abbreviated and some are not
-    try:
-        gDate_parsed = datetime.strptime(gDate, '%B %d, %Y').strftime('%Y-%m-%d')
-    except ValueError:
-        try:
-            gDate_parsed = datetime.strptime(gDate, '%b. %d, %Y').strftime('%Y-%m-%d')
-        except ValueError:
-            return HttpResponseBadRequest("Invalid date format. {gDate} - swapcancel_view")
+    # GATE: Verify Swap is still open - prevents back button abuse
+    error_msg = 'The requested Swap is no longer available.  Please review the available Swaps on the Sub Swap page and try again.'
+    swap_offer = get_open_subswap_or_error(swap_id, error_msg, request)
+    if isinstance(swap_offer, HttpResponse):
+        return swap_offer
+    
 
+    # Fetch the tt_id assoc with the swap_id
+    subswap_row = get_object_or_404(SubSwap, id=swap_id)
+    tt_id = subswap_row.TeeTimeIndID_id
+    
     # Fetch the Player ID associated with the logged-in user
     user_id = request.user.id
-    player = Players.objects.filter(user_id=user_id).first()
-    if not player:
-        return HttpResponseBadRequest("Player not found for the logged-in user.")
+    first_name = request.user.first_name
+    last_name = request.user.last_name
+
+    player = get_object_or_404(Players, user_id=user_id)
     player_id = player.id
 
+    # Fetch the TeeTimeInd instance and other players using the utility function (in utils.py)
+    tee_time_details = get_tee_time_details(tt_id, player_id)
+    gDate = tee_time_details['gDate']
+    gDate_display = tee_time_details['gDate_display']
+    course_name = tee_time_details['course_name']
+    course_time_slot = tee_time_details['course_time_slot']
+    other_players = tee_time_details['other_players']
+
     # Update SubSwap table
-    SubSwap.objects.filter(SwapID=swap_id, Status='Swap Open').update(Status='Swap Cancelled')
+    SubSwap.objects.filter(SwapID=swap_id, nStatus='Open').update(Status='Swap Cancelled', nStatus='Closed', SubStatus='Cancelled')
 
     # Insert a row into Log table
     Log.objects.create(
         SentDate=timezone.now(),
         Type='Swap Cancelled',
         MessageID='No text sent',
-        RequestDate=gDate_parsed,
+        RequestDate=gDate,
         OfferID=player_id,
         RefID=swap_id,
         Msg=f'Swap Cancelled by {first_name} {last_name}'
@@ -2294,6 +2265,9 @@ def swapcancel_view(request):
 
     context = {
         'gDate': gDate,
+        'gDate_display': gDate_display,
+        'course_name': course_name,
+        'course_time_slot': course_time_slot,
         'first_name': first_name,
         'last_name': last_name,
     }

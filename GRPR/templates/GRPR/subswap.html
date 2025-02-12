@@ -129,7 +129,7 @@
                 <td>{{ swap.other_players }}</td>
                 <td>
 
-                    <a href="{% url 'store_swapoffer_data_view' %}?userid={{ user_id }}&swapID={{ swap.swapID }}&Msg={{ swap.Msg }}&RequestDate={{ swap.ymdDate }}&OfferID={{ swap.OfferID }}" class="btn btn-primary">Review Offer</a>
+                    <a href="{% url 'store_swapoffer_data_view' %}?swapID={{ swap.swapID }}" class="btn btn-primary">Review Offer</a>
                     
                 </td>
             </tr>
@@ -224,7 +224,7 @@
             <td>{{ swap.course }}</td>
             <td>{{ swap.tee_time }}</td>
             <td>
-                <a href="{% url 'store_swapcancelconfirm_data_view' %}?gDate={{ swap.playing_date }}&courseName={{ swap.course }}&courseTimeSlot={{ swap.tee_time }}&swap_id={{ swap.swap_id }}" class="btn btn-danger btn-sm">Cancel Swap</a>
+                <a href="{% url 'store_swapcancelconfirm_data_view' %}?swap_id={{ swap.swap_id }}" class="btn btn-danger btn-sm">Cancel Swap</a>
             </td>
         </tr>
         {% endfor %}
