@@ -17,7 +17,7 @@ from django.contrib.auth.decorators import login_required # added to require cer
 from django.views.decorators.csrf import csrf_exempt # added to allow Twilio to send messages
 from django.contrib.auth.models import User # for user activity tracking on Admin page
 from django.contrib.auth import login as auth_login # for user activity tracking on Admin page
-from django.db.models import Q, Count, F, Func, Subquery, OuterRef
+from django.db.models import Q, Count, F, Func, Subquery, OuterRef, Value
 from django.urls import reverse_lazy
 from django.core.mail import send_mail
 from GRPR.utils import get_open_subswap_or_error, check_player_availability, get_tee_time_details
