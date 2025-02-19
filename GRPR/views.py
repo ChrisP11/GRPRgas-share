@@ -148,20 +148,20 @@ def admin_view(request):
     users = User.objects.all().values('username', 'date_joined', 'last_login').order_by('-last_login')
     login_activities = LoginActivity.objects.values('user__username').annotate(login_count=Count('id'))
 
-    # Define a custom function to extract the last 11 digits
-    class Right(Func):
-        function = 'RIGHT'
-        template = '%(function)s(%(expressions)s, 11)'
+    # Define a custom function to remove the leading '+'
+    class Replace(Func):
+        function = 'REPLACE'
+        template = '%(function)s(%(expressions)s, %(text)s, %(replacement)s)'
 
     # Perform the query
     players_subquery = Players.objects.filter(
-        Mobile=OuterRef('from_number_last_11')
+        Mobile=OuterRef('from_number_cleaned')
     ).values(
         'FirstName', 'LastName'
     )
 
     responses = SMSResponse.objects.annotate(
-        from_number_last_11=Right(F('from_number')),
+        from_number_cleaned=Replace(F('from_number'), Value('+'), Value('')),
         player_first_name=Subquery(players_subquery.values('FirstName')[:1]),
         player_last_name=Subquery(players_subquery.values('LastName')[:1])
     ).values(
