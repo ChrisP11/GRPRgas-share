@@ -28,7 +28,7 @@ def sms_reply(request):
     # Create a TwiML response
     response = MessagingResponse()
     # Optionally, you can add a message to the response
-    # response.message("Your custom reply message here.")
+    response.message("You rang?")
     return HttpResponse(str(response), content_type='text/xml')
 
 # added for secure login page creation
