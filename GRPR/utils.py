@@ -12,7 +12,9 @@ def get_open_subswap_or_error(swap_id, error_msg, request):
 def check_player_availability(player_id, gDate, request):
     playing_dates = TeeTimesInd.objects.filter(PID=player_id).values_list('gDate', flat=True)
     if gDate in playing_dates:
-        error_msg = f'You are not available to play on {gDate}. You are already playing on this date.'
+        player = get_object_or_404(Players, id=player_id)
+        player_name = f'{player.FirstName} {player.LastName}'
+        error_msg = f'{player_name} is not available to play on {gDate}. They are already scheduled to play on this date.'
         return render(request, 'GRPR/error_msg.html', {'error_msg': error_msg})
     return None
 

@@ -1,7 +1,8 @@
 from django.urls import path
 from GRPR import views
 from django.contrib.auth import views as auth_views
-from GRPR.views import CustomLoginView, register, CustomPasswordChangeView
+from GRPR.views import CustomLoginView, register, CustomPasswordChangeView, sms_reply
+# from .views import sms_reply
 # from .views import admin_view
 
 urlpatterns = [
@@ -55,5 +56,6 @@ urlpatterns = [
     path('email_test/', views.email_test_view, name='email_test_view'),
     path('text_test/', views.text_test_view, name='text_test_view'),
     path('error_message/<str:error_msg>/', views.error_message_view, name='error_message_view'),
+    path('sms/reply/', sms_reply, name='sms_reply'),
 
 ]

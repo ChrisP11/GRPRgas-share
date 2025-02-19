@@ -21,6 +21,15 @@ from django.urls import reverse_lazy
 from django.core.mail import send_mail
 from GRPR.utils import get_open_subswap_or_error, check_player_availability, get_tee_time_details
 from twilio.rest import Client # Import the Twilio client
+from twilio.twiml.messaging_response import MessagingResponse
+
+# for Twilio.  Creates a response to people who reply to outbound text messages
+def sms_reply(request):
+    # Create a TwiML response
+    response = MessagingResponse()
+    # Optionally, you can add a message to the response
+    # response.message("Your custom reply message here.")
+    return HttpResponse(str(response), content_type='text/xml')
 
 # added for secure login page creation
 class CustomLoginView(LoginView):
@@ -341,7 +350,7 @@ def subswap_view(request):
     # Fetch the schedule for the player
     schedule = TeeTimesInd.objects.filter(PID=player_id, gDate__gte=current_datetime).select_related('CourseID').order_by('gDate')
 
-    # Prepare the data for the schedule table
+    # Schedule Table - for player to offer Subs and Swaps from
     schedule_data = []
     for teetime in schedule:
         other_players = TeeTimesInd.objects.filter(
@@ -349,7 +358,7 @@ def subswap_view(request):
         ).exclude(PID=player_id)
 
         schedule_data.append({
-            'tt_id': teetime.id,  # Add the ID column here
+            'tt_id': teetime.id,
             'date': teetime.gDate,
             'course': teetime.CourseID.courseName,
             'time_slot': teetime.CourseID.courseTimeSlot,
@@ -358,14 +367,15 @@ def subswap_view(request):
             ])
         })
     
+    # Available Subs Table
     # Fetch available subs for the player
     available_subs = SubSwap.objects.filter(
-        Type='Sub Offer Sent',
-        Status='Sub Open',
+        nType='Sub',
+        SubType='Received',
+        nStatus='Open',
         PID=player_id
     ).select_related('TeeTimeIndID', 'TeeTimeIndID__CourseID').order_by('TeeTimeIndID__gDate')
 
-    # Prepare the data for the available subs table
     available_subs_data = []
     for sub in available_subs:
         teetime = sub.TeeTimeIndID
@@ -375,7 +385,7 @@ def subswap_view(request):
 
         # Fetch the OfferID for the sub offer
         try:
-            sub_offer = SubSwap.objects.get(SwapID=sub.SwapID, Type='Sub Offer')
+            sub_offer = SubSwap.objects.get(SwapID=sub.SwapID, nType='Sub', SubType='Offer')
             offer_pid = sub_offer.PID.id
         except SubSwap.DoesNotExist:
             offer_pid = None
@@ -394,10 +404,12 @@ def subswap_view(request):
             ])
         })
 
+    # Available Swaps Table
     # Fetch available swaps for the player
     available_swaps = SubSwap.objects.filter(
-        Type='Swap Offer Sent',
-        Status='Swap Open',
+        nType='Swap',
+        SubType='Received',
+        nStatus='Open',
         PID=player_id
     ).select_related('TeeTimeIndID', 'TeeTimeIndID__CourseID').order_by('TeeTimeIndID__gDate')
 
@@ -411,7 +423,7 @@ def subswap_view(request):
 
         # Fetch the OfferID for the swap offer
         try:
-            swap_offer = SubSwap.objects.get(SwapID=swap.SwapID, Type='Swap Offer')
+            swap_offer = SubSwap.objects.get(SwapID=swap.SwapID, nType='Swap', SubType='Offer')
             offer_pid = swap_offer.PID.id
         except SubSwap.DoesNotExist:
             offer_pid = None
@@ -433,8 +445,9 @@ def subswap_view(request):
     # Counter Offers table - Fetch counter offers for the player
     offered_swaps = SubSwap.objects.filter(
         PID=player_id,
-        Type='Swap Offer',
-        Status='Swap Open'
+        nType='Swap',
+        SubType='Offer',
+        nStatus='Open'
     )
 
     counter_offers_data = []
@@ -442,8 +455,9 @@ def subswap_view(request):
         for offer in offered_swaps:
             # Fetch the original offer details
             original_offer = SubSwap.objects.filter(
-                Type='Swap Offer',
-                Status='Swap Open',
+                nType='Swap',
+                SubType='Offer',
+                nStatus='Open',
                 SwapID=offer.SwapID
             ).select_related('TeeTimeIndID', 'TeeTimeIndID__CourseID').first()
 
@@ -453,8 +467,9 @@ def subswap_view(request):
 
                 # Fetch the proposed swaps
                 proposed_swaps = SubSwap.objects.filter(
-                    Type='Swap Counter',
-                    Status='Swap Open',
+                    nType='Swap',
+                    SubType='Counter',
+                    nStatus='Open',
                     SwapID=offer.SwapID
                 ).select_related('TeeTimeIndID', 'TeeTimeIndID__CourseID', 'PID')
 
@@ -473,10 +488,11 @@ def subswap_view(request):
                         'swap_ttid': proposed_swap.TeeTimeIndID.id,
                     })
     
-    # Query for Subs Proposed Table
+    #Subs Offered Table
     subs_proposed = SubSwap.objects.filter(
-        Type='Sub Offer',
-        Status='Sub Open',
+        nType='Sub',
+        SubType='Offer',
+        nStatus='Sub',
         PID=player_id
     ).select_related('TeeTimeIndID', 'TeeTimeIndID__CourseID')
 
@@ -490,10 +506,8 @@ def subswap_view(request):
             'swap_id': sub.id
         })
     
-    # Query for Swaps Proposed
+    # Swaps Proposed Table
     swaps_proposed = SubSwap.objects.filter(
-        Type='Swap Offer', # Delete once cutover is complete
-        Status='Swap Open', # Delete once cutover is complete
         nType='Swap',
         SubType='Offer',
         nStatus='Open',
@@ -515,8 +529,9 @@ def subswap_view(request):
     
     # Query for Open Sub Offers - used to gray out Sub Swap buttons on subswap.html
     open_sub_offers = SubSwap.objects.filter(
-        Type='Sub Offer',
-        Status='Sub Open',
+        nType='Sub',
+        SubType='Offer',
+        nStatus='Open',
         PID=player_id
     ).select_related('TeeTimeIndID')
 
@@ -644,8 +659,6 @@ def subrequestsent_view(request):
         RequestDate=timezone.now(),
         PID_id=player_id,
         TeeTimeIndID_id=tt_id,
-        Type="Sub Offer", # Delete once cutover is complete
-        Status="Sub Open", # Delete once cutover is complete
         nType="Sub",
         SubType="Offer",
         nStatus="Open",
@@ -696,8 +709,6 @@ def subrequestsent_view(request):
                 RequestDate=timezone.now(),
                 PID=player,
                 TeeTimeIndID_id=tt_id,
-                Type="Sub Offer Sent", # Delete once cutover is complete
-                Status="Sub Open", # Delete once cutover is complete
                 nType="Sub",
                 SubType="Received",
                 nStatus="Open",
@@ -745,8 +756,6 @@ def subrequestsent_view(request):
                 RequestDate=timezone.now(),
                 PID=player,
                 TeeTimeIndID_id=tt_id,
-                Type="Sub Offer Sent", # Delete once cutover is complete
-                Status="Sub Open", # Delete once cutover is complete
                 nType="Sub",
                 SubType="Received",
                 nStatus="Open",
@@ -980,22 +989,21 @@ def subfinal_view(request):
         nType='Sub',
         SubType='Received',
         PID=player_id
-    ).update(Status='Sub Closed', Type='Sub Accepted', nStatus = 'Closed', SubStatus='Accepted')
+    ).update(nStatus = 'Closed', SubStatus='Accepted')
 
     # closes all the other sub offer rows that equal this swap_id
     SubSwap.objects.filter(
         SwapID=swap_id,
-        Status='Sub Open',
         nType='Sub',
         nStatus='Open'
-    ).update(Status='Sub Closed', nStatus='Closed')
+    ).update(nStatus='Closed')
 
     # closes any swap counters that could be open and offered by the original owner of the offered Sub tee time
     SubSwap.objects.filter(
         TeeTimeIndID=tt_id,
-        Status='Swap Open',
+        nType = 'Swap',
         nStatus='Open',
-    ).update(Status='Swap Closed Other', nStatus='Closed', SubStatus='Owner Changed')
+    ).update(nStatus='Closed', SubStatus='Owner Change')
     
     #finds any other sub or swap offers that are open for the accepting player for the same date they just took a sub for
     subswap_offers_same_date = SubSwap.objects.select_related('TeeTimeIndID').filter(
@@ -1011,7 +1019,7 @@ def subfinal_view(request):
 
         SubSwap.objects.filter(
             id=ss_id,
-            ).update(Status='SubSwap Superseded', nStatus='Closed', SubStatus='Superseded')
+            ).update(nStatus='Closed', SubStatus='Superseded')
         
         # Insert row into Log for offer player
         Log.objects.create(
@@ -1125,7 +1133,7 @@ def store_subcancelconfirm_data_view(request):
         swap_id = request.GET.get('swap_id')
 
         # Fetch the SubSwap instance
-        sub_offer = get_object_or_404(SubSwap, SwapID=swap_id, Type='Sub Offer', Status='Sub Open')
+        sub_offer = get_object_or_404(SubSwap, SwapID=swap_id, nType='Sub', nStatus='Open')
 
         # GATE: Fetch the SubSwap instance using the utility function (in utils.py)
         error_msg = 'The requested Sub is no longer open and able to be cxld'
@@ -1139,12 +1147,6 @@ def store_subcancelconfirm_data_view(request):
         course = teetime.CourseID
         course_name = course.courseName
         course_time_slot = course.courseTimeSlot
-
-        print('store_SUBcancelconfirm_data_view')
-        print('gDate', gDate)
-        print('course_name', course_name) 
-        print('course_time_slot', course_time_slot) 
-        print('swap_id', swap_id)
 
         # Store necessary data in the session
         request.session['gDate'] = gDate.strftime('%Y-%m-%d')
@@ -1251,7 +1253,7 @@ def subcancel_view(request):
     player_id = player.id
 
     # Update SubSwap table
-    SubSwap.objects.filter(SwapID=swap_id, nStatus='Open').update(Status='Sub Cancelled', nStatus='Closed', SubStatus='Cancelled')
+    SubSwap.objects.filter(SwapID=swap_id, nStatus='Open').update(nStatus='Closed', SubStatus='Cancelled')
 
     # Insert a row into Log table
     Log.objects.create(
@@ -1385,7 +1387,6 @@ def swaprequestsent_view(request):
 
     # Fetch the tee time instance
     tee_time_instance = get_object_or_404(TeeTimesInd, pk=swap_tt_id)
-    print('tee_time_instance', tee_time_instance)
 
     # Find all players playing on the requested date
     players_on_requested_date = TeeTimesInd.objects.filter(gDate=gDate).values_list('PID_id', flat=True)
@@ -1396,10 +1397,22 @@ def swaprequestsent_view(request):
     ).exclude(pk=25)  # Exclude Course Credit
 
     # GATE:  if no avail players with dates, sends user to swapnoneavail_view
-    # Check if there are any available players with available swap dates
+    # Fetch the list of future dates for the offering player (player_id)
+    offering_player_future_dates = TeeTimesInd.objects.filter(PID=player_id, gDate__gt=gDate).values_list('gDate', flat=True)
+
     available_players_with_swap_dates = []
     for player in available_players:
+        # Fetch the list of future dates for the current player
+        player_future_dates = TeeTimesInd.objects.filter(PID=player, gDate__gt=gDate).values_list('gDate', flat=True)
+        
+        # Check if all future dates for the current player are in the offering player's future dates
+        if all(date in offering_player_future_dates for date in player_future_dates):
+            print(f"Player {player.id} has all future dates in the offering player's schedule. Skipping.")
+            continue
+        
+        # Check if the player has any available swap dates
         available_swap_dates = TeeTimesInd.objects.filter(PID=player, gDate__gt=gDate).exists()
+
         if available_swap_dates:
             available_players_with_swap_dates.append(player)
 
@@ -1411,8 +1424,6 @@ def swaprequestsent_view(request):
         RequestDate=timezone.now(),
         PID=swap_request_player,
         TeeTimeIndID=tee_time_instance,
-        Type="Swap Offer",
-        Status="Swap Open",
         nType="Swap",
         nStatus="Open",
         SubType="Offer",
@@ -1462,8 +1473,6 @@ def swaprequestsent_view(request):
                 RequestDate=timezone.now(),
                 PID=player,
                 TeeTimeIndID=tee_time_instance,
-                Type="Swap Offer Sent",
-                Status="Swap Open",
                 nType="Swap",
                 nStatus="Open",
                 SubType="Received",
@@ -1497,8 +1506,6 @@ def swaprequestsent_view(request):
                 RequestDate=timezone.now(),
                 PID=player,
                 TeeTimeIndID=tee_time_instance,
-                Type="Swap Offer Sent",
-                Status="Swap Open",
                 nType="Swap",
                 nStatus="Open",
                 SubType="Received",
@@ -1700,7 +1707,7 @@ def swapcounter_view(request):
     player = get_object_or_404(Players, pk=player_id)
 
     # Fetch the offer player instance
-    swap_offer = get_object_or_404(SubSwap, pk=swap_id, Type='Swap Offer')
+    swap_offer = get_object_or_404(SubSwap, pk=swap_id, nType='Swap', SubType='Offer')
     offer_player = swap_offer.PID
 
     # Fetch the mobile numbers
@@ -1794,8 +1801,6 @@ def swapcounter_view(request):
         SubSwap.objects.create(
             RequestDate=timezone.now(),
             PID=player,
-            Type='Swap Counter',
-            Status='Swap Open',
             nType='Swap',
             nStatus='Open',
             SubType='Counter',
@@ -1807,7 +1812,7 @@ def swapcounter_view(request):
 
     # Update SubSwap table.  Change status on the offer row to the counter player to 'Swap Kountered'.  
     # This prevents the same offer showing up in the Counter Players 'Available Swaps' list on subswap.html
-    SubSwap.objects.filter(SwapID=swap_id, Type='Swap Offer Sent', Status='Swap Open', PID_id=player).update(Status='Swap Kountered', SubType='Kountered')
+    SubSwap.objects.filter(SwapID=swap_id, nType='Swap', SubType = 'Received', nStatus='Open', PID_id=player).update(SubType='Kountered')
 
     context = {
         'offer_msg': orig_offer_msg,
@@ -1823,54 +1828,11 @@ def swapcounter_view(request):
 @login_required
 def store_swapcounteraccept_data_view(request):
     if request.method == "GET":
-        user_id = request.GET.get('userID')
-        original_offer_date = request.GET.get('original_offer_date')
-        offer_other_players = request.GET.get('offer_other_players')
-        proposed_swap_date = request.GET.get('proposed_swap_date')
-        swap_other_players = request.GET.get('swap_other_players')
         swap_id = request.GET.get('swapid')
         counter_ttid = request.GET.get('swap_ttid')
 
-        print('store_swapcounteraccept_data_view')
-        print('user_id', user_id)
-        print('original_offer_date', original_offer_date)
-        print('offer_other_players', offer_other_players)
-        print('proposed_swap_date', proposed_swap_date)
-        print('swap_other_players', swap_other_players)
-        print('swap_id', swap_id)
-        print('counter_ttid', counter_ttid)
-
-        # Fetch the Player ID associated with the logged-in user
-        player = Players.objects.filter(user_id=user_id).first()
-        if not player:
-            return HttpResponseBadRequest("Player not found for the logged-in user.")
-        player_id = player.id
-
-        # Fetch the PID from the TeeTimesInd table using counter_ttid
-        teetime = TeeTimesInd.objects.filter(id=counter_ttid).first()
-        if not teetime:
-            return HttpResponseBadRequest("Tee time not found.")
-        counter_player_id = teetime.PID.id
-
-        # Fetch the first name and last name from the Players table using counter_player_id
-        counter_player = Players.objects.filter(id=counter_player_id).first()
-        if not counter_player:
-            return HttpResponseBadRequest("Counter player not found.")
-        counter_first_name = counter_player.FirstName
-        counter_last_name = counter_player.LastName
-
-        # Store necessary data in the session
-        request.session['original_offer_date'] = original_offer_date
-        request.session['offer_other_players'] = offer_other_players
-        request.session['proposed_swap_date'] = proposed_swap_date
-        request.session['swap_other_players'] = swap_other_players
         request.session['swap_id'] = swap_id
         request.session['counter_ttid'] = counter_ttid
-        request.session['player_id'] = player_id
-        request.session['player_first_name'] = player.FirstName
-        request.session['player_last_name'] = player.LastName
-        request.session['counter_first_name'] = counter_first_name
-        request.session['counter_last_name'] = counter_last_name
 
         return redirect('swapcounteraccept_view')
     else:
@@ -1879,48 +1841,59 @@ def store_swapcounteraccept_data_view(request):
 
 @login_required
 def swapcounteraccept_view(request):
-    # Retrieve data from the session
-    original_offer_date = request.session.pop('original_offer_date', None)
-    offer_other_players = request.session.pop('offer_other_players', None)
-    proposed_swap_date = request.session.pop('proposed_swap_date', None)
-    swap_other_players = request.session.pop('swap_other_players', None)
     swap_id = request.session.pop('swap_id', None)
     counter_ttid = request.session.pop('counter_ttid', None)
-    player_id = request.session.pop('player_id', None)
-    player_first_name = request.session.pop('player_first_name', None)
-    player_last_name = request.session.pop('player_last_name', None)
-    counter_first_name = request.session.pop('counter_first_name', None)
-    counter_last_name = request.session.pop('counter_last_name', None)
 
-    # Debugging: Print the retrieved values
-    print('swapcounteraccept_view')
-    print('original_offer_date:', original_offer_date)
-    print('offer_other_players:', offer_other_players)
-    print('proposed_swap_date:', proposed_swap_date)
-    print('swap_other_players:', swap_other_players)
-    print('swap_id:', swap_id)
-    print('counter_ttid:', counter_ttid)
-    print('player_id:', player_id)
-    print('player_first_name:', player_first_name)
-    print('player_last_name:', player_last_name)
-    print('counter_first_name:', counter_first_name)
-    print('counter_last_name:', counter_last_name)
-
-
-    if not original_offer_date or not offer_other_players or not proposed_swap_date or not swap_other_players or not swap_id or not counter_ttid or not player_id or not player_first_name or not player_last_name or not counter_first_name or not counter_last_name:
+    if not swap_id or not counter_ttid:
         return HttpResponseBadRequest("Required data is missing. - swapcounteraccept_view")
 
+    # Fetch the tt_id assoc with the swap_id
+    subswap_row = get_object_or_404(SubSwap, id=swap_id)
+    offer_tt_id = subswap_row.TeeTimeIndID_id
+    
+    # Fetch the Player ID associated with the logged-in user
+    user_id = request.user.id
+    offer_first_name = request.user.first_name
+    offer_last_name = request.user.last_name
+
+    player = get_object_or_404(Players, user_id=user_id)
+    player_id = player.id
+
+    # Fetch the TeeTimeInd instance details for the offer date using the utility function (in utils.py)
+    offer_tee_time_details = get_tee_time_details(offer_tt_id, player_id)
+    offer_date = offer_tee_time_details['gDate']
+    offer_course_name = offer_tee_time_details['course_name']
+    offer_time_slot = offer_tee_time_details['course_time_slot']
+    offer_other_players = offer_tee_time_details['other_players']
+
+    # Fetch the TeeTimeInd instance details for the counter date using the utility function (in utils.py)
+    counter_tti = get_object_or_404(TeeTimesInd, id=counter_ttid)
+    counter_id = counter_tti.PID_id
+
+    counter_tee_time_details = get_tee_time_details(counter_ttid, counter_id)
+    counter_date = counter_tee_time_details['gDate']
+    counter_course_name = counter_tee_time_details['course_name']
+    counter_time_slot = counter_tee_time_details['course_time_slot']
+    counter_other_players = counter_tee_time_details['other_players']
+
+    # Fetch the first name and last name from the Players table using counter_player_id
+    counter_player = Players.objects.filter(id=counter_id).first()
+    counter_first_name = counter_player.FirstName
+    counter_last_name = counter_player.LastName
+    
     context = {
-        'original_offer_date': original_offer_date,
+        'offer_date': offer_date,
+        'offer_course_name': offer_course_name,
+        'offer_time_slot': offer_time_slot,
         'offer_other_players': offer_other_players,
-        'proposed_swap_date': proposed_swap_date,
-        'swap_other_players': swap_other_players,
-        'counter_player': f"{player_first_name} {player_last_name}",
-        'player_id': player_id,
+        'counter_date': counter_date,
+        'counter_course_name': counter_course_name,
+        'counter_time_slot': counter_time_slot,
+        'counter_other_players': counter_other_players,
         'counter_ttid': counter_ttid,
         'swap_id': swap_id,
-        'first_name' : player_first_name,
-        'last_name' : player_last_name,
+        'first_name' : offer_first_name,
+        'last_name' : offer_last_name,
         'counter_first_name': counter_first_name,
         'counter_last_name': counter_last_name,
     }
@@ -1930,17 +1903,10 @@ def swapcounteraccept_view(request):
 @login_required
 def store_swapfinal_data_view(request):
     if request.method == "GET":
-        player_id = request.GET.get('player_id')
         counter_ttid = request.GET.get('counter_ttid')
         swap_id = request.GET.get('swap_id')
 
-        print('store_swapfinal_data_view')
-        print('player_id', player_id)
-        print('counter_ttid', counter_ttid)
-        print('swap_id', swap_id)
-
         # Store necessary data in the session
-        request.session['player_id'] = player_id
         request.session['counter_ttid'] = counter_ttid
         request.session['swap_id'] = swap_id
 
@@ -1951,22 +1917,31 @@ def store_swapfinal_data_view(request):
 
 @login_required
 def swapfinal_view(request):
-    # Retrieve data from the session
-    player_id = request.session.pop('player_id', None)
     counter_ttid = request.session.pop('counter_ttid', None)
     swap_id = request.session.pop('swap_id', None)
 
-    print('swapfinal_view')
-    print('player_id', player_id)
-    print('counter_ttid', counter_ttid, 'THIS ONE')
-    print('swap_id', swap_id)
-
-
-    if not player_id or not counter_ttid or not swap_id:
+    if not counter_ttid or not swap_id:
         return HttpResponseBadRequest("Required data is missing. - swapfinal_view")
+    
+    # GATE: Verify Swap Offer is still open - prevents back button abuse
+    error_msg = 'The requested Swap Offer is no longer available.  Please review the available Swaps on the Sub Swap page and try again.'
+    swap_offer = get_open_subswap_or_error(swap_id, error_msg, request)
+    if isinstance(swap_offer, HttpResponse):
+        return swap_offer
+    
+    # GATE: Verify Counter Offer is still open
+    counter_offer = SubSwap.objects.filter(SwapID=swap_id, SubType='Counter', nStatus='Open')
+    if not counter_offer.exists():
+        return render(request, 'GRPR/error_msg.html', {'error_msg': 'The Counter Offer is no longer available.  Please review the available Swaps on the Sub Swap page and try again.'})
+
+    # Fetch the Player ID associated with the logged-in user
+    user_id = request.user.id
+    first_name = request.user.first_name
+    last_name = request.user.last_name
 
     # Fetch the offer player instance
-    offer_player = get_object_or_404(Players, pk=player_id)
+    offer_player = get_object_or_404(Players, user_id=user_id)
+    player_id = offer_player.id
     offer_mobile = offer_player.Mobile
     offer_name = f"{offer_player.FirstName} {offer_player.LastName}"
 
@@ -1974,8 +1949,9 @@ def swapfinal_view(request):
     counter_offer = SubSwap.objects.filter(
         TeeTimeIndID=counter_ttid,
         SwapID=swap_id,
-        Type='Swap Counter',
-        Status='Swap Open'
+        nType='Swap',
+        SubType='Counter',
+        nStatus='Open'
     ).select_related('TeeTimeIndID', 'TeeTimeIndID__CourseID', 'PID').first()
 
     counter_user_id = counter_offer.PID.id
@@ -1985,11 +1961,17 @@ def swapfinal_view(request):
     counter_name = f"{counter_offer.PID.FirstName} {counter_offer.PID.LastName}"
     counter_mobile = counter_offer.PID.Mobile
 
+    # GATE: Check if the logged-in user is still available to play the Swap gDate on offer
+    offer_player_availability_error = check_player_availability(player_id, counter_gDate, request)
+    if offer_player_availability_error:
+        return offer_player_availability_error
+
     # Fetch the original offer details
     original_offer = SubSwap.objects.filter(
         SwapID=swap_id,
-        Type='Swap Offer',
-        Status='Swap Open'
+        nType='Swap',
+        SubType='Offer',
+        nStatus='Open'
     ).select_related('TeeTimeIndID', 'TeeTimeIndID__CourseID').first()
 
     offer_ttid = original_offer.TeeTimeIndID.id
@@ -1997,42 +1979,53 @@ def swapfinal_view(request):
     offer_Course = original_offer.TeeTimeIndID.CourseID.courseName
     offer_TimeSlot = original_offer.TeeTimeIndID.CourseID.courseTimeSlot
 
-    # Update SubSwap table
-    SubSwap.objects.filter(
-        SwapID=swap_id,
-        Status='Swap Open',
-        Type='Swap Counter',
-        TeeTimeIndID=counter_ttid
-    ).update(Type='Swap Accepted')
+    # GATE: Check if the Counter Player is still available to play the Swap gDate on offer
+    counter_player_availability_error = check_player_availability(counter_user_id, offer_gDate, request)
+    if counter_player_availability_error:
+        return counter_player_availability_error
 
+    # Update SubSwap table for the Counter Offer
     SubSwap.objects.filter(
         SwapID=swap_id,
-        Status='Swap Open'
-    ).update(Status='Swap Closed')
+        nStatus='Open',
+        nType='Swap',
+        SubType='Counter',
+        TeeTimeIndID=counter_ttid
+    ).update(SubStatus='Accepted', nStatus='Closed')
+
+    # Update SubSwap table for all other open rows associated with the swap_id
+    SubSwap.objects.filter(
+        SwapID=swap_id,
+        nStatus='Open'
+    ).update(nStatus='Closed')
 
     # This bit closes any row in the SubSwap table related to the counter_tt_id that just changed ownership
     # For example, if the counter player currently had a Sub or Swap request live for this counter date, those would now be closed
     SubSwap.objects.filter(
         TeeTimeIndID=counter_ttid,
-        Status='Swap Open'
-    ).update(Status='Swap Closed Other')
-    #### COME BACK TO THIS, SHOULD BE SWAP OR SUB OPEN
+        nStatus='Open',
+    ).update(nStatus='Closed', SubStatus='Owner Change')
 
-    # finds any other sub or swap offers that are open for the counter player for the same date they just took a swap for
-    subswap_offers_same_date = SubSwap.objects.select_related('TeeTimeIndID').filter(
+    # Does the same for the offer_tt_id
+    SubSwap.objects.filter(
+        TeeTimeIndID=offer_ttid,
+        nStatus='Open',
+    ).update(nStatus='Closed', SubStatus='Owner Change')
+
+    # Counter Player availability change - closes all sub swaps available to counter player for the offer date they just acquired
+    counter_player_same_date = SubSwap.objects.select_related('TeeTimeIndID').filter(
             Q(TeeTimeIndID__gDate=offer_gDate) &
             Q(PID=counter_user_id) &
-            (Q(Status='Swap Open') | Q(Status='Sub Open'))
+            Q(nStatus='Open')
     )
-    
-    # closes any other subs or swaps that were opened (when the counter player was available) that, with this acceptance, are no longer available for
-    for ss in subswap_offers_same_date:
-        ss_id = ss.id
-        ss_swap_id = ss.SwapID
+
+    for offers in counter_player_same_date:
+        ss_id = offers.id
+        ss_swap_id = offers.SwapID
 
         SubSwap.objects.filter(
             id=ss_id,
-            ).update(Status='SubSwap Superseded')
+            ).update(nStatus='Closed', SubStatus='Superseded')
         
         # Insert row into Log for offer player
         Log.objects.create(
@@ -2043,28 +2036,44 @@ def swapfinal_view(request):
             ReceiveID=counter_user_id,
             OfferID=player_id,
             RefID=ss_swap_id,
-            Msg="Sub Swap was superseded by another Sub Swap for the same date that was accepted by this player",
+            Msg=f"{counter_name} has accepted a counter offer for this date.  SubSwap request has been superseded.",
         )
-    
-    ## NEED TO FINISH THIS
-    # # finds any other sub or swap offers that are open for the OFFER player for the same date they just took a swap for
-    ss_offers_same_date = SubSwap.objects.select_related('TeeTimeIndID').filter(
+
+    # Offer Player availability change - closes all sub swaps available to offer player for the counter date they just acquired
+    offer_player_same_date = SubSwap.objects.select_related('TeeTimeIndID').filter(
             Q(TeeTimeIndID__gDate=counter_gDate) &
             Q(PID=player_id) &
-            (Q(Status='Swap Open') | Q(Status='Sub Open'))
+            Q(nStatus='Open')
     )
+
+    for offers in offer_player_same_date:
+        ss_id = offers.id
+        ss_swap_id = offers.SwapID
+
+        SubSwap.objects.filter(
+            id=ss_id,
+            ).update(nStatus='Closed', SubStatus='Superseded')
+        
+        # Insert row into Log for offer player
+        Log.objects.create(
+            SentDate=timezone.now(),
+            Type="SubSwap Superseded",
+            MessageID='none',
+            RequestDate=offer_gDate,
+            ReceiveID=counter_user_id,
+            OfferID=player_id,
+            RefID=ss_swap_id,
+            Msg=f"{offer_name} has accepted a counter offer for this date.  SubSwap request has been superseded.",
+        )
 
     # Update TeeTimesInd table
     TeeTimesInd.objects.filter(id=offer_ttid).update(PID=counter_user_id)
     TeeTimesInd.objects.filter(id=counter_ttid).update(PID=player_id)
-    print('TeeTimesInd updated.  offer_ttid', offer_ttid, '  and counter_user_id:', counter_user_id)
-    print('TeeTimesInd updated.  counter_ttid', counter_ttid, '  and player_id:', player_id)
 
     # create the msgs that will be sent via text to the players + be entered into the Log table
     offer_msg = f"Tee Time Swap Accepted. {offer_name} is now playing {counter_gDate} at {counter_Course} at {counter_TimeSlot}am. {counter_name} will play {offer_gDate} at {offer_Course} at {offer_TimeSlot}am."
     counter_msg = f"Tee Time Swap Accepted. {counter_name} is now playing {offer_gDate} at {offer_Course} at {offer_TimeSlot}am. {offer_name} will play {counter_gDate} at {counter_Course} at {counter_TimeSlot}am."
     
-
     # Send texts via Twilio
     if settings.TWILIO_ENABLED:
         client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
@@ -2147,8 +2156,8 @@ def swapfinal_view(request):
         'offer_gDate': offer_gDate,
         'offer_Course': offer_Course,
         'offer_TimeSlot': offer_TimeSlot,
-        'first_name': request.user.first_name,
-        'last_name': request.user.last_name,
+        'first_name': first_name,
+        'last_name': last_name,
     }
     return render(request, 'GRPR/swapfinal.html', context)
 
@@ -2250,7 +2259,7 @@ def swapcancel_view(request):
     other_players = tee_time_details['other_players']
 
     # Update SubSwap table
-    SubSwap.objects.filter(SwapID=swap_id, nStatus='Open').update(Status='Swap Cancelled', nStatus='Closed', SubStatus='Cancelled')
+    SubSwap.objects.filter(SwapID=swap_id, nStatus='Open').update(nStatus='Closed', SubStatus='Cancelled')
 
     # Insert a row into Log table
     Log.objects.create(
