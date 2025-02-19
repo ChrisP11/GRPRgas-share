@@ -14,6 +14,7 @@ from django.contrib.auth.views import PasswordChangeView
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm # added for secure login page creation
 from .forms import CustomPasswordChangeForm
 from django.contrib.auth.decorators import login_required # added to require certified login to view any page
+from django.views.decorators.csrf import csrf_exempt # added to allow Twilio to send messages
 from django.contrib.auth.models import User # for user activity tracking on Admin page
 from django.contrib.auth import login as auth_login # for user activity tracking on Admin page
 from django.db.models import Q, Count
@@ -24,6 +25,7 @@ from twilio.rest import Client # Import the Twilio client
 from twilio.twiml.messaging_response import MessagingResponse
 
 # for Twilio.  Creates a response to people who reply to outbound text messages
+@csrf_exempt
 def sms_reply(request):
     # Create a TwiML response
     response = MessagingResponse()
