@@ -29,7 +29,7 @@ from twilio.twiml.messaging_response import MessagingResponse
 def sms_reply(request):
     # Get the message body and sender's phone number from the request
     message_body = request.POST.get('Body', '').strip().lower()
-    from_number = request.POST.get('From', '')
+    from_number = request.POST.get('From', '').lstrip('+')  # Remove the leading '+'
 
     # Create a new SMSResponse object and save it to the database
     SMSResponse.objects.create(
@@ -148,22 +148,22 @@ def admin_view(request):
     users = User.objects.all().values('username', 'date_joined', 'last_login').order_by('-last_login')
     login_activities = LoginActivity.objects.values('user__username').annotate(login_count=Count('id'))
 
-    # Define a custom function to extract the last 11 digits
-    class Right(Func):
-        function = 'RIGHT'
-        template = '%(function)s(%(expressions)s, 11)'
+    # Fetch the SMS Response Activity
+    players_subquery = Players.objects.filter(
+        Mobile=OuterRef('from_number')
+    ).values(
+        'FirstName', 'LastName'
+    )
 
-    # Perform the query
     responses = SMSResponse.objects.annotate(
-        from_number_last_11=Right(F('from_number'))
-    ).filter(
-        from_number_last_11=F('player__Mobile')
+        player_first_name=Subquery(players_subquery.values('FirstName')[:1]),
+        player_last_name=Subquery(players_subquery.values('LastName')[:1])
     ).values(
         'received_at',
         'from_number',
         'message_body',
-        'player__FirstName',
-        'player__LastName'
+        'player_first_name',
+        'player_last_name'
     )
 
     
