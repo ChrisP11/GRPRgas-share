@@ -47,9 +47,9 @@ class SubSwap(models.Model):
     RequestDate = models.DateTimeField()
     PID = models.ForeignKey('Players', on_delete=models.CASCADE)
     TeeTimeIndID = models.ForeignKey('TeeTimesInd', on_delete=models.CASCADE)
-    nStatus = models.CharField(max_length=32, null=True, blank=True)
+    nStatus = models.CharField(max_length=32)
     SubStatus = models.CharField(max_length=32, null=True, blank=True)
-    nType = models.CharField(max_length=32, null=True, blank=True)
+    nType = models.CharField(max_length=32)
     SubType = models.CharField(max_length=32, null=True, blank=True)
     Msg = models.CharField(max_length=2048)
     OtherPlayers = models.CharField(max_length=1024)
@@ -95,3 +95,14 @@ class Xdates(models.Model):
     class Meta:
         db_table = "Xdates"
 
+
+class SMSResponse(models.Model):
+    from_number = models.CharField(max_length=15)
+    message_body = models.TextField()
+    received_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"From: {self.from_number}, Message: {self.message_body}"
+    
+    class Meta:
+        db_table = "SMSResponse"

@@ -4,7 +4,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpResponse
 from django.http import HttpResponseBadRequest
 from django.utils import timezone
-from GRPR.models import Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity
+from GRPR.models import Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity, SMSResponse
 from datetime import datetime
 # from dateutil import parser
 # from dateutil.parser import ParserError
@@ -27,10 +27,20 @@ from twilio.twiml.messaging_response import MessagingResponse
 # for Twilio.  Creates a response to people who reply to outbound text messages
 @csrf_exempt
 def sms_reply(request):
+    # Get the message body and sender's phone number from the request
+    message_body = request.POST.get('Body', '').strip().lower()
+    from_number = request.POST.get('From', '')
+
+    # Create a new SMSResponse object and save it to the database
+    SMSResponse.objects.create(
+        from_number=from_number,
+        message_body=message_body
+    )
+
     # Create a TwiML response
     response = MessagingResponse()
-    # Optionally, you can add a message to the response
-    response.message("You rang?")
+    # IF you want to send a response, uncomment below.  Currently no response is sent
+    # response.message("Thank you for your response!")
     return HttpResponse(str(response), content_type='text/xml')
 
 # added for secure login page creation
