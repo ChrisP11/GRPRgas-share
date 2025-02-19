@@ -166,6 +166,14 @@ def admin_view(request):
         'player_last_name'
     )
 
+    # Debugging: Print the generated SQL query
+    print("Generated SQL Query for responses:")
+    print(responses.query)
+
+    # Debugging: Print the responses
+    for response in responses:
+        print(response)
+
     
     context = {
         'users': users,
