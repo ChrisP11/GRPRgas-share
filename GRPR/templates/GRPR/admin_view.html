@@ -13,6 +13,32 @@
     <br>
     <br>
 
+    <h1>SMS Responses</h1>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Received</th>
+                <th>From</th>
+                <th>Msg</th>
+                <th>First Name</th>
+                <th>Last Name</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for msg in responses %}
+            <tr>
+                <td>{{ msg.received_at }}</td>
+                <td>{{ msg.from_number }}</td>
+                <td>{{ msg.message_body }}</td>
+                <td>{{ msg.players__FirstName }}</td>
+                <td>{{ msg.players__LastName }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <br>
+    <br>
+
     <h1>User Activity</h1>
     <table class="table">
         <thead>

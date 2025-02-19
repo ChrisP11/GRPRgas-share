@@ -17,7 +17,7 @@ from django.contrib.auth.decorators import login_required # added to require cer
 from django.views.decorators.csrf import csrf_exempt # added to allow Twilio to send messages
 from django.contrib.auth.models import User # for user activity tracking on Admin page
 from django.contrib.auth import login as auth_login # for user activity tracking on Admin page
-from django.db.models import Q, Count
+from django.db.models import Q, Count, F, Func, Subquery, OuterRef
 from django.urls import reverse_lazy
 from django.core.mail import send_mail
 from GRPR.utils import get_open_subswap_or_error, check_player_availability, get_tee_time_details
@@ -147,10 +147,36 @@ def admin_view(request):
     # Fetch user activity
     users = User.objects.all().values('username', 'date_joined', 'last_login').order_by('-last_login')
     login_activities = LoginActivity.objects.values('user__username').annotate(login_count=Count('id'))
+
+    # Define a custom function to extract the last 11 digits
+    class Right(Func):
+        function = 'RIGHT'
+        template = '%(function)s(%(expressions)s, 11)'
+
+    # Perform the query
+    players_subquery = Players.objects.filter(
+        Mobile=OuterRef('from_number_last_11')
+    ).values(
+        'FirstName', 'LastName'
+    )
+
+    responses = SMSResponse.objects.annotate(
+        from_number_last_11=Right(F('from_number')),
+        player_first_name=Subquery(players_subquery.values('FirstName')[:1]),
+        player_last_name=Subquery(players_subquery.values('LastName')[:1])
+    ).values(
+        'received_at',
+        'from_number',
+        'message_body',
+        'player_first_name',
+        'player_last_name'
+    )
+
     
     context = {
         'users': users,
         'login_activities': login_activities,
+        'responses': responses,
     }
     return render(request, 'admin_view.html', context)
 
@@ -2313,7 +2339,7 @@ def swapnoneavail_view(request):
 
 @login_required
 def statistics_view(request):
-    # for course dustro chart:
+    # for course distro chart:
     courses = Courses.objects.all()
     players = Players.objects.exclude(id=25).order_by('LastName')
 
@@ -2356,23 +2382,18 @@ def statistics_view(request):
 
     # Find the maximum count for normalization
     max_count = max(max(distinct_counts.values()) for distinct_counts in chart_data.values())
-    
 
     # Normalize the values
     normalized_chart_data = {}
     for player_a_id, counts in chart_data.items():
         normalized_counts = {player_id: count / max_count for player_id, count in counts.items()}
         normalized_chart_data[player_a_id] = normalized_counts
-    
-    # print('normalized_chart_data', normalized_chart_data)
 
     # Zip the players, chart_data, and normalized_chart_data for easy iteration in the template
     zipped_data = [
         (player_a, [(player_b, chart_data[player_a.id].get(player_b.id, None), normalized_chart_data[player_a.id].get(player_b.id, None)) for player_b in players])
         for player_a in players
     ]
-
-    # print('zipped_data', zipped_data)
 
     # for the User Activity feed:
     actions = []
