@@ -158,22 +158,13 @@ def admin_view(request):
     responses = SMSResponse.objects.annotate(
         player_first_name=Subquery(players_subquery.values('FirstName')[:1]),
         player_last_name=Subquery(players_subquery.values('LastName')[:1])
-    ).values(
+    ).order_by('-received_at')[:30].values(
         'received_at',
         'from_number',
         'message_body',
         'player_first_name',
         'player_last_name'
     )
-
-    # Debugging: Print the generated SQL query
-    print("Generated SQL Query for responses:")
-    print(responses.query)
-
-    # Debugging: Print the responses
-    for response in responses:
-        print(response)
-
     
     context = {
         'users': users,
@@ -2342,7 +2333,7 @@ def swapnoneavail_view(request):
 @login_required
 def statistics_view(request):
     # for course distro chart:
-    courses = Courses.objects.all()
+    courses = Courses.objects.all().order_by('id')
     players = Players.objects.exclude(id=25).order_by('LastName')
 
     course_names= []
@@ -2360,6 +2351,22 @@ def statistics_view(request):
         total_count = sum(korse_per.values())
         korse_per['total'] = total_count
         korse_chart_data[player_a.id] = korse_per
+
+    # for date distro chart:
+    dates = TeeTimesInd.objects.filter(gDate__gt='2025-01-01').values('gDate').distinct().order_by('gDate')
+
+    date_names = [date['gDate'].strftime('%Y-%m-%d') for date in dates]
+
+    date_chart_data = {}
+
+    for player_b in players:
+        date_per = {}
+        for date in dates:
+            date_count = TeeTimesInd.objects.filter(PID=player_b.id, gDate=date['gDate']).count()
+            date_per[date['gDate'].strftime('%Y-%m-%d')] = date_count
+        total_count = sum(date_per.values())
+        date_per['total'] = total_count
+        date_chart_data[player_b.id] = date_per
 
     # For the player heatmap chart:
     chart_data = {}
@@ -2427,6 +2434,8 @@ def statistics_view(request):
         'players': players,
         'korse_chart_data': korse_chart_data,
         'course_names': course_names,
+        'date_names': date_names,
+        'date_chart_data': date_chart_data,
         'zipped_data': zipped_data,
         "actions": actions,
         "first_name": request.user.first_name,  # Add the first name of the logged-in user

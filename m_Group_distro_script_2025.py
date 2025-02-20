@@ -180,11 +180,12 @@ def results():
 	print()
 
 def split_partners_distro():
-	prds = [1,2,4,20] # hard coded list of players that need to be split
-	for p in prds:
+	# s_golfers is the half of the split partners that were given a full list of dates
+	for p in s_golfers:
 		print()
 		splitPartnerTeeTimes = TeeTimesInd.objects.filter(PID_id=p, gDate__gt='2025-01-01').values('id')
 		splitID = Players.objects.get(SplitPartner=p)
+		print('split partner distro process for PID', p, 'and SplitID', splitID)
 		trn = 0
 		for tt in splitPartnerTeeTimes:
 			tt_id = tt['id']
@@ -203,13 +204,24 @@ def split_partners_distro():
 
 # Query the Players table and get PIDs
 preRandomGolfers = []
-# hard coded OUT the second split player - see below in the results() function where this needs to
-players = Players.objects.exclude(id=25).exclude(SplitPartner__in=[1, 2, 4, 20])
+# Get all the players x/ course credit and those with a split partner.  Will get those in a minute
+players = Players.objects.exclude(id=25).exclude(SplitPartner__isnull=False)
 for player in players:
 	pID = player.id
+	print(f"{pID} {player.FirstName} {player.LastName}")
 	preRandomGolfers.append(pID)
 
-
+# Get all split players
+s_golfers = []
+splitPlayers = Players.objects.filter(SplitPartner__isnull=False)
+for s_plyr in splitPlayers:
+	pID = s_plyr.id
+	split_pID = s_plyr.SplitPartner
+	# if the split partner is not in the list, it is ok to add this player
+	if split_pID not in s_golfers:
+		s_golfers.append(pID)
+		preRandomGolfers.append(pID)
+		
 
 courses = []
 korses = Courses.objects.filter(crewID=1)
@@ -228,12 +240,9 @@ teetimes = [{'date': '2025-04-19'}, {'date': '2025-04-26'}, {'date': '2025-05-03
 
 
 exDatesDict = {
-	1 : ['2025-06-28', '2025-07-05', '2025-08-16']
-	,2 : ['2025-08-16', '2025-08-23', '2025-08-30']
+	2 : ['2025-08-16', '2025-08-23', '2025-08-30']
 	,4 : ['2025-04-26', '2025-06-14', '2025-08-16']
-	,7 : ['2025-04-19', '2025-04-26', '2025-05-03', '2025-05-10', '2025-05-17', '2025-05-24', '2025-06-07', '2025-06-14', '2025-07-1', '2025-08-09']
 	,6 : ['2025-05-10', '2025-05-17', '2025-05-24']
-	,7 : ['2025-04-19', '2025-07-05', '2025-08-30']
 	,8 : ['2025-07-19', '2025-08-16']
 	,9 : ['2025-05-10', '2025-07-05', '2025-07-19']
 	,10 : ['2025-05-10', '2025-06-28', '2025-07-12']
@@ -245,8 +254,6 @@ exDatesDict = {
 	,16 : ['2025-06-14', '2025-07-05', '2025-08-30']
 	,17 : ['2025-04-26', '2025-08-16']
 	,18 : ['2025-04-19', '2025-05-10', '2025-05-17']
-	,19 : ['2025-07-05']
-	,20 : ['2025-05-17', '2025-06-07']
 }
 
 
@@ -277,7 +284,7 @@ while resultsGood == 0:
 	# check to see if someone got shorted
 	# special section to cover Mike Ewell and his short summer
 	# del golferSlotsDict['Mike Ewell']
-	del golferSlotsDict[7]
+	# del golferSlotsDict[7]
 	minSlots = min(golferSlotsDict.values())
 	print()
 	if minSlots < maxRounds - 1:

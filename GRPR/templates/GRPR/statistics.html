@@ -5,18 +5,24 @@
 {% block content %}
 
 <div class="container my-4">
+    <h1>Data Page</h1>
+    <h3>Charts showing Tee Time and Partner distribution + Activity</h3>
+    <h5>(this is not very mobile friendly - sorry!)</h5>
+    <br>
 
         <!-- Navigation Links -->
         <div class="nav-links">
             <a href="#activity-feed">Activity Feed</a> |
+            <a href="#partner-heatmap">Partner Heatmap</a> |
             <a href="#course-heatmap">Course Heatmap</a> |
-            <a href="#partner-heatmap">Partner Heatmap</a>
+            <a href="#date-heatmap">Date Heatmap</a>
+            
         </div>
     
     <br>
     <br>
 
-    <h1 id="activity-feed" class="mb-4">Activity Feed</h1>
+    <h2 id="activity-feed" class="mb-4">Activity Feed</h2>
     <!-- Log Table Activity -->
     {% if actions %}
         <table class="table table-striped">
@@ -40,11 +46,43 @@
             </tbody>
         </table>
     {% endif %}
+
+    <br>
+    <br>
+
+    <h2 id="partner-heatmap">Partner Heatmap</h2>
+    <table class="table">
+        <thead>
+            <tr>
+                <th></th>
+                {% for player in players %}
+                    <th class="rotate"><div>{{ player.FirstName }} {{ player.LastName }}</div></th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for player_a, row in zipped_data %}
+                <tr>
+                    <th>{{ player_a.FirstName }} {{ player_a.LastName }}</th>
+                    {% for player_b, cell, normalized_cell in row %}
+                        {% if cell is not None %}
+                            <td class="heatmap-cell" style="background-color: rgba(0, 142, 112, {{ normalized_cell }});">
+                                {{ cell }}
+                            </td>
+                        {% else %}
+                            <td class="heatmap-cell"></td>
+                        {% endif %}
+                    {% endfor %}
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
     <br>
     <br>
 
 
-    <h1 id="course-heatmap" class="mb-4">Course Heatmap</h1>
+    <h2 id="course-heatmap" class="mb-4">Course Heatmap</h2>
     <!-- Course HeatMap Table -->
     <table class="table table-striped">
         <thead>
@@ -77,33 +115,36 @@
     <br>
     <br>
 
-    <h1 id="partner-heatmap">Partner Heatmap</h1>
-    <table class="table">
+    <h1 id="date-heatmap" class="mb-4">Date Heatmap</h1>
+    <!-- Date HeatMap Table -->
+    <table class="table table-striped">
         <thead>
             <tr>
-                <th></th>
-                {% for player in players %}
-                    <th class="rotate"><div>{{ player.FirstName }} {{ player.LastName }}</div></th>
+                <th>Player</th>
+                {% for date in date_names %}
+                    <th>{{ date }}</th>
                 {% endfor %}
+                <th>Total</th>
             </tr>
         </thead>
         <tbody>
-            {% for player_a, row in zipped_data %}
+            {% for player_id, dates in date_chart_data.items %}
                 <tr>
-                    <th>{{ player_a.FirstName }} {{ player_a.LastName }}</th>
-                    {% for player_b, cell, normalized_cell in row %}
-                        {% if cell is not None %}
-                            <td class="heatmap-cell" style="background-color: rgba(0, 142, 112, {{ normalized_cell }});">
-                                {{ cell }}
-                            </td>
-                        {% else %}
-                            <td class="heatmap-cell"></td>
-                        {% endif %}
+                    <td>
+                        {% for player in players %}
+                            {% if player.id == player_id %}
+                                {{ player.FirstName }} {{ player.LastName }}
+                            {% endif %}
+                        {% endfor %}
+                    </td>
+                    {% for date, count in dates.items %}
+                        <td>{{ count }}</td>
                     {% endfor %}
                 </tr>
             {% endfor %}
         </tbody>
     </table>
+
 </div>
 
 {% endblock %}
