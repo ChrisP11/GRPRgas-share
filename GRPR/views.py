@@ -523,7 +523,7 @@ def subswap_view(request):
     subs_proposed = SubSwap.objects.filter(
         nType='Sub',
         SubType='Offer',
-        nStatus='Sub',
+        nStatus='Open',
         PID=player_id
     ).select_related('TeeTimeIndID', 'TeeTimeIndID__CourseID')
 
