@@ -13,6 +13,7 @@
         <!-- Navigation Links -->
         <div class="nav-links">
             <a href="#activity-feed">Activity Feed</a> |
+            <a href="#requested-off">Requested Off Dates</a> |
             <a href="#partner-heatmap">Partner Heatmap</a> |
             <a href="#course-heatmap">Course Heatmap</a> |
             <a href="#date-heatmap">Date Heatmap</a>
@@ -47,6 +48,25 @@
         </table>
     {% endif %}
 
+    <br>
+    <br>
+    <h2 id="requested-off" class="mb-4">Requested Off Dates</h2>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Player</th>
+                <th>Requested Off</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in xdates_list %}
+                <tr>
+                    <td>{{ entry.player }}</td>
+                    <td>{{ entry.requested_off }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
     <br>
     <br>
 

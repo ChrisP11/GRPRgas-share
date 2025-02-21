@@ -10,6 +10,8 @@ import math    # used to round up to integers
 import random  # used to randomize the golfer order
 import os
 import django
+from datetime import datetime, date
+
 
 # Set up the Django environment
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'portfolio.settings')
@@ -239,22 +241,28 @@ teetimes = [{'date': '2025-04-19'}, {'date': '2025-04-26'}, {'date': '2025-05-03
 			, {'date': '2025-08-23'}, {'date': '2025-08-30'}]
 
 
-exDatesDict = {
-	2 : ['2025-08-16', '2025-08-23', '2025-08-30']
-	,4 : ['2025-04-26', '2025-06-14', '2025-08-16']
-	,6 : ['2025-05-10', '2025-05-17', '2025-05-24']
-	,8 : ['2025-07-19', '2025-08-16']
-	,9 : ['2025-05-10', '2025-07-05', '2025-07-19']
-	,10 : ['2025-05-10', '2025-06-28', '2025-07-12']
-	,11 : ['2025-04-26', '2025-06-07', '2025-06-14']
-	,12 : ['2025-05-03', '2025-05-24', '2025-06-28']
-	,13 : ['2025-06-14', '2025-06-28']
-	,14 : ['2025-05-10', '2025-06-21']
-	,15 : ['2025-05-24', '2025-06-07']
-	,16 : ['2025-06-14', '2025-07-05', '2025-08-30']
-	,17 : ['2025-04-26', '2025-08-16']
-	,18 : ['2025-04-19', '2025-05-10', '2025-05-17']
-}
+# get a list of disctinct PIDs in Xdates
+distinct_pid_ids = Xdates.objects.filter(CrewID=1).values_list('PID_id', flat=True).distinct()
+
+# Dictionary to store xDates for each PID
+exDatesDict = {}
+
+# Iterate through each distinct PID and get the xDates
+# for pid in distinct_pid_ids:
+#     xdates = Xdates.objects.filter(PID_id=pid).values_list('xDate', flat=True)
+#     exDatesDict[pid] = list(xdates)
+
+# Iterate through each distinct PID and get the xDates
+for pid in distinct_pid_ids:
+    xdates = Xdates.objects.filter(PID_id=pid).values_list('xDate', flat=True)
+    exDatesDict[pid] = [xdate.strftime('%Y-%m-%d') if isinstance(xdate, (datetime, date)) else xdate for xdate in xdates]
+
+print()
+print('xDates for each PID:')
+# Print the xDates for each PID
+for pid, xdates in exDatesDict.items():
+    print(f"PID: {pid}, xDates: {xdates}")
+print()
 
 
 # create a variable to track if we need to run everything again
@@ -282,9 +290,6 @@ while resultsGood == 0:
 	create_foursomes(maxRounds, maxPerCourse)
 
 	# check to see if someone got shorted
-	# special section to cover Mike Ewell and his short summer
-	# del golferSlotsDict['Mike Ewell']
-	# del golferSlotsDict[7]
 	minSlots = min(golferSlotsDict.values())
 	print()
 	if minSlots < maxRounds - 1:
@@ -308,10 +313,16 @@ if post2025_teetimes == 0:
 	# this nugget is for the prima donna Brad Hunter - basically I re-ran the dmn thing until I knew he would not bitch
 	print('Brad slots', golferSlotsDict[9])
 	# print('me slots', golferSlotsDict['Chris Prouty'])
-	print('Brad at MM', courseGolferDict[1][9])
+	print('Brad at 710', courseGolferDict[1][9])
 	# print('Me at MM', courseGolferDict['Maple Meadows']['Chris Prouty'])
 else:
-	print('Tee Times already created for 2025')
+	print()
+	print('Tee Times already created for 2025.  Distro was NOT run.  Need to remove 2025 dates before this can run fully.')
+	print()
+	print()
+
+
+
 
 
 

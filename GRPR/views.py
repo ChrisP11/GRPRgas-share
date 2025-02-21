@@ -4,7 +4,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpResponse
 from django.http import HttpResponseBadRequest
 from django.utils import timezone
-from GRPR.models import Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity, SMSResponse
+from GRPR.models import Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity, SMSResponse, Xdates
 from datetime import datetime
 # from dateutil import parser
 # from dateutil.parser import ParserError
@@ -665,12 +665,6 @@ def subrequestsent_view(request):
     course_name = tee_time_details['course_name']
     course_time_slot = tee_time_details['course_time_slot']
     other_players = tee_time_details['other_players']
-
-    print(f"tt_pid: {tt_pid}, player_id: {player_id}, tt_id: {tt_id}")
-    print(f"first_name: {first_name}, last_name: {last_name}")
-    print(f"gDate: {gDate}, course_name: {course_name}, course_time_slot: {course_time_slot}")
-    print(f"other_players: {other_players}")
-
 
     # GATE: Verify the logged in user owns this tee time (abundance of caution here)
     if tt_pid != player_id:
@@ -1513,7 +1507,8 @@ def swaprequestsent_view(request):
             )
 
             # Generate and send text to each available player
-            msg = player.Mobile + " " + swap_offer + " Use this link to pick a date to swap."
+            swap_id = initial_swap.id
+            msg = f"{player.Mobile} {swap_offer} https://www.gasgolf.org/GRPR/store_swapoffer_data/?swapID={swap_id}."
             to_number = '13122961817'  # Hardcoded for now
             # to_number = swap_request_player.Mobile
             message = client.messages.create(from_= '+18449472599', body=msg, to=to_number)
@@ -2358,13 +2353,14 @@ def statistics_view(request):
     date_names = [date['gDate'].strftime('%Y-%m-%d') for date in dates]
 
     date_chart_data = {}
-
+    
     for player_b in players:
         date_per = {}
         for date in dates:
             date_count = TeeTimesInd.objects.filter(PID=player_b.id, gDate=date['gDate']).count()
-            date_per[date['gDate'].strftime('%Y-%m-%d')] = date_count
-        total_count = sum(date_per.values())
+            # Replace zero values with blanks
+            date_per[date['gDate'].strftime('%Y-%m-%d')] = date_count if date_count != 0 else ''
+        total_count = sum(value for value in date_per.values() if value != '')
         date_per['total'] = total_count
         date_chart_data[player_b.id] = date_per
 
@@ -2430,6 +2426,19 @@ def statistics_view(request):
             'offer_id': row.OfferID,
         })
     
+    # for Requested Off dates:
+    xdates_query = Xdates.objects.select_related('PID').order_by('PID__LastName', 'PID__FirstName')
+    xdates_data = {}
+    for xdate in xdates_query:
+        player_name = f"{xdate.PID.FirstName} {xdate.PID.LastName}"
+        if player_name not in xdates_data:
+            xdates_data[player_name] = []
+        xdates_data[player_name].append(xdate.xDate.strftime('%Y-%m-%d'))
+
+    # Convert the xdates_data dictionary to a list of dictionaries for easier iteration in the template
+    xdates_list = [{'player': player, 'requested_off': ', '.join(dates)} for player, dates in xdates_data.items()]
+
+
     context = {
         'players': players,
         'korse_chart_data': korse_chart_data,
@@ -2438,6 +2447,7 @@ def statistics_view(request):
         'date_chart_data': date_chart_data,
         'zipped_data': zipped_data,
         "actions": actions,
+        'xdates_list': xdates_list,  
         "first_name": request.user.first_name,  # Add the first name of the logged-in user
         "last_name": request.user.last_name, # Add the last name of the logged-in user
     }

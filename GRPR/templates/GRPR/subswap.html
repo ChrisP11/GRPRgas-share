@@ -13,11 +13,11 @@
     <table class="table table-striped">
         <tbody>
             <tr>
-                <td>Swaps Available</td>
+                <td><a href="#swaps-available">Swaps Available</a></td>
                 <td>{{ available_swaps_data_count }}</td>
-                <td>Subs Available</td>
+                <td><a href="#subs-available">Subs Available</a></td>
                 <td>{{ available_subs_data_count }}</td>
-                <td>Counter Offers</td>
+                <td><a href="#counters-available">Counter Offers</a></td>
                 <td>{{ counter_offers_data_count }}</td>
             </tr>
         </tbody>
@@ -60,7 +60,7 @@
 
     {% if available_subs_data %}
     <br>
-    <h1>Available Subs</h1>
+    <h1 id="subs-available" class="mb-4">Available Subs</h1>
 
     <!-- Available Subs Table -->
 
@@ -100,7 +100,7 @@
     
     {% if available_swaps_data %}
     <br>
-    <h1>Available Swaps</h1>
+    <h1 id="swaps-available" class="mb-4">Available Swaps</h1>
     <h7> Tee Times available for trade with one of your Tee Times</h7>
 
     <!-- Available Swaps Table -->
@@ -140,7 +140,8 @@
 
 {% if counter_offers_data %}
 <br>
-<h1>Counter Offers</h1>
+
+<h1 id="counters-available" class="mb-4">Counter Offers</h1>
     <h7>Tee Times being offered by other players for your swap request/s</h7>
     
     <!-- Counter Offers Table -->

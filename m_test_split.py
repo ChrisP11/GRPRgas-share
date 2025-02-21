@@ -2,6 +2,7 @@ import math    # used to round up to integers
 import random  # used to randomize the golfer order
 import os
 import django
+from datetime import datetime, date
 
 # Set up the Django environment
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'portfolio.settings')
@@ -10,56 +11,65 @@ django.setup()
 from GRPR.models import Players, Courses, TeeTimesInd, Xdates
 
 
+teetimes = [{'date': '2025-04-19'}, {'date': '2025-04-26'}, {'date': '2025-05-03'}, {'date': '2025-05-10'}
+			, {'date': '2025-05-17'}, {'date': '2025-05-24'}, {'date': '2025-05-31'}, {'date': '2025-06-07'}
+			, {'date': '2025-06-14'}, {'date': '2025-06-21'}, {'date': '2025-06-28'}, {'date': '2025-07-05'}
+			, {'date': '2025-07-12'}, {'date': '2025-08-02'}, {'date': '2025-08-09'}, {'date': '2025-08-16'}
+			, {'date': '2025-08-23'}, {'date': '2025-08-30'}]
+
+# get a list of disctinct PIDs in Xdates
+distinct_pid_ids = Xdates.objects.filter(CrewID=1).values_list('PID_id', flat=True).distinct()
+
+# Dictionary to store xDates for each PID
+exDatesDict = {}
+
+# Iterate through each distinct PID and get the xDates
+for pid in distinct_pid_ids:
+    xdates = Xdates.objects.filter(PID_id=pid).values_list('xDate', flat=True)
+    exDatesDict[pid] = list(xdates)
+
+players = Players.objects.exclude(id=25)
 
 
-# Get all players
-preRandomGolfers = []
+# Convert the dates in exDatesDict to strings in the same format as the dates in teetimes
+# for pid, xdates in exDatesDict.items():
+#     exDatesDict[pid] = [xdate.strftime('%Y-%m-%d') if isinstance(xdate, datetime) else xdate for xdate in xdates]
 
-players = Players.objects.exclude(id=25).exclude(SplitPartner__isnull=False)
-for player in players:
-    pID = player.id
-    print(f"{pID} {player.FirstName} {player.LastName}")
-    preRandomGolfers.append(pID)
+# date = '2025-05-10'
 
-print()
+# Print each date associated with a PID in exDatesDict
+# for pid, xdates in exDatesDict.items():
+#     for xdate in xdates:
+#         print(xdate.strftime('%Y-%m-%d'), date)
+#         if xdate.strftime('%Y-%m-%d') == date:
+#             print('finally???')
+#         print(f"PID: {pid}, xDate: {xdate}")
 
-# Get all split players
-s_golfers = []
 
-splitPlayers = Players.objects.filter(SplitPartner__isnull=False)
-for s_plyr in splitPlayers:
-    pID = s_plyr.id
-    split_pID = s_plyr.SplitPartner
-    print(f"{pID} {s_plyr.FirstName} {s_plyr.LastName} {split_pID}")
-    if split_pID not in s_golfers:
-        s_golfers.append(pID)
-        preRandomGolfers.append(pID)
+# for tt in teetimes:
+#     date = tt['date']
+#     for player in players:
+#         if player.id in exDatesDict and date in exDatesDict[player.id]:
+#             print(f"Player {player} has an xDate on {date}")
 
-for pID in s_golfers:
-    print(pID)
 
-print()
-for pID in preRandomGolfers:
-    print(pID)
+# Convert the dates in exDatesDict to strings in the same format as the dates in teetimes
+for pid, xdates in exDatesDict.items():
+    exDatesDict[pid] = [xdate.strftime('%Y-%m-%d') if isinstance(xdate, (datetime, date)) else xdate for xdate in xdates]
 
-# def split_partners_distro():
-# 	prds = [1,2,4,20] # hard coded list of players that need to be split
-# 	for p in prds:
-# 		print()
-# 		splitPartnerTeeTimes = TeeTimesInd.objects.filter(PID_id=p, gDate__gt='2025-01-01').values('id')
-# 		splitID = Players.objects.get(SplitPartner=p)
-# 		trn = 0
-# 		for tt in splitPartnerTeeTimes:
-# 			tt_id = tt['id']
-# 			print(tt_id)
-# 			if trn == 0:
-# 				trn = 1
-# 				print(tt_id, 'stays with original player')
-# 			else:
-# 				# give this tee time to the split partner
-# 				TeeTimesInd.objects.filter(id=tt_id).update(
-# 					PID=splitID
-# 				)
-# 				print(tt_id, 'changed to', splitID)
-# 				trn = 0
+# Print each date associated with a PID in exDatesDict
+# for pid, xdates in exDatesDict.items():
+#     for xdate in xdates:
+#         print(f"PID: {pid}, xDate: {xdate}")
 
+# Iterate through the teetimes and players
+for tt in teetimes:
+    date = tt['date']
+    for player in players:
+        if player.id in exDatesDict and date in exDatesDict[player.id]:
+            print(f"Player {player.FirstName} {player.LastName} (ID: {player.id}) has an xDate on {date}")
+        # else:
+        #     print(f"Player {player.FirstName} {player.LastName} (ID: {player.id}) does not have an xDate on {date}")
+
+
+# if player in exDatesDict and date in exDatesDict[player]:
