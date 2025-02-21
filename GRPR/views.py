@@ -1158,7 +1158,7 @@ def store_subcancelconfirm_data_view(request):
         swap_id = request.GET.get('swap_id')
 
         # Fetch the SubSwap instance
-        sub_offer = get_object_or_404(SubSwap, SwapID=swap_id, nType='Sub', nStatus='Open')
+        sub_offer = get_object_or_404(SubSwap, SwapID=swap_id, nType='Sub', nStatus='Open', SubType='Offer')
 
         # GATE: Fetch the SubSwap instance using the utility function (in utils.py)
         error_msg = 'The requested Sub is no longer open and able to be cxld'
