@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+
+{% block title %}Counter Cancel Confirm{% endblock %}
+
+{% block content %}
+
+<div class="container mt-4">
+    <h1>Cancel Offered Counter</h1>
+    <h4>Please confirm you would like to cancel your proposal to swap the Tee Time below.</h4>
+    <br>
+    <h5><strong> Tee Time Details </strong>  {{ gDate }} {{ courseName }} {{ courseTimeSlot }}am</h5>
+    <br>
+    <h3 style="color: red;">Clicking the Cancel Offered Counter button cancels your proposed Tee Time trade</h3>
+    <div class="d-flex justify-content-start">
+        <a href="{% url 'store_countercancel_data_view' %}?subswap_table_id={{ subswap_table_id }}" class="btn btn-danger btn-sm">Cancel Counter</a>
+        <a href="{% url 'subswap_view' %}" class="btn btn-secondary btn-sm ms-2">Go Back</a>
+    </div>
+</div>
+{% endblock %}

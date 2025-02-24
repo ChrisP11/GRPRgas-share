@@ -6,8 +6,8 @@
 
 <div class="container mt-4">
     <br>
-    <h4><strong>Swap</strong> - Request a future Tee Time for one of your current Tee Times</h4>
-    <h4><strong>Sub</strong> - Offer one of your current Tee Times for anyone to take</h4>
+    <h4><strong>Swap</strong> - Request a trade of Tee Times - one of yours for one of someone's elses </h4>
+    <h4><strong>Sub</strong> - Offer a Tee Time you cannot make for anyone not playing that day to use instead of you</h4>
     <br>
     <!-- <h4>Swaps Available: {{ available_swaps_data_count }} &nbsp;&nbsp; Subs Available:  {{ available_subs_data_count }} &nbsp;&nbsp; Counter Offers:  {{ counter_offers_data_count }}</h4> -->
     <table class="table table-striped">
@@ -30,9 +30,9 @@
     <table class="table table-striped">
         <thead>
             <tr>
-                <th>Date</th>
+                <th>Tee Date</th>
                 <th>Course</th>
-                <th>Time Slot</th>
+                <th>Tee Time</th>
                 <th>Other Players</th>
                 <th>Actions</th>
             </tr>
@@ -69,9 +69,9 @@
         <thead>
 
             <tr>
-                <th>Date</th>
+                <th>Tee Date</th>
                 <th>Course</th>
-                <th>Time Slot</th>
+                <th>Tee Time</th>
                 <th>Current Foursome</th>
                 <th>Actions</th>
 
@@ -110,9 +110,9 @@
         <thead>
 
             <tr>
-                <th>Date</th>
+                <th>Tee Date</th>
                 <th>Course</th>
-                <th>Time Slot</th>
+                <th>Tee Time</th>
                 <th>Current Foursome</th>
                 <th>Actions</th>
 
@@ -227,6 +227,39 @@
             <td>{{ swap.tee_time }}</td>
             <td>
                 <a href="{% url 'store_swapcancelconfirm_data_view' %}?swap_id={{ swap.swap_id }}" class="btn btn-danger btn-sm">Cancel Swap</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+<br>
+<br>
+
+<!-- Counter Offers Proposed Table -->
+{% if counter_offers_proposed_data %}
+<h1>Counter Offers Proposed</h1>
+<h7>You have counter offered the following Tee Times to another player in trade for one of their tee times</h7>
+
+<table class="table table-striped mt-4">
+    <thead>
+        <tr>
+            <th>Counter Proposed Date</th>
+            <th>Playing Date</th>
+            <th>Course</th>
+            <th>Tee Time</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for offer in counter_offers_proposed_data %}
+        <tr>
+            <td>{{ offer.request_date }}</td>
+            <td>{{ offer.playing_date }}</td>
+            <td>{{ offer.course }}</td>
+            <td>{{ offer.tee_time }}</td>
+            <td>
+                <a href="{% url 'store_countercancelconfirm_data_view' %}?subswap_table_id={{ offer.subswap_table_id }}" class="btn btn-danger btn-sm">Cancel Counter</a>
             </td>
         </tr>
         {% endfor %}

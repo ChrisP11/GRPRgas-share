@@ -6,8 +6,6 @@ from django.http import HttpResponseBadRequest
 from django.utils import timezone
 from GRPR.models import Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity, SMSResponse, Xdates
 from datetime import datetime
-# from dateutil import parser
-# from dateutil.parser import ParserError
 from django.conf import settings  # Import settings
 from django.contrib.auth.views import LoginView # added for secure login page creation
 from django.contrib.auth.views import PasswordChangeView
@@ -256,7 +254,7 @@ def teesheet_view(request):
             return HttpResponseBadRequest("Date is required.")
 
         # Query the database for the tee sheet cards
-        queryset = TeeTimesInd.objects.filter(gDate=gDate).select_related('PID', 'CourseID')
+        queryset = TeeTimesInd.objects.filter(gDate=gDate).select_related('PID', 'CourseID').order_by('CourseID')
 
         # Construct the cards dictionary
         cards = {}
@@ -280,7 +278,7 @@ def teesheet_view(request):
             })
         
         # Query the database for the schedule table
-        schedule_queryset = TeeTimesInd.objects.filter(gDate__gt=current_datetime).select_related('PID', 'CourseID')
+        schedule_queryset = TeeTimesInd.objects.filter(gDate__gt=current_datetime).select_related('PID', 'CourseID').order_by('gDate', 'CourseID')
 
         # Construct the schedule dictionary
         schedule_dict = {}
@@ -545,6 +543,25 @@ def subswap_view(request):
         PID=player_id
     ).select_related('TeeTimeIndID', 'TeeTimeIndID__CourseID')
 
+    # Counter Offers Proposed Table
+    counter_offers_proposed = SubSwap.objects.filter(
+        nType='Swap',
+        SubType='Counter',
+        nStatus='Open',
+        PID_id=player_id
+    ).select_related('TeeTimeIndID__CourseID')
+
+    counter_offers_proposed_data = []
+    for offer in counter_offers_proposed:
+        
+        counter_offers_proposed_data.append({
+            'request_date': offer.RequestDate.strftime('%Y-%m-%d'),
+            'playing_date': offer.TeeTimeIndID.gDate.strftime('%Y-%m-%d'),
+            'course': offer.TeeTimeIndID.CourseID.courseName,
+            'tee_time': offer.TeeTimeIndID.CourseID.courseTimeSlot,
+            'subswap_table_id': offer.id #gets the unique row id in the subswap table
+        })
+
     swaps_proposed_data = []
     # used to check if the swap has already been proposed, if it has, the buttons will be disabled
     offered_tee_time_ids = set()
@@ -575,9 +592,9 @@ def subswap_view(request):
     counter_offers_data_count = len(counter_offers_data)
 
     context = {
-        'user_name': user_name,  # Use the logged-in user's name
-        'user_id': user_id,  # Use the logged-in user's ID
-        'player_id': player_id,  # Use the logged-in user's Player ID
+        'user_name': user_name,  
+        'user_id': user_id,  
+        'player_id': player_id,  
         'schedule_data': schedule_data,
         'available_subs_data': available_subs_data,
         'available_swaps_data': available_swaps_data,
@@ -585,8 +602,9 @@ def subswap_view(request):
         'subs_proposed_data': subs_proposed_data, 
         'swaps_proposed_data': swaps_proposed_data,
         'offered_tee_time_ids': offered_tee_time_ids,
-        'first_name': request.user.first_name,  # Add the first name of the logged-in user
-        'last_name': request.user.last_name, # Add the last name of the logged-in user
+        'counter_offers_proposed_data': counter_offers_proposed_data,
+        'first_name': request.user.first_name,  
+        'last_name': request.user.last_name, 
         'available_swaps_data_count': available_swaps_data_count,   
         'available_subs_data_count': available_subs_data_count,
         'counter_offers_data_count': counter_offers_data_count,
@@ -623,6 +641,23 @@ def subrequest_view(request):
     course_time_slot = tee_time_details['course_time_slot']
     other_players = tee_time_details['other_players']
 
+    # Get players already playing on the date
+    playing_players = TeeTimesInd.objects.filter(gDate=gDate).values_list('PID_id', flat=True)
+
+    # Get all players and subtract playing players and Course Credit (ID 25)
+    available_players = Players.objects.exclude(id__in=list(playing_players) + [25])
+
+    ## GATE - make sure there are players available, send to error page if not.
+    if not available_players.exists():
+        return render(request, 'GRPR/error_msg.html', {'error_msg': 'No Players have available tee times on this date.'})
+    
+        # Get list of players available to sub
+    available_subs = []
+    for player in available_players:
+        possible_sub = player.FirstName + " " + player.LastName
+        available_subs.append({'possible_sub': possible_sub, 'id': player.id})
+        
+
     # Pass data to the template
     context = {
         'first_name': first_name,
@@ -633,22 +668,40 @@ def subrequest_view(request):
         'course_time_slot': course_time_slot,
         'other_players': other_players,
         'tt_id': tt_id, 
+        'available_subs': available_subs,
     }
     return render(request, 'GRPR/subrequest.html', context)
 
 
 @login_required
 def store_sub_request_sent_data_view(request):
-    tt_id = request.GET.get('tt_id')
+    if request.method == "POST":
+        tt_id = request.POST.get('tt_id')
+        player_ids = request.POST.getlist('player_ids')
 
-    request.session['tt_id'] = tt_id
+        if not player_ids:
+            return render(request, 'GRPR/error_msg.html', {'error_msg': 'No players selected for the sub request.'})
 
-    return redirect('subrequestsent_view')
+        # Store necessary data in the session
+        request.session['tt_id'] = tt_id
+        request.session['player_ids'] = player_ids
 
+        return redirect('subrequestsent_view')
+    else:
+        return HttpResponseBadRequest("Invalid request.")
 
 @login_required
 def subrequestsent_view(request):
     tt_id = request.session.pop('tt_id', None)
+    # changing the available players id list name to avoid confusion with player_id variable
+    sub_ids = request.session.pop('player_ids', None)
+
+    if not tt_id or not sub_ids:
+        return HttpResponseBadRequest("Required data is missing. - subrequestsent_view")
+    
+    for s_id in sub_ids:
+        print(f"Sub ID: {s_id}")
+    
 
     # Fetch the Player ID associated with the logged-in user
     user_id = request.user.id
@@ -696,12 +749,25 @@ def subrequestsent_view(request):
     initial_sub.save()
     swap_id = initial_sub.id
 
-    # Get players already playing on the date
-    playing_players = TeeTimesInd.objects.filter(gDate=gDate).values_list('PID_id', flat=True)
+    # # Get players already playing on the date
+    # playing_players = TeeTimesInd.objects.filter(gDate=gDate).values_list('PID_id', flat=True)
 
-    ## ADD A Check Gate here - make sure there are players available, send to error page if not.
-    # Get all players and subtract playing players and Course Credit (ID 25)
-    available_players = Players.objects.exclude(id__in=list(playing_players) + [25])
+    # # Get all players and subtract playing players and Course Credit (ID 25)
+    # available_players = Players.objects.exclude(id__in=list(playing_players) + [25])
+
+    # ## GATE - make sure there are players available, send to error page if not.
+    # if not available_players.exists():
+    #     return render(request, 'GRPR/error_msg.html', {'error_msg': 'No Players have available tee times on this date.'})
+    
+    available_players = []
+
+    for s_id in sub_ids:
+        player = Players.objects.get(id=s_id)
+        to_number = player.Mobile
+        avail_id = player.id
+        avail_name = player.FirstName + " " + player.LastName
+        available_players.append({'player': player, 'to_number': to_number, 'avail_id': avail_id, 'avail_name': avail_name})
+
 
     if settings.TWILIO_ENABLED:
         # Initialize the Twilio client
@@ -729,7 +795,11 @@ def subrequestsent_view(request):
         )
 
         # Create an insert in SubSwap table for every player in the Available Players list
-        for player in available_players:
+        for player_data in available_players:
+            player = player_data['player']
+            to_number = player_data['to_number']
+            avail_id = player_data['avail_id']
+
             SubSwap.objects.create(
                 RequestDate=timezone.now(),
                 PID=player,
@@ -743,7 +813,7 @@ def subrequestsent_view(request):
             )
 
             # Create and send a text to every Available Player
-            msg = f"{player.Mobile} {sub_offer} https://www.gasgolf.org/GRPR/store_subaccept_data/?swap_id={swap_id}"
+            msg = f"{sub_offer} https://www.gasgolf.org/GRPR/store_subaccept_data/?swap_id={swap_id}"
             to_number = '13122961817'  # Hardcoded for now, but future will be Mobile of the Available Player
             message = client.messages.create(from_='+18449472599', body=msg, to=to_number)
             mID = message.sid
@@ -755,13 +825,12 @@ def subrequestsent_view(request):
                 MessageID=mID,
                 RequestDate=gDate,
                 OfferID=player_id,
-                ReceiveID=player.id,
+                ReceiveID=avail_id,
                 RefID=swap_id,
                 Msg=sub_offer,
                 To_number=to_number
             )
     else:
-        to_number = player.Mobile
 
         # Insert initial Sub Offer into Log
         Log.objects.create(
@@ -776,7 +845,11 @@ def subrequestsent_view(request):
         )
 
         # Create an insert in SubSwap table for every player in the Available Players list
-        for player in available_players:
+        for player_data in available_players:
+            player = player_data['player']
+            to_number = player_data['to_number']
+            avail_id = player_data['avail_id']
+
             SubSwap.objects.create(
                 RequestDate=timezone.now(),
                 PID=player,
@@ -789,16 +862,14 @@ def subrequestsent_view(request):
                 SwapID=swap_id
             )
 
-            to_number = player.Mobile
-
-            # Insert a row into Log table for every Available Player
+            # Insert a row into Log table for every text sent
             Log.objects.create(
                 SentDate=timezone.now(),
                 Type="Sub Offer Sent",
                 MessageID='fake mID',
                 RequestDate=gDate,
                 OfferID=player_id,
-                ReceiveID=player.id,
+                ReceiveID=avail_id,
                 RefID=swap_id,
                 Msg=sub_offer,
                 To_number=to_number
@@ -988,21 +1059,6 @@ def subfinal_view(request):
     player_id = request.session.pop('player_id', None)
     player_mobile = request.session.pop('player_mobile', None)
 
-    print('subfinal_view')
-    print('swap_id', swap_id)
-    print('gDate', gDate)   
-    print('course_name', course_name)   
-    print('course_time_slot', course_time_slot) 
-    print('offer_player_first_name', offer_player_first_name)   
-    print('offer_player_last_name', offer_player_last_name) 
-    print('offer_player_mobile', offer_player_mobile)
-    print('offer_player_id', offer_player_id)
-    print('other_players', other_players)
-    print('first_name', first_name)
-    print('last_name', last_name)
-    print('player_id', player_id)
-    print('player_mobile', player_mobile)
-
     if not swap_id or not tt_id or not gDate or not course_name or not course_time_slot or not offer_player_first_name or not offer_player_last_name or not offer_player_mobile or not offer_player_id or not other_players or not first_name or not last_name or not player_id or not player_mobile:
         return HttpResponseBadRequest("Required data is missing. - subfinal_view")
 
@@ -1090,7 +1146,7 @@ def subfinal_view(request):
         player_mobile = '13122961817'
 
         # Send text to the Sub Accept Player
-        accept_msg = f"Sub Accepted: You are taking {offer_player_first_name} {offer_player_last_name}'s tee time on {gDate} at {course_name} {course_time_slot}."
+        accept_msg = f"Sub Accepted: { first_name } { last_name } is taking {offer_player_first_name} {offer_player_last_name}'s tee time on {gDate} at {course_name} {course_time_slot}."
         to_number = player_mobile
         message = client.messages.create(from_='+18449472599', body=accept_msg, to=to_number)
         accept_mID = message.sid
@@ -1124,7 +1180,7 @@ def subfinal_view(request):
             To_number=to_number
         )
 
-        accept_msg = f"Sub Accepted: You are taking {offer_player_first_name} {offer_player_last_name}'s tee time on {gDate} at {course_name} {course_time_slot}."
+        accept_msg = f"Sub Accepted: { first_name } { last_name } is taking {offer_player_first_name} {offer_player_last_name}'s tee time on {gDate} at {course_name} {course_time_slot}."
         to_number = player_mobile
 
         # Insert row into Log for Sub Accept Player
@@ -1721,8 +1777,6 @@ def swapcounter_view(request):
         return availability_error
     
     # GATE: prevents back button abuse
-    print('swap_id', swap_id)   
-    print('player_id', player_id)
     if SubSwap.objects.filter(SwapID=swap_id, PID_id=player_id, SubType = 'Kountered', nStatus = 'Open').exists():
         error_msg = 'It appears you have already made a counter offer for this tee time.  Please return to the Sub Swap page and review.'
         return render(request, 'GRPR/error_msg.html', {'error_msg': error_msg})
@@ -1746,10 +1800,12 @@ def swapcounter_view(request):
     offer_timeslot = swap_offer.TeeTimeIndID.CourseID.courseTimeSlot
     offer_player_first_name = offer_player.FirstName
     offer_player_last_name = offer_player.LastName
+    first_name = request.user.first_name
+    last_name = request.user.last_name
 
     # Create messages
     offer_msg = f"{player.FirstName} {player.LastName} has proposed dates to swap for your tee time on {offer_date} at {offer_course} {offer_timeslot}am."
-    counter_msg = f"You have proposed dates to swap for {offer_player_first_name} {offer_player_last_name}'s tee time on {offer_date} at {offer_course} {offer_timeslot}am."
+    counter_msg = f"{ first_name } { last_name } have proposed dates to swap for {offer_player_first_name} {offer_player_last_name}'s tee time on {offer_date} at {offer_course} {offer_timeslot}am."
 
     # Send Twilio messages
     if settings.TWILIO_ENABLED:
@@ -1845,8 +1901,8 @@ def swapcounter_view(request):
         'available_dates': selected_dates,
         'offer_player_first_name': offer_player_first_name,
         'offer_player_last_name': offer_player_last_name,
-        'first_name': request.user.first_name,
-        'last_name': request.user.last_name,
+        'first_name': first_name,
+        'last_name': last_name,
     }
     return render(request, 'GRPR/swapcounter.html', context)
 
@@ -2307,6 +2363,128 @@ def swapcancel_view(request):
         'last_name': last_name,
     }
     return render(request, 'GRPR/swapcancel.html', context)
+
+
+@login_required
+def store_countercancelconfirm_data_view(request):
+    if request.method == "GET":
+        subswap_table_id = request.GET.get('subswap_table_id')
+
+        request.session['subswap_table_id'] = subswap_table_id
+
+        return redirect('countercancelconfirm_view')
+    else:
+        return HttpResponseBadRequest("Invalid request.")
+    
+
+@login_required
+def countercancelconfirm_view(request):
+    subswap_table_id = request.session.pop('subswap_table_id', None)
+
+    if not subswap_table_id:
+        return HttpResponseBadRequest("Required data is missing. - countercancelconfirm_view")
+    
+    # Fetch the tt_id assoc with the swap_id
+    subswap_row = get_object_or_404(SubSwap, id=subswap_table_id)
+    tt_id = subswap_row.TeeTimeIndID_id
+    
+    # Fetch the Player ID associated with the logged-in user
+    user_id = request.user.id
+    first_name = request.user.first_name
+    last_name = request.user.last_name
+
+    player = get_object_or_404(Players, user_id=user_id)
+    player_id = player.id
+
+    # Fetch the TeeTimeInd instance and other players using the utility function (in utils.py)
+    tee_time_details = get_tee_time_details(tt_id, player_id)
+    gDate = tee_time_details['gDate']
+    course_name = tee_time_details['course_name']
+    course_time_slot = tee_time_details['course_time_slot']
+
+    context = {
+        'gDate': gDate,
+        'courseName': course_name,
+        'courseTimeSlot': course_time_slot,
+        'subswap_table_id': subswap_table_id,
+        'first_name': first_name,
+        'last_name': last_name,
+    }
+    return render(request, 'GRPR/countercancelconfirm.html', context)
+
+
+@login_required
+def store_countercancel_data_view(request):
+    if request.method == "GET":
+        subswap_table_id = request.GET.get('subswap_table_id')
+
+        # Store necessary data in the session
+        request.session['subswap_table_id'] = subswap_table_id
+
+        return redirect('countercancel_view')
+    else:
+        return HttpResponseBadRequest("Invalid request.")
+
+
+@login_required
+def countercancel_view(request):
+    # Retrieve data from the session
+    subswap_table_id = request.session.pop('subswap_table_id', None)
+
+    if not subswap_table_id:
+        return HttpResponseBadRequest("Required data is missing. - countercancel_view")
+    
+    # GATE: Verify Counter is still open - prevents back button abuse
+    error_msg = 'The requested Counter is no longer available. Please review the Sub Swap page and try again.'
+    counter_offer = SubSwap.objects.filter(id=subswap_table_id, nStatus='Open', SubType='Counter')
+    
+    if not counter_offer.exists():
+        return render(request, 'GRPR/error_msg.html', {'error_msg': error_msg})
+
+
+    # Fetch the tt_id assoc with the swap_id
+    subswap_row = get_object_or_404(SubSwap, id=subswap_table_id)
+    tt_id = subswap_row.TeeTimeIndID_id
+    swap_id = subswap_row.SwapID
+    
+    # Fetch the Player ID associated with the logged-in user
+    user_id = request.user.id
+    first_name = request.user.first_name
+    last_name = request.user.last_name
+
+    player = get_object_or_404(Players, user_id=user_id)
+    player_id = player.id
+
+    # Fetch the TeeTimeInd instance and other players using the utility function (in utils.py)
+    tee_time_details = get_tee_time_details(tt_id, player_id)
+    gDate = tee_time_details['gDate']
+    gDate_display = tee_time_details['gDate_display']
+    course_name = tee_time_details['course_name']
+    course_time_slot = tee_time_details['course_time_slot']
+
+    # Update SubSwap table
+    SubSwap.objects.filter(id=subswap_table_id, nStatus='Open', SubType='Counter').update(nStatus='Closed', SubStatus='Cancelled')
+
+    # Insert a row into Log table
+    Log.objects.create(
+        SentDate=timezone.now(),
+        Type='Counter Cancelled',
+        MessageID='No text sent',
+        RequestDate=gDate,
+        OfferID=player_id,
+        RefID=swap_id,
+        Msg=f'Counter Cancelled by {first_name} {last_name}'
+    )
+
+    context = {
+        'gDate': gDate,
+        'gDate_display': gDate_display,
+        'course_name': course_name,
+        'course_time_slot': course_time_slot,
+        'first_name': first_name,
+        'last_name': last_name,
+    }
+    return render(request, 'GRPR/countercancel.html', context)
 
 
 @login_required

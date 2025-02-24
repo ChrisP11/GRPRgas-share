@@ -16,17 +16,15 @@
     <table class="table table-striped">
         <thead>
             <tr>
-                <th>First Name</th>
-                <th>Last Name</th>
+                <th>Player</th>
                 <th>Mobile</th>
             </tr>
         </thead>
         <tbody>
             {% for player in available_players %}
                 <tr>
-                    <td>{{ player.FirstName }}</td>
-                    <td>{{ player.LastName }}</td>
-                    <td>{{ player.Mobile }}</td>
+                    <td>{{ player.avail_name }}</td>
+                    <td>{{ player.to_number }}</td>
                 </tr>
             {% endfor %}
         </tbody>
