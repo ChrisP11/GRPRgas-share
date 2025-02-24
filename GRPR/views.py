@@ -207,18 +207,34 @@ def text_test_view(request):
         twilio_phone_number = '+18449472599'
 
         client = Client(twilio_account_sid, twilio_auth_token)
+        user_id = request.user.id
+        logged_in_user = Players.objects.get(user_id=user_id)
 
         try:
             for player_id in player_ids:
                 player = Players.objects.get(id=player_id)
                 cell_number = player.Mobile
-                client.messages.create(
+                twilio_message = client.messages.create(
                     body=message,
                     from_=twilio_phone_number,
                     to=cell_number
                 )
-            success_message = 'Test text message sent successfully.'
+                mID = twilio_message.sid
+
+                # Insert record into Log table
+                Log.objects.create(
+                    SentDate=timezone.now(),
+                    Type="Admin Text Msg",
+                    MessageID=mID,
+                    OfferID=logged_in_user.id,
+                    ReceiveID=player.id,
+                    Msg=message,
+                    To_number=cell_number
+            )
+
+            success_message = 'text message sent successfully.'
             return render(request, 'text_test.html', {'success_message': success_message, 'players': Players.objects.all()})
+
         except Exception as e:
             error_message = f'Error sending test text message: {e}'
             return render(request, 'text_test.html', {'error_message': error_message, 'players': Players.objects.all()})
