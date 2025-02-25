@@ -4,23 +4,78 @@
 
 {% block content %}
 
-    <!-- Main Content -->
+    <!-- Swap Request Content -->
     <div class="container my-4">
         <h1>Swap Request</h1>
-        <p>
-            Please review and confirm the following Swap Request.  <strong>IF </strong>you click 'Confirm', the following message will be sent to all available members in the group.
-        </p>
-        <blockquote class="blockquote">
-            <strong>{{ first_name }} {{ last_name }}</strong> would like to swap his tee time on <strong>{{ date }}</strong> at 
-            <strong>{{ course }}</strong> <strong>{{ time_slot }}</strong> (playing with <strong>{{ other_players }}</strong>) 
-            with one of your tee times.
+        <blockquote class="blockquote">Please review your Swap Request and choose which Available Players you want to offer it to. 
+          It is <strong>HIGHLY</strong> recommended to choose <strong>'select all'</strong> to make sure the Tee Time is filled
         </blockquote>
+        <br>
 
-        <!-- Action Buttons -->
-        <div class="d-flex">
-            <a href="{% url 'store_swaprequestsent_data_view' %}?swap_tt_id={{ swap_tt_id }}" class="btn btn-primary">Confirm</a>
-            <!-- <a href="{% url 'store_swaprequestsent_data_view' %}?date={{ date }}&course={{ course }}&time_slot={{ time_slot }}&user_name={{ user_name }}&other_players={{ other_players|urlencode }}&swap_tt_id={{ swap_tt_id }}&user_id={{ user_id }}&first_name={{ first_name }}&last_name={{ last_name }}" class="btn btn-primary">Confirm</a> -->
-            <a href="{% url 'subswap_view' %}" class="btn btn-secondary-custom">Cancel the Swap Request</a>
-        </div>
+        <h4>Message to be sent to all selected players:</h4>
+        <blockquote class="blockquote">
+            '{{ first_name }} {{ last_name }} is offering his tee time on <strong>{{ gDate_display }}</strong> at <strong>{{ course_name }}</strong> 
+            <strong>{{ course_time_slot }}</strong> to play with <strong>{{ other_players }}</strong> to the first person who wants it.'' 
+            <br>
+            
+        </blockquote>
+        <br>
+
+        <!-- Available Players Table -->
+        <h3>Players Available to Swap on {{ gDate_display }}</h3>
+
+        <form method="post" action="{% url 'store_swap_request_sent_data_view' %}">
+            {% csrf_token %}
+            <input type="hidden" name="tt_id" value="{{ tt_id }}">
+            <table class="table table-striped mt-4">
+                <thead>
+                    <tr>
+                        <th>Available Player</th>
+                        <th>Future Dates Available for Trade</th>
+                        <th>
+                            <input type="checkbox" id="select-all" checked> Select All
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for plyr in available_players %}
+                    <tr>
+                        <td>{{ plyr.FirstName }} {{ plyr.LastName }}</td>
+                        <td>
+                            {% for date, id in plyr.swap_dates %}
+                                {{ date }} 
+                            {% endfor %}
+                        </td>
+                        <td>
+                            <input type="checkbox" name="player_ids" value="{{ plyr.id }}" class="player-checkbox" checked>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <div class="mt-4">
+                <button type="submit" class="btn btn-primary btn-sm">Confirm</button>
+                <a href="{% url 'subswap_view' %}" class="btn btn-secondary-custom">Cancel the Swap Request</a>
+            </div>
+        </form>
     </div>
+
+    <script>
+        document.getElementById('select-all').onclick = function() {
+            var checkboxes = document.querySelectorAll('.player-checkbox');
+            for (var checkbox of checkboxes) {
+                checkbox.checked = this.checked;
+            }
+        };
+
+        document.querySelector('form').onsubmit = function() {
+            var checkboxes = document.querySelectorAll('.player-checkbox:checked');
+            if (checkboxes.length === 0) {
+                alert('Please select at least one player.');
+                return false;
+            }
+        };
+    </script>
+
 {% endblock %}

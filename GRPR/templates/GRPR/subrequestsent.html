@@ -24,7 +24,7 @@
             {% for player in available_players %}
                 <tr>
                     <td>{{ player.avail_name }}</td>
-                    <td>{{ player.to_number }}</td>
+                    <td>{{ player.to_number|slice:"1:4" }}-{{ player.to_number|slice:"4:7" }}-{{ player.to_number|slice:"7:11" }}</td>
                 </tr>
             {% endfor %}
         </tbody>

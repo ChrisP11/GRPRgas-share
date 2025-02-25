@@ -135,6 +135,17 @@ def home_page(request):
     }
     return render(request, 'GRPR/index.html', context)
 
+# About page
+@login_required
+def about_view(request):
+
+    context = {
+        'first_name': request.user.first_name,
+        'last_name': request.user.last_name,
+    }
+
+    return render(request, 'GRPR/about.html', context)
+
 
 # Admin page
 @login_required
@@ -1381,7 +1392,6 @@ def store_swap_data_view(request):
 
         # Store necessary data in the session
         request.session['swap_tt_id'] = tt_id
-        request.session['user_id'] = request.user.id
 
         return redirect('swaprequest_view')
     else:
@@ -1391,10 +1401,14 @@ def store_swap_data_view(request):
 def swaprequest_view(request):
     # Retrieve data from the session
     swap_tt_id = request.session.pop('swap_tt_id', None)
-    user_id = request.session.pop('user_id', None)
 
-    if not swap_tt_id or not user_id:
+    if not swap_tt_id:
         return HttpResponseBadRequest("Required data is missing.")
+
+    # Fetch the Player ID associated with the logged-in user
+    user_id = request.user.id
+    first_name = request.user.first_name
+    last_name = request.user.last_name
     
     # Fetch the Player ID associated with the logged-in user
     player = Players.objects.filter(user_id=user_id).first()
@@ -1407,94 +1421,20 @@ def swaprequest_view(request):
     gDate = tee_time_details['gDate']
     gDate_display = tee_time_details['gDate_display']
     course_name = tee_time_details['course_name']
-    time_slot = tee_time_details['course_time_slot']
+    course_time_slot = tee_time_details['course_time_slot']
     other_players = tee_time_details['other_players']
 
-    context = {
-        'swap_tt_id': swap_tt_id,
-        'user_id': user_id,
-        'date': gDate,
-        'date_display': gDate_display,
-        'course': course_name,
-        'time_slot': time_slot,
-        'other_players': other_players,
-        'first_name': request.user.first_name,
-        'last_name': request.user.last_name,
-        'user_name': request.user.username,
-    }
+    # Get players already playing on the date
+    playing_players = TeeTimesInd.objects.filter(gDate=gDate).values_list('PID_id', flat=True)
 
-    return render(request, 'GRPR/swaprequest.html', context)
-
-
-@login_required
-def store_swaprequestsent_data_view(request):
-    if request.method == "GET":
-        swap_tt_id = request.GET.get('swap_tt_id')
-
-        if not swap_tt_id:
-            return HttpResponseBadRequest("Required data is missing. - store_swaprequestsent_data_view")
-        # only thing we are doing here is hiding the swap_tt_id in the session
-
-        request.session['swap_tt_id'] = swap_tt_id
-
-        return redirect('swaprequestsent_view')
-    else:
-        return HttpResponseBadRequest("Invalid request.")
+    # Get all players and subtract playing players and Course Credit (ID 25)
+    available_players = Players.objects.exclude(id__in=list(playing_players) + [25])
     
-
-@login_required
-def swaprequestsent_view(request):
-    # Retrieve data from the session
-    swap_tt_id = request.session.pop('swap_tt_id', None)
+    ## GATE - make sure there are players available, send to error page if not.
+    if not available_players.exists():
+        return render(request, 'GRPR/error_msg.html', {'error_msg': 'No Players have available tee times on this date.'})
     
-    if not swap_tt_id:
-        return HttpResponseBadRequest("Required data is missing. - swaprequestsent_view")
-
-    # Fetch the offer player instance for nav bar and other stuff
-    user_id = request.user.id
-    first_name = request.user.first_name
-    last_name = request.user.last_name
-    player = Players.objects.filter(user_id=user_id).first()
-    swap_request_player = player
-    if not player:
-        return HttpResponseBadRequest("Player not found for the logged-in user.")
-    player_id = player.id
-
-    # Fetch the TeeTimeInd instance and other players using the utility function
-    tee_time_details = get_tee_time_details(swap_tt_id, player_id)
-    gDate = tee_time_details['gDate']
-    gDate_display = tee_time_details['gDate_display']
-    tt_pid = tee_time_details['tt_pid']
-    course = tee_time_details['course_name']
-    time_slot = tee_time_details['course_time_slot']
-    other_players = tee_time_details['other_players']
-
-    # GATE: Verify the logged in user owns this tee time (abundance of caution)
-    if tt_pid != player_id:
-        error_msg = 'It appears you are not the owner of this tee time.  Please return to the Sub Swap page and try again.'
-        return render(request, 'GRPR/error_msg.html', {'error_msg': error_msg})
-    
-    # GATE: Verify the user has not offered this tt_id already - prevents 'back' button abuse
-    if SubSwap.objects.filter(TeeTimeIndID_id=swap_tt_id, nType='Swap', SubType = 'Offer', nStatus = 'Open').exists():
-        error_msg = 'It appears you have already offered this tee time as a Swap and it is still available.  Please return to the Sub Swap page and review.'
-        return render(request, 'GRPR/error_msg.html', {'error_msg': error_msg})
-
-    # Message to display at the top of the page
-    swap_offer = f"{first_name} {last_name} would like to swap his tee time on {gDate_display} at {course} {time_slot} (playing with {other_players}) with one of your tee times."
-
-    # Fetch the tee time instance
-    tee_time_instance = get_object_or_404(TeeTimesInd, pk=swap_tt_id)
-
-    # Find all players playing on the requested date
-    players_on_requested_date = TeeTimesInd.objects.filter(gDate=gDate).values_list('PID_id', flat=True)
-
-    # Get all available players (excluding those playing on the requested date and "Course Credit")
-    available_players = Players.objects.exclude(
-        pk__in=players_on_requested_date
-    ).exclude(pk=25)  # Exclude Course Credit
-
-    # GATE:  if no avail players with dates, sends user to swapnoneavail_view
-    # Fetch the list of future dates for the offering player (player_id)
+    # # Fetch the list of future dates for the offering player (player_id)
     offering_player_future_dates = TeeTimesInd.objects.filter(PID=player_id, gDate__gt=gDate).values_list('gDate', flat=True)
 
     available_players_with_swap_dates = []
@@ -1515,144 +1455,235 @@ def swaprequestsent_view(request):
 
     if not available_players_with_swap_dates:
         return redirect('swapnoneavail_view')
+    
+    # Generate Available Swap Dates for each available player
+    filtered_players = []
+    for player in available_players:
+        available_player_dates = TeeTimesInd.objects.filter(PID=player, gDate__gt=gDate).values_list('gDate', 'id')
+        swap_request_player_dates = TeeTimesInd.objects.filter(PID=player_id, gDate__gt=gDate).values_list('gDate', flat=True)
+        swap_dates = sorted([(d[0], d[1]) for d in available_player_dates if d[0] not in swap_request_player_dates])
 
-    # Insert the initial swap offer into SubSwap
+        if swap_dates:
+            formatted_swap_dates = [(d[0].strftime('%m/%d/%Y'), d[1]) for d in swap_dates]
+            player.swap_dates = formatted_swap_dates
+            filtered_players.append({
+                'id': player.id,
+                'FirstName': player.FirstName,
+                'LastName': player.LastName,
+                'Mobile': player.Mobile,
+                'swap_dates': formatted_swap_dates,
+            })
+
+
+    context = {
+        'tt_id': swap_tt_id,
+        'gDate': gDate,
+        'gDate_display': gDate_display,
+        'course_name': course_name,
+        'course_time_slot': course_time_slot,
+        'other_players': other_players,
+        'first_name': first_name,
+        'last_name': last_name,
+        'available_players': filtered_players, 
+    }
+
+    return render(request, 'GRPR/swaprequest.html', context)
+
+
+@login_required
+def store_swap_request_sent_data_view(request):
+    if request.method == "POST":
+        tt_id = request.POST.get('tt_id')
+        player_ids = request.POST.getlist('player_ids')
+
+        if not player_ids:
+            return render(request, 'GRPR/error_msg.html', {'error_msg': 'No players selected for the swap request.'})
+
+        # Store necessary data in the session
+        request.session['tt_id'] = tt_id
+        request.session['player_ids'] = player_ids
+
+        return redirect('swaprequestsent_view')
+    else:
+        return HttpResponseBadRequest("Invalid request.")    
+
+@login_required
+def swaprequestsent_view(request):
+    tt_id = request.session.pop('tt_id', None)
+    player_ids = request.session.pop('player_ids', None)
+
+    if not tt_id or not player_ids:
+        return HttpResponseBadRequest("Required data is missing. - swaprequestsent_view")
+
+    # Fetch the Player ID associated with the logged-in user
+    user_id = request.user.id
+    first_name = request.user.first_name
+    last_name = request.user.last_name
+
+    player = get_object_or_404(Players, user_id=user_id)
+    player_id = player.id
+
+    # Fetch the TeeTimeInd instance and other players using the utility function
+    tee_time_details = get_tee_time_details(tt_id, player_id)
+    gDate = tee_time_details['gDate']
+    tt_pid = tee_time_details['tt_pid']
+    course_name = tee_time_details['course_name']
+    course_time_slot = tee_time_details['course_time_slot']
+    other_players = tee_time_details['other_players']
+
+    # GATE: Verify the logged in user owns this tee time (abundance of caution here)
+    if tt_pid != player_id:
+        error_msg = 'It appears you are not the owner of this tee time.  Please return to the Sub Swap page and try again.'
+        return render(request, 'GRPR/error_msg.html', {'error_msg': error_msg})
+    
+    # GATE: Verify the user has not offered this tt_id already - prevents 'back' button abuse
+    if SubSwap.objects.filter(TeeTimeIndID_id=tt_id, nType='Swap', SubType = 'Offer', nStatus = 'Open').exists():
+        error_msg = 'It appears you have already offered this tee time and it is still available.  Please return to the Sub Swap page and try again.'
+        return render(request, 'GRPR/error_msg.html', {'error_msg': error_msg})
+
+    # Create the swap_offer message
+    swap_offer = f"{first_name} {last_name} is offering his tee time on {gDate} at {course_name} {course_time_slot} to play with {other_players} to the first person who wants it."
+
+    # Insert the initial Swap Offer into SubSwap
     initial_swap = SubSwap.objects.create(
         RequestDate=timezone.now(),
-        PID=swap_request_player,
-        TeeTimeIndID=tee_time_instance,
+        PID_id=player_id,
+        TeeTimeIndID_id=tt_id,
         nType="Swap",
-        nStatus="Open",
         SubType="Offer",
+        nStatus="Open",
         Msg=swap_offer,
         OtherPlayers=other_players
     )
 
-    # Update the SwapID of the initial swap offer
+    # Update the SwapID of the initial Swap Offer
     initial_swap.SwapID = initial_swap.id
     initial_swap.save()
+    swap_id = initial_swap.id
 
-    # Check if Twilio is enabled
+    available_players = []
+
+    for s_id in player_ids:
+        player = Players.objects.get(id=s_id)
+        to_number = player.Mobile
+        avail_id = player.id
+        avail_name = player.FirstName + " " + player.LastName
+        available_players.append({'player': player, 'to_number': to_number, 'avail_id': avail_id, 'avail_name': avail_name})
+
     if settings.TWILIO_ENABLED:
         # Initialize the Twilio client
         account_sid = settings.TWILIO_ACCOUNT_SID
         auth_token = settings.TWILIO_AUTH_TOKEN
         client = Client(account_sid, auth_token)
 
-        # Generate text message and send to Offering Player
+        # Generate text message and send to Swap Offering player
         msg = "This msg has been sent to all of the players available for your request date: '" + swap_offer + "'      you will be able to see this offer and status on the sub swap page."
         to_number = '13122961817'  # Hardcoded for now
         # to_number = player.Mobile
         message = client.messages.create(from_='+18449472599', body=msg, to=to_number)
         mID = message.sid
-    else:
-        mID = "Twilio turned off"
-        msg = "This msg has been sent to all of the players available for your request date: '" + swap_offer + "'      you will be able to see this offer and status on the sub swap page."
-        to_number = swap_request_player.Mobile
 
-    # Insert the initial swap offer into Log
-    Log.objects.create(
-        SentDate=timezone.now(),
-        Type="Swap Offer",
-        MessageID=mID,
-        RequestDate=gDate,
-        OfferID=swap_request_player.id,
-        RefID=initial_swap.id,
-        Msg=swap_offer,
-        To_number=to_number
-    )
+        # Insert initial Swap Offer into Log
+        Log.objects.create(
+            SentDate=timezone.now(),
+            Type="Swap Offer",
+            MessageID=mID,
+            RequestDate=gDate,
+            OfferID=player_id,
+            RefID=swap_id,
+            Msg=swap_offer,
+            To_number=to_number
+        )
 
-    # Check if Twilio is enabled
-    if settings.TWILIO_ENABLED:
+        # Create an insert in SubSwap table for every player in the Available Players list
+        for player_data in available_players:
+            player = player_data['player']
+            to_number = player_data['to_number']
+            avail_id = player_data['avail_id']
 
-        for player in available_players:
             SubSwap.objects.create(
                 RequestDate=timezone.now(),
                 PID=player,
-                TeeTimeIndID=tee_time_instance,
+                TeeTimeIndID_id=tt_id,
                 nType="Swap",
-                nStatus="Open",
                 SubType="Received",
+                nStatus="Open",
                 Msg=swap_offer,
                 OtherPlayers=other_players,
-                SwapID=initial_swap.id
+                SwapID=swap_id
             )
 
-            # Generate and send text to each available player
-            swap_id = initial_swap.id
-            msg = f"{player.Mobile} {swap_offer} https://www.gasgolf.org/GRPR/store_swapoffer_data/?swapID={swap_id}."
-            to_number = '13122961817'  # Hardcoded for now
-            # to_number = swap_request_player.Mobile
-            message = client.messages.create(from_= '+18449472599', body=msg, to=to_number)
+            # Create and send a text to every Available Player
+            msg = f"{swap_offer} https://www.gasgolf.org/GRPR/store_swapaccept_data/?swap_id={swap_id}"
+            to_number = '13122961817'  # Hardcoded for now, but future will be Mobile of the Available Player
+            message = client.messages.create(from_='+18449472599', body=msg, to=to_number)
             mID = message.sid
 
-            # Insert into Log table for tracking
+            # Insert a row into Log table for every text sent
             Log.objects.create(
                 SentDate=timezone.now(),
                 Type="Swap Offer Sent",
                 MessageID=mID,
                 RequestDate=gDate,
-                OfferID=swap_request_player.id,
-                ReceiveID=player.id,
-                RefID=initial_swap.id,
+                OfferID=player_id,
+                ReceiveID=avail_id,
+                RefID=swap_id,
                 Msg=swap_offer,
                 To_number=to_number
             )
     else:
-        for player in available_players:
+        to_number = player.Mobile
+
+        # Insert initial Swap Offer into Log
+        Log.objects.create(
+            SentDate=timezone.now(),
+            Type="Swap Offer",
+            MessageID='fake mID',
+            RequestDate=gDate,
+            OfferID=player_id,
+            RefID=swap_id,
+            Msg=swap_offer,
+            To_number=to_number
+        )
+
+        # Create an insert in SubSwap table for every player in the Available Players list
+        for player_data in available_players:
+            player = player_data['player']
+            to_number = player_data['to_number']
+            avail_id = player_data['avail_id']
+
             SubSwap.objects.create(
                 RequestDate=timezone.now(),
                 PID=player,
-                TeeTimeIndID=tee_time_instance,
+                TeeTimeIndID_id=tt_id,
                 nType="Swap",
-                nStatus="Open",
                 SubType="Received",
+                nStatus="Open",
                 Msg=swap_offer,
                 OtherPlayers=other_players,
-                SwapID=initial_swap.id
+                SwapID=swap_id
             )
-            mID = 'Twilio off'
-            to_number = player.Mobile
-            msg = player.Mobile + " " + swap_offer + " Use this link to pick a date to swap."
 
-            # Insert into Log table for tracking
+            # Insert a row into Log table for every text sent
             Log.objects.create(
                 SentDate=timezone.now(),
                 Type="Swap Offer Sent",
-                MessageID=mID,
+                MessageID='fake mID',
                 RequestDate=gDate,
-                OfferID=swap_request_player.id,
-                ReceiveID=player.id,
-                RefID=initial_swap.id,
+                OfferID=player_id,
+                ReceiveID=avail_id,
+                RefID=swap_id,
                 Msg=swap_offer,
                 To_number=to_number
             )
 
-    # Generate Available Swap Dates for each available player
-    filtered_players = []
-    for player in available_players:
-        available_player_dates = TeeTimesInd.objects.filter(PID=player, gDate__gt=gDate).values_list('gDate', 'id')
-        swap_request_player_dates = TeeTimesInd.objects.filter(PID=swap_request_player, gDate__gt=gDate).values_list('gDate', flat=True)
-        swap_dates = sorted([(d[0], d[1]) for d in available_player_dates if d[0] not in swap_request_player_dates])
-
-        if swap_dates:
-            player.swap_dates = swap_dates
-            filtered_players.append({
-                'id': player.id,
-                'FirstName': player.FirstName,
-                'LastName': player.LastName,
-                'Mobile': player.Mobile,
-                'swap_dates': swap_dates,
-            })
-
+    # Pass data to the template
     context = {
+        'date': gDate,
         'swap_offer': swap_offer,
-        'available_players': filtered_players,
-        'first_name': first_name,
-        'last_name': last_name,
+        'available_players': available_players,
     }
     return render(request, 'GRPR/swaprequestsent.html', context)
-
 
 @login_required
 def store_swapoffer_data_view(request):

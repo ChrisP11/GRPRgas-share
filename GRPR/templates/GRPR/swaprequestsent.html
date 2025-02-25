@@ -7,7 +7,7 @@
 
 <!-- Swap Request Sent Content -->
 <div class="container my-4">
-    <h1>Swap Request Sent to all Available Players</h1>
+    <h1>Swap Request Sent to chosen Available Players</h1>
     <p>
         Message:  {{ swap_offer }}
     </p>
@@ -15,23 +15,15 @@
     <table class="table table-striped">
         <thead>
             <tr>
-                <th>First Name</th>
-                <th>Last Name</th>
+                <th>Player</th>
                 <th>Mobile</th>
-                <th>Available Swap Dates</th>
             </tr>
         </thead>
         <tbody>
             {% for player in available_players %}
                 <tr>
-                    <td>{{ player.FirstName }}</td>
-                    <td>{{ player.LastName }}</td>
-                    <td>{{ player.Mobile }}</td>
-                    <td>
-                        {% for date, id in player.swap_dates %}
-                            {{ date }} <br>
-                        {% endfor %}
-                    </td>
+                    <td>{{ player.avail_name }}</td>
+                    <td>{{ player.to_number|slice:"1:4" }}-{{ player.to_number|slice:"4:7" }}-{{ player.to_number|slice:"7:11" }}</td>
                 </tr>
             {% endfor %}
         </tbody>
