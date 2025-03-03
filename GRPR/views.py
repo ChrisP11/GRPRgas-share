@@ -65,6 +65,13 @@ class CustomPasswordChangeView(PasswordChangeView):
     success_url = reverse_lazy('password_change_done')
     template_name = 'GRPR/password_change.html'
 
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        # Set force_password_change to False after successful password change
+        self.request.user.userprofile.force_password_change = False
+        self.request.user.userprofile.save()
+        return response
+
 
 # login page
 def register(request):

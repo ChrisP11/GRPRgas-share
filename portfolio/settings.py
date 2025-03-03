@@ -71,6 +71,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'GRPR.middleware.SSLRedirectMiddleware',  # Add this line to force using https
+    'GRPR.middleware.ForcePasswordChangeMiddleware',  # Add this line to force password change
 ]
 
 ROOT_URLCONF = 'portfolio.urls'
