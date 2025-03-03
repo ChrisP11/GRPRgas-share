@@ -244,13 +244,13 @@ def text_test_view(request):
             )
 
             success_message = 'text message sent successfully.'
-            return render(request, 'text_test.html', {'success_message': success_message, 'players': Players.objects.all()})
+            return render(request, 'text_test.html', {'success_message': success_message, 'players': Players.objects.all().exclude(Member=0).order_by('LastName', 'FirstName')})
 
         except Exception as e:
             error_message = f'Error sending test text message: {e}'
-            return render(request, 'text_test.html', {'error_message': error_message, 'players': Players.objects.all()})
+            return render(request, 'text_test.html', {'error_message': error_message, 'players': Players.objects.all().exclude(Member=0).order_by('LastName', 'FirstName')})
 
-    return render(request, 'text_test.html', {'players': Players.objects.all()})
+    return render(request, 'text_test.html', {'players': Players.objects.all().exclude(Member=0).order_by('LastName', 'FirstName')})
 
 
 @login_required
@@ -671,8 +671,8 @@ def subrequest_view(request):
     # Get players already playing on the date
     playing_players = TeeTimesInd.objects.filter(gDate=gDate).values_list('PID_id', flat=True)
 
-    # Get all players and subtract playing players and Course Credit (ID 25)
-    available_players = Players.objects.exclude(id__in=list(playing_players) + [25])
+    # Get all players who are members and subtract playing players
+    available_players = Players.objects.filter(Member=1).exclude(id__in=list(playing_players))
 
     ## GATE - make sure there are players available, send to error page if not.
     if not available_players.exists():
@@ -775,16 +775,6 @@ def subrequestsent_view(request):
     initial_sub.SwapID = initial_sub.id
     initial_sub.save()
     swap_id = initial_sub.id
-
-    # # Get players already playing on the date
-    # playing_players = TeeTimesInd.objects.filter(gDate=gDate).values_list('PID_id', flat=True)
-
-    # # Get all players and subtract playing players and Course Credit (ID 25)
-    # available_players = Players.objects.exclude(id__in=list(playing_players) + [25])
-
-    # ## GATE - make sure there are players available, send to error page if not.
-    # if not available_players.exists():
-    #     return render(request, 'GRPR/error_msg.html', {'error_msg': 'No Players have available tee times on this date.'})
     
     available_players = []
 
@@ -1427,8 +1417,8 @@ def swaprequest_view(request):
     # Get players already playing on the date
     playing_players = TeeTimesInd.objects.filter(gDate=gDate).values_list('PID_id', flat=True)
 
-    # Get all players and subtract playing players and Course Credit (ID 25)
-    available_players = Players.objects.exclude(id__in=list(playing_players) + [25])
+    # Get all players who are members and subtract playing players
+    available_players = Players.objects.filter(Member=1).exclude(id__in=list(playing_players))
     
     ## GATE - make sure there are players available, send to error page if not.
     if not available_players.exists():
@@ -2554,7 +2544,7 @@ def swapnoneavail_view(request):
 def statistics_view(request):
     # for course distro chart:
     courses = Courses.objects.all().order_by('id')
-    players = Players.objects.exclude(id=25).order_by('LastName')
+    players = Players.objects.filter(Member=1).order_by('LastName')
 
     course_names= []
     for course in courses:
@@ -2686,7 +2676,7 @@ def players_view(request):
     current_datetime = datetime.now()
 
     # Query all players
-    players = Players.objects.exclude(id=25).order_by('LastName', 'FirstName')
+    players = Players.objects.filter(Member=1).order_by('LastName', 'FirstName')
 
     # Prepare the data for the table
     players_data = []
