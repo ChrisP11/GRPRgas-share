@@ -15,11 +15,7 @@ from GRPR.models import Players
 
 # new players to add
 new_players = [
-    ('Matt', 'Heintz', 'mheint@hotmail.com', '13145834381', None),
-    ('Dave', 'Martin', 'David@dcmartin.net', '17084049384', None),
-    ('Dave', 'Piech', 'piech8@comcast.net', '17082753369', None),
-    ('Tom', 'Shaughnessy', 'tmshaugh1@yahoo.com', '13123072322', None),
-    ('Ray', 'Thompson', 'Ray.Thompson10@outlook.com', '16307818210', None),
+    ('Mike', 'Woods', 'mwoodball@yahoo.com', '15047826553', None),
 ]
 
 crew_id = 1

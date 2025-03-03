@@ -38,6 +38,7 @@ class Players(models.Model):
     Email = models.CharField(max_length=256)
     Mobile = models.CharField(max_length=256)
     SplitPartner = models.IntegerField(null=True)
+    Member = models.IntegerField(null=True)
 
     class Meta:
         db_table = "Players"

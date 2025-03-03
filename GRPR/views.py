@@ -2724,3 +2724,22 @@ def profile_view(request):
         'mobile': player.Mobile,
     }
     return render(request, 'GRPR/profile.html', context)
+
+
+
+#### Skins game views
+@login_required
+def scorecard_view(request):
+    # Fetch distinct tee times
+    teetimes = TeeTimesInd.objects.values('gDate', 'CourseID__courseName', 'CourseID__courseTimeSlot').distinct().order_by('gDate', 'CourseID__courseTimeSlot')
+
+    # Fetch players for each distinct tee time
+    for teetime in teetimes:
+        teetime['players'] = list(TeeTimesInd.objects.filter(
+            gDate=teetime['gDate'],
+            CourseID__courseName=teetime['CourseID__courseName'],
+            CourseID__courseTimeSlot=teetime['CourseID__courseTimeSlot']
+        ).select_related('PID').values('PID__FirstName', 'PID__LastName'))
+    print('teetime', teetimes)
+
+    return render(request, 'GRPR/scorecard.html', {'teetimes': teetimes})

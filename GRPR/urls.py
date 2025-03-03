@@ -63,4 +63,7 @@ urlpatterns = [
     path('error_message/<str:error_msg>/', views.error_message_view, name='error_message_view'),
     path('sms/reply/', sms_reply, name='sms_reply'),
 
+    ### Skins Game
+    path('scorecard/', views.scorecard_view, name='scorecard_view'),
+    
 ]
