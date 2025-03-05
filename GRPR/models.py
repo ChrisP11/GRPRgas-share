@@ -108,6 +108,7 @@ class SMSResponse(models.Model):
     class Meta:
         db_table = "SMSResponse"
     
+
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     force_password_change = models.BooleanField(default=False)

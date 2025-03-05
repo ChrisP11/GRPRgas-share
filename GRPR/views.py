@@ -354,7 +354,7 @@ def teesheet_view(request):
 
 @login_required
 def schedule_view(request):
-    players = Players.objects.all().order_by('LastName', 'FirstName')
+    players = Players.objects.all().exclude(Member=0).order_by('LastName', 'FirstName')
 
     current_datetime = datetime.now()
 
@@ -369,7 +369,7 @@ def schedule_view(request):
     if request.method == "GET":
         player_id = request.GET.get("player_id", logged_in_player.id if logged_in_player else None)
         if player_id:
-            selected_player = Players.objects.filter(id=player_id).first()
+            selected_player = Players.objects.filter(id=player_id).exclude(Member=0).first()
             schedule_query = TeeTimesInd.objects.filter(PID=player_id, gDate__gte=current_datetime).select_related('CourseID').order_by('gDate')
             for teetime in schedule_query:
                 # Collect the names of other players in the group
