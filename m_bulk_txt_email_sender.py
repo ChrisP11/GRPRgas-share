@@ -36,13 +36,13 @@ for player in players:
     Any problems or concerns please contact Chris Prouty at 312-296-1817'''
     from_email = os.environ.get('EMAIL_HOST_USER')
 
-    # try:
-    #     send_mail(subject, message, from_email, [email])
-    #     email_success_message = f'Email sent {player.LastName} {email}.'
-    #     print(email_success_message)
-    # except Exception as e:
-    #     error_message = f'Error sending test email: {player.LastName} {email} {e}'
-    #     print(error_message)    
+    try:
+        send_mail(subject, message, from_email, [email])
+        email_success_message = f'Email sent {player.LastName} {email}.'
+        print(email_success_message)
+    except Exception as e:
+        error_message = f'Error sending test email: {player.LastName} {email} {e}'
+        print(error_message)    
 
     
     
@@ -60,26 +60,26 @@ for player in players:
     mobile = player.Mobile
     player_id = player.id
 
-    # client = Client(twilio_account_sid, twilio_auth_token)
+    client = Client(twilio_account_sid, twilio_auth_token)
 
-    # twilio_message = client.messages.create(
-    #     body=txt_msg,
-    #     from_=twilio_phone_number,
-    #     to=mobile
-    # )
-    # mID = twilio_message.sid
+    twilio_message = client.messages.create(
+        body=txt_msg,
+        from_=twilio_phone_number,
+        to=mobile
+    )
+    mID = twilio_message.sid
 
-    # # Insert record into Log table
-    # Log.objects.create(
-    #     SentDate=timezone.now(),
-    #     Type="Admin Text Msg",
-    #     MessageID=mID,
-    #     OfferID=13,
-    #     ReceiveID=player_id,
-    #     Msg=txt_msg,
-    #     To_number=mobile
+    # Insert record into Log table
+    Log.objects.create(
+        SentDate=timezone.now(),
+        Type="Admin Text Msg",
+        MessageID=mID,
+        OfferID=13,
+        ReceiveID=player_id,
+        Msg=txt_msg,
+        To_number=mobile
 
-    print(f'{player.FirstName} {player.LastName} {player.Email} {player.Mobile} {player_id}')
+    # print(f'{player.FirstName} {player.LastName} {player.Email} {player.Mobile} {player_id}')
 
-    # txt_success_message = f'text message sent {player.LastName} {mobile}.'
-    # print(txt_success_message)
+    txt_success_message = f'text message sent {player.LastName} {mobile}.'
+    print(txt_success_message)
