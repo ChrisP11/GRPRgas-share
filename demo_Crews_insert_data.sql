@@ -1,0 +1,1 @@
+INSERT INTO "Crews" (crewName, crewCaptain, email, mobile) VALUES ('GAS', '6', 'Christopher_Coogan@rush.edu', '17083342800');
