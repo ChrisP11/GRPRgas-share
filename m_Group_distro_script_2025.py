@@ -207,7 +207,7 @@ def split_partners_distro():
 # Query the Players table and get PIDs
 preRandomGolfers = []
 # Get all the players x/ course credit and those with a split partner.  Will get those in a minute
-players = Players.objects.exclude(id=25).exclude(SplitPartner__isnull=False)
+players = Players.objects.exclude(Member=0).exclude(SplitPartner__isnull=False)
 for player in players:
 	pID = player.id
 	print(f"{pID} {player.FirstName} {player.LastName}")
