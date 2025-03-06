@@ -41,14 +41,6 @@ else:
     }
 
 
-## Database config for SQLite   # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
-
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -161,9 +153,9 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Add this setting to control Twilio functionality
-# TWILIO_ENABLED = True
-TWILIO_ENABLED = False
+# Add this setting to control Twilio functionality, defualt is False if no environment variable is set
+TWILIO_ENABLED = os.environ.get('TWILIO_ENABLED', 'False') == 'True'
+
 
 # Twilio credentials
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
