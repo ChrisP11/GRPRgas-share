@@ -79,6 +79,8 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'portfolio.context_processors.enviro',  # reads the ENVIRO env var
+
             ],
         },
     },
@@ -171,3 +173,8 @@ EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
 
 # Default from email address
 DEFAULT_FROM_EMAIL = os.environ.get('EMAIL_HOST_USER')
+
+
+# Environment setting
+ENVIRO = os.environ.get('ENVIRO', 'Prod')
+print(f"Environment: {ENVIRO}")  # Add this line to verify the environment variable

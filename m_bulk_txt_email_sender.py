@@ -78,6 +78,7 @@ for player in players:
         ReceiveID=player_id,
         Msg=txt_msg,
         To_number=mobile
+    )
 
     # print(f'{player.FirstName} {player.LastName} {player.Email} {player.Mobile} {player_id}')
 

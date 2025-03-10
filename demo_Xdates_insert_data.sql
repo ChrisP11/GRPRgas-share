@@ -29,6 +29,10 @@ INSERT INTO "Xdates" ("CrewID", "xDate", "rDate", "PID_id") VALUES (1, '2025-06-
 INSERT INTO "Xdates" ("CrewID", "xDate", "rDate", "PID_id") VALUES (1, '2025-06-14', now(), 13);
 INSERT INTO "Xdates" ("CrewID", "xDate", "rDate", "PID_id") VALUES (1, '2025-07-05', now(), 13);
 
+INSERT INTO "Xdates" ("CrewID", "xDate", "rDate", "PID_id") VALUES (1, '2025-06-07', now(), 1);
+INSERT INTO "Xdates" ("CrewID", "xDate", "rDate", "PID_id") VALUES (1, '2025-06-14', now(), 1);
+INSERT INTO "Xdates" ("CrewID", "xDate", "rDate", "PID_id") VALUES (1, '2025-07-05', now(), 1);
+
 INSERT INTO "Xdates" ("CrewID", "xDate", "rDate", "PID_id") VALUES (1, '2025-04-26', now(), 23);
 INSERT INTO "Xdates" ("CrewID", "xDate", "rDate", "PID_id") VALUES (1, '2025-07-12', now(), 23);
 INSERT INTO "Xdates" ("CrewID", "xDate", "rDate", "PID_id") VALUES (1, '2025-07-19', now(), 23);
@@ -75,6 +79,10 @@ INSERT INTO "Xdates" ("CrewID", "xDate", "rDate", "PID_id") VALUES (1, '2025-08-
 INSERT INTO "Xdates" ("CrewID", "xDate", "rDate", "PID_id") VALUES (1, '2025-05-03', now(), 9);
 INSERT INTO "Xdates" ("CrewID", "xDate", "rDate", "PID_id") VALUES (1, '2025-08-23', now(), 9);
 INSERT INTO "Xdates" ("CrewID", "xDate", "rDate", "PID_id") VALUES (1, '2025-08-30', now(), 9);
+
+INSERT INTO "Xdates" ("CrewID", "xDate", "rDate", "PID_id") VALUES (1, '2025-08-16', now(), 2);
+INSERT INTO "Xdates" ("CrewID", "xDate", "rDate", "PID_id") VALUES (1, '2025-08-23', now(), 2);
+INSERT INTO "Xdates" ("CrewID", "xDate", "rDate", "PID_id") VALUES (1, '2025-08-30', now(), 2);
 
 
 -- Insert into "Xdates" ("CrewID", "xDate", "rDate", "PID_id") Values (1, '2025-06-15', now(), 86);

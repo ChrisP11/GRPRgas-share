@@ -44,6 +44,12 @@
             </div>
         </div>
     </nav>
+    
+    {% if ENVIRO != 'Prod' %}
+    <div style="background-color: yellow; padding: 10px; text-align: center;">
+        <strong>Environment: {{ ENVIRO }}</strong>
+    </div>
+    {% endif %}
 
     <div class="container my-4">
         {% block content %}{% endblock %}
