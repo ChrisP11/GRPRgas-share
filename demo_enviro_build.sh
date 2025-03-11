@@ -8,6 +8,12 @@ GIT_REMOTE="preprod"
 # Create a new Heroku app
 heroku create $APP_NAME
 
+# Check if the app was created successfully
+if [ $? -ne 0 ]; then
+    echo "Failed to create Heroku app. Exiting."
+    exit 1
+fi
+
 # Set non-sensitive environment variables
 heroku config:set ENVIRO=Demo --app $APP_NAME
 heroku config:set DEBUG=True --app $APP_NAME
@@ -15,7 +21,13 @@ heroku config:set EMAIL_HOST_USER=gasgolf25@gmail.com --app $APP_NAME
 heroku config:set TWILIO_ENABLED=False --app $APP_NAME
 
 # creates the postgres db
-heroku addons:create heroku-postgresql:essential-0 --app demo-grpr
+heroku addons:create heroku-postgresql:essential-0 --app $APP_NAME
+
+# Check if the addon was created successfully
+if [ $? -ne 0 ]; then
+    echo "Failed to create Heroku Postgres addon. Exiting."
+    exit 1
+fi
 
 # Add Heroku remote
 git remote add $GIT_REMOTE https://git.heroku.com/$APP_NAME.git
@@ -38,9 +50,5 @@ heroku run python manage.py createsuperuser --app $APP_NAME
 
 # Run Python scripts to insert data into the database
 heroku run python manage.py shell --app $APP_NAME < /Users/cprouty/Dropbox/Dev/Python/Apps/GRPR/demo_Players_Users_data.py
-# heroku run python manage.py shell --app $APP_NAME < /Users/cprouty/Dropbox/Dev/Python/Apps/GRPR/demo_Courses_insert_data.py
-
-# Run SQL statements from the file
-heroku pg:psql --app $APP_NAME < /Users/cprouty/Dropbox/Dev/Python/Apps/GRPR/demo_Courses_insert_data.sql
 
 echo "Environment setup complete."
