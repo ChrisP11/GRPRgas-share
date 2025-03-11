@@ -49,6 +49,8 @@ heroku run python manage.py migrate --app $APP_NAME
 heroku run python manage.py createsuperuser --app $APP_NAME
 
 # Run Python scripts to insert data into the database
-heroku run python manage.py shell --app $APP_NAME < /Users/cprouty/Dropbox/Dev/Python/Apps/GRPR/demo_Players_Users_data.py
+# heroku run python manage.py shell --app $APP_NAME < /Users/cprouty/Dropbox/Dev/Python/Apps/GRPR/demo_Players_Users_data.py
+heroku run python /app/demo_Players_Users_data.py --app $APP_NAME
+heroku run python /app/demo_Courses_insert_data.py --app $APP_NAME
 
 echo "Environment setup complete."
