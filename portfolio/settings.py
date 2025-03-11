@@ -26,19 +26,13 @@ print('Debug', DEBUG)
 ALLOWED_HOSTS = ['*'] if DEBUG else ['gasgolf.org', 'www.gasgolf.org', 'grpr.herokuapp.com']
 
 # Database configuration. Always use production settings on Heroku
-if 'DYNO' in os.environ:
-    DATABASES = {'default': dj_database_url.config(conn_max_age=600, ssl_require=True)}
-else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': 'grpr_db',
-            'USER': os.getenv('POSTGRES_USER'),
-            'PASSWORD': os.getenv('POSTGRES_PASSWORD'), 
-            'HOST': 'localhost',
-            'PORT': '',
-        }
-    }
+DATABASES = {
+    'default': dj_database_url.config(
+        default=f'postgres://{os.getenv("POSTGRES_USER", "your_default_user")}:{os.getenv("POSTGRES_PASSWORD", "your_default_password")}@localhost:5432/grpr_db',
+        conn_max_age=600,
+        ssl_require=not DEBUG
+    )
+}
 
 
 # Application definition
@@ -174,7 +168,6 @@ EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
 # Default from email address
 DEFAULT_FROM_EMAIL = os.environ.get('EMAIL_HOST_USER')
 
-
 # Environment setting
 ENVIRO = os.environ.get('ENVIRO', 'Prod')
-print(f"Environment: {ENVIRO}")  # Add this line to verify the environment variable
+print(f"Environment: {ENVIRO}")  
