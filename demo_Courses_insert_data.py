@@ -18,12 +18,12 @@ courses_data = [
 
 # Insert data into Courses table
 print("Starting to insert courses data...")
-# for course_id, course_name, course_time_slot in courses_data:
-#     print(f"Adding course: {course_id} {course_name} {course_time_slot}")
-    # add_course = Courses.objects.create(
-    #     crewID=course_id,
-    #     courseName=course_name,
-    #     courseTimeSlot=course_time_slot
-    # )
+for course_id, course_name, course_time_slot in courses_data:
+    print(f"Adding course: {course_id} {course_name} {course_time_slot}")
+    add_course = Courses.objects.create(
+        crewID=course_id,
+        courseName=course_name,
+        courseTimeSlot=course_time_slot
+    )
 
 print("Finished inserting courses data.")
