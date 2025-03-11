@@ -58,8 +58,7 @@ heroku run python /app/demo_Players_updates.py --app $APP_NAME
 # get cprouty added to Players
 heroku run python /app/demo_cprouty_insert_link_data.py --app $APP_NAME
 
-# do split partners
 # run Distro script
-
+heroku run python /app/m_Group_distro_script_2025.py --app $APP_NAME
 
 echo "Environment setup complete."
