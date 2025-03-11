@@ -19,10 +19,10 @@ print("Starting to insert crews data...")
 for crewName, crewCaptain, email, mobile in crews_data:
     print(f"Adding crew: {crewName}")
     add_course = Crews.objects.create(
-        CrewName=crewName,
-        CrewCaptain=crewCaptain,
-        Email=email,
-        Mobile=mobile
+        crewName=crewName,
+        crewCaptain=crewCaptain,
+        email=email,
+        mobile=mobile
     )
 
-print("Finished inserting crewss data.")
+print("Finished inserting crews data.")
