@@ -11,11 +11,15 @@ from GRPR.models import Courses
 
 # Data to be inserted
 courses_data = [
-    {"crewID": 1, "courseName": "The Preserve", "courseTimeSlot": "7:10"},
-    {"crewID": 1, "courseName": "The Preserve", "courseTimeSlot": "8:50"},
-    {"crewID": 1, "courseName": "The Preserve", "courseTimeSlot": "9:00"},
+    {1, "The Preserve", "7:10"},
+    {1, "The Preserve", "8:50"},
+    {1, "The Preserve", "9:00"},
 ]
 
 # Insert data into Courses table
-for course in courses_data:
-    Courses.objects.create(**course)
+for course_id, course_name, course_time_slot in courses_data:
+    add_course = Courses.objects.create(
+        CourseID=course_id,
+        CourseName=course_name,
+        CourseTimeSlot=course_time_slot
+    )
