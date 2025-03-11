@@ -27,12 +27,16 @@ ALLOWED_HOSTS = ['*'] if DEBUG else ['gasgolf.org', 'www.gasgolf.org', 'grpr.her
 
 # Database configuration. Always use production settings on Heroku
 DATABASES = {
-    'default': dj_database_url.config(
-        default=f'postgres://{os.getenv("POSTGRES_USER", "your_default_user")}:{os.getenv("POSTGRES_PASSWORD", "your_default_password")}@localhost:5432/grpr_db',
-        conn_max_age=600,
-        ssl_require=not DEBUG
-    )
+    'default': dj_database_url.config(conn_max_age=600, ssl_require=True)
 }
+
+# DATABASES = {
+#     'default': dj_database_url.config(
+#         default=f'postgres://{os.getenv("POSTGRES_USER", "your_default_user")}:{os.getenv("POSTGRES_PASSWORD", "your_default_password")}@localhost:5432/grpr_db',
+#         conn_max_age=600,
+#         ssl_require=not DEBUG
+#     )
+# }
 
 
 # Application definition
