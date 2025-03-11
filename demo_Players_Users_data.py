@@ -9,9 +9,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'portfolio.settings')# Replace '
 django.setup()
 
 from django.contrib.auth.models import User
-from GRPR.models import Players
-
-
+from GRPR.models import Players, Courses
 
 # new players to add
 new_players = [
@@ -81,3 +79,19 @@ for first_name, last_name, email, mobile, split_partner in new_players:
     player.save()
     print(f"Linked user: {first_name} {last_name} {email} {mobile} {split_partner} {crew_id}")
 
+
+
+# New Courses to add
+courses_data = [
+    (1, "The Preserve", "7:10"),
+    (1, "The Preserve", "8:50"),
+    (1, "The Preserve", "9:00"),
+]
+
+# Insert data into Courses table
+for course_id, course_name, course_time_slot in courses_data:
+    add_course = Courses.objects.create(
+        CourseID=course_id,
+        CourseName=course_name,
+        CourseTimeSlot=course_time_slot
+    )
