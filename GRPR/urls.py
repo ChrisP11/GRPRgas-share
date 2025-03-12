@@ -65,5 +65,7 @@ urlpatterns = [
 
     ### Skins Game
     path('scorecard/', views.scorecard_view, name='scorecard_view'),
+    path('skins/', views.skins_view, name='skins_view'),
+    path('skins/new/', views.new_skins_game_view, name='new_skins_game_view'),
     
 ]

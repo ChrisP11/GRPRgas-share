@@ -685,7 +685,7 @@ def subrequest_view(request):
     if not available_players.exists():
         return render(request, 'GRPR/error_msg.html', {'error_msg': 'No Players have available tee times on this date.'})
     
-        # Get list of players available to sub
+    # Get list of players available to sub
     available_subs = []
     for player in available_players:
         possible_sub = player.FirstName + " " + player.LastName
@@ -801,8 +801,7 @@ def subrequestsent_view(request):
 
         # Generate text message and send to Sub Offering player
         msg = "This msg has been sent to all of the players available for your request date: '" + sub_offer + "'      you will be able to see this offer and status on the sub swap page."
-        to_number = '13122961817'  # Hardcoded for now
-        # to_number = player.Mobile
+        to_number = player.Mobile
         message = client.messages.create(from_='+18449472599', body=msg, to=to_number)
         mID = message.sid
 
@@ -838,7 +837,6 @@ def subrequestsent_view(request):
 
             # Create and send a text to every Available Player
             msg = f"{sub_offer} https://www.gasgolf.org/GRPR/store_subaccept_data/?swap_id={swap_id}"
-            to_number = '13122961817'  # Hardcoded for now, but future will be Mobile of the Available Player
             message = client.messages.create(from_='+18449472599', body=msg, to=to_number)
             mID = message.sid
 
@@ -1028,22 +1026,6 @@ def store_subfinal_data_view(request):
         first_name = request.user.first_name
         last_name = request.user.last_name
 
-        print('store_subfinal_data_view')
-        print('swap_id', swap_id)
-        print('gDate', gDate)   
-        print('course_name', course_name)   
-        print('course_time_slot', course_time_slot) 
-        print('offer_player_first_name', offer_player_first_name)   
-        print('offer_player_last_name', offer_player_last_name) 
-        print('offer_player_mobile', offer_player_mobile)
-        print('offer_player_id', offer_player_id)
-        print('other_players', other_players)
-        print('first_name', first_name)
-        print('last_name', last_name)
-        print('player_id', player_id)
-        print('player_mobile', player_mobile)
-
-
         # Store necessary data in the session
         request.session['swap_id'] = swap_id
         request.session['tt_id'] = teetime.id
@@ -1144,9 +1126,6 @@ def subfinal_view(request):
         auth_token = settings.TWILIO_AUTH_TOKEN
         client = Client(account_sid, auth_token)
 
-        # hard code to Prouty mobile for now
-        offer_player_mobile = '13122961817'
-
         # Send text to the Sub Offer Player
         offer_msg = f"Sub Accepted: {first_name} {last_name} is taking your tee time on {gDate} at {course_name} {course_time_slot}."
         to_number = offer_player_mobile
@@ -1165,9 +1144,6 @@ def subfinal_view(request):
             Msg=offer_msg,
             To_number=to_number
         )
-
-        # hard code to Prouty mobile for now
-        player_mobile = '13122961817'
 
         # Send text to the Sub Accept Player
         accept_msg = f"Sub Accepted: { first_name } { last_name } is taking {offer_player_first_name} {offer_player_last_name}'s tee time on {gDate} at {course_name} {course_time_slot}."
@@ -1575,8 +1551,7 @@ def swaprequestsent_view(request):
 
         # Generate text message and send to Swap Offering player
         msg = "This msg has been sent to all of the players available for your request date: '" + swap_offer + "'      you will be able to see this offer and status on the sub swap page."
-        to_number = '13122961817'  # Hardcoded for now
-        # to_number = player.Mobile
+        to_number = player.Mobile
         message = client.messages.create(from_='+18449472599', body=msg, to=to_number)
         mID = message.sid
 
@@ -1612,7 +1587,6 @@ def swaprequestsent_view(request):
 
             # Create and send a text to every Available Player
             msg = f"{swap_offer} https://www.gasgolf.org/GRPR/store_swapaccept_data/?swap_id={swap_id}"
-            to_number = '13122961817'  # Hardcoded for now, but future will be Mobile of the Available Player
             message = client.messages.create(from_='+18449472599', body=msg, to=to_number)
             mID = message.sid
 
@@ -1854,12 +1828,6 @@ def swapcounter_view(request):
     # Send Twilio messages
     if settings.TWILIO_ENABLED:
         client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
-
-        ##############################
-        # hard code to prouty mobile
-        offer_mobile = '13122961817'
-        counter_mobile = '13122961817'
-        ##############################
 
         # Send message to offer player
         message = client.messages.create(from_='+18449472599', body=offer_msg, to=offer_mobile)
@@ -2203,12 +2171,6 @@ def swapfinal_view(request):
     # Send texts via Twilio
     if settings.TWILIO_ENABLED:
         client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
-
-        # hard code mobiles to Chris Prouty
-        print("currently hard coded to Prouty Mobile, but offer_mobile would be ", offer_mobile)
-        offer_mobile='13122961817'
-        print("currently hard coded to Prouty Mobile, but counter_mobile would be ", counter_mobile)
-        counter_mobile='13122961817'
 
         # Send text to Offer Player
         message = client.messages.create(from_='+18449472599', body=offer_msg, to=offer_mobile)
@@ -2726,6 +2688,18 @@ def profile_view(request):
 
 #### Skins game views
 @login_required
+def skins_view(request):
+    user = request.user
+
+    context = {
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+    }
+
+    return render(request, 'GRPR/skins.html', context)
+
+
+@login_required
 def scorecard_view(request):
     # Fetch distinct tee times
     teetimes = TeeTimesInd.objects.values('gDate', 'CourseID__courseName', 'CourseID__courseTimeSlot').distinct().order_by('gDate', 'CourseID__courseTimeSlot')
@@ -2740,3 +2714,43 @@ def scorecard_view(request):
     print('teetime', teetimes)
 
     return render(request, 'GRPR/scorecard.html', {'teetimes': teetimes})
+
+@login_required
+def new_skins_game_view(request):
+    # Get today's date
+    current_datetime = datetime.now()
+
+    # Query the next closest future date in the TeeTimesInd table
+    next_closest_date = TeeTimesInd.objects.filter(gDate__gte=current_datetime).order_by('gDate').values('gDate').first()
+
+    # If no future date is found, return an empty context
+    if not next_closest_date:
+        context = {
+            'tee_times': [],
+            'first_name': request.user.first_name,
+            'last_name': request.user.last_name,
+        }
+        return render(request, 'GRPR/new_skins_game.html', context)
+
+    # Get the next closest date
+    next_closest_date = next_closest_date['gDate']
+
+    # Query the database for tee times on the next closest date
+    tee_times_queryset = TeeTimesInd.objects.filter(gDate=next_closest_date).select_related('PID', 'CourseID').order_by('CourseID__courseTimeSlot')
+
+    # Construct the tee times list
+    tee_times = []
+    for teetime in tee_times_queryset:
+        tee_times.append({
+            'date': teetime.gDate.strftime('%Y-%m-%d'),
+            'time': teetime.CourseID.courseTimeSlot,
+            'course': teetime.CourseID.courseName,
+            'players': ', '.join([f"{teetime.PID.FirstName} {teetime.PID.LastName}"]),
+        })
+
+    context = {
+        'tee_times': tee_times,
+        'first_name': request.user.first_name,
+        'last_name': request.user.last_name,
+    }
+    return render(request, 'GRPR/new_skins_game.html', context)

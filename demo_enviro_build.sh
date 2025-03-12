@@ -1,3 +1,6 @@
+# This script creates a Demo Environment in Heroku 
+# complete with Players and a schedule.
+
 # filepath: /Users/cprouty/Dropbox/Dev/Python/Apps/GRPR/demo_enviro_build.sh
 #!/bin/bash
 
