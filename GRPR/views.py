@@ -1995,6 +1995,124 @@ def swapcounteraccept_view(request):
 
 
 @login_required
+def swapcounterreject_view(request):
+    counter_ttid = request.GET.get('counter_ttid')
+    swap_id = request.GET.get('swap_id')
+    comments = request.GET.get('comments', '')
+
+    if not counter_ttid or not swap_id:
+        return HttpResponseBadRequest("Required data is missing. - swapfinal_view")
+    
+    # GATE: Verify Swap Offer is still open - prevents back button abuse
+    error_msg = 'The requested Swap Offer is no longer available.  Please review the available Swaps on the Sub Swap page and try again.'
+    swap_offer = get_open_subswap_or_error(swap_id, error_msg, request)
+    if isinstance(swap_offer, HttpResponse):
+        return swap_offer
+    
+    # GATE: Verify Counter Offer is still open
+    counter_offer = SubSwap.objects.filter(SwapID=swap_id, SubType='Counter', nStatus='Open')
+    if not counter_offer.exists():
+        return render(request, 'GRPR/error_msg.html', {'error_msg': 'The Counter Offer is no longer available.  Please review the available Swaps on the Sub Swap page and try again.'})
+
+    # Fetch the tt_id assoc with the swap_id
+    subswap_row = get_object_or_404(SubSwap, id=swap_id)
+    offer_tt_id = subswap_row.TeeTimeIndID_id
+    
+    # Fetch the Player ID associated with the logged-in user
+    user_id = request.user.id
+    offer_first_name = request.user.first_name
+    offer_last_name = request.user.last_name
+
+    player = get_object_or_404(Players, user_id=user_id)
+    player_id = player.id
+
+    # Fetch the TeeTimeInd instance details for the offer date using the utility function (in utils.py)
+    offer_tee_time_details = get_tee_time_details(offer_tt_id, player_id)
+    offer_date = offer_tee_time_details['gDate']
+    offer_course_name = offer_tee_time_details['course_name']
+    offer_time_slot = offer_tee_time_details['course_time_slot']
+
+    # Fetch the TeeTimeInd instance details for the counter date using the utility function (in utils.py)
+    counter_tti = get_object_or_404(TeeTimesInd, id=counter_ttid)
+    counter_id = counter_tti.PID_id
+
+    counter_tee_time_details = get_tee_time_details(counter_ttid, counter_id)
+    counter_date = counter_tee_time_details['gDate']
+    counter_course_name = counter_tee_time_details['course_name']
+    counter_time_slot = counter_tee_time_details['course_time_slot']
+
+    # Fetch the first name and last name from the Players table using counter_player_id
+    counter_player = Players.objects.filter(id=counter_id).first()
+    counter_first_name = counter_player.FirstName
+    counter_last_name = counter_player.LastName
+    counter_mobile = counter_player.Mobile
+    counter_user_id = counter_player.id
+
+    # Update SubSwap table for the Counter Offer, closes it as rejected
+    SubSwap.objects.filter(
+        SwapID=swap_id,
+        nStatus='Open',
+        nType='Swap',
+        SubType='Counter',
+        TeeTimeIndID=counter_ttid
+    ).update(SubStatus='Rejected', nStatus='Closed')
+
+    counter_msg = f"Tee Time Swap Proposal. {offer_first_name} {offer_last_name} has rejected your proposed { counter_date } at { counter_course_name } { counter_time_slot }am swap for his tee time on {offer_date} at {offer_course_name} {offer_time_slot}am.  Comments: {comments}"
+    
+    # Send texts via Twilio
+    if settings.TWILIO_ENABLED:
+        client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+
+        # Send text to Counter Player
+        message = client.messages.create(from_='+18449472599', body=counter_msg, to=counter_mobile)
+        counter_mID = message.sid
+
+        # Insert into Log table for counter player
+        Log.objects.create(
+            SentDate=timezone.now(),
+            Type='Swap Offer Reject',
+            MessageID=counter_mID,
+            RequestDate=offer_date,
+            OfferID=player_id,
+            ReceiveID=counter_user_id,
+            RefID=swap_id,
+            Msg=counter_msg,
+            To_number=counter_mobile
+        )
+    else:
+        print('Twilio is not enabled')
+        counter_mID = 'Fake Mib'
+
+        # Insert into Log table for counter player
+        Log.objects.create(
+            SentDate=timezone.now(),
+            Type='Swap Offer Accept',
+            MessageID=counter_mID,
+            RequestDate=offer_date,
+            OfferID=player_id,
+            ReceiveID=counter_user_id,
+            RefID=swap_id,
+            Msg=counter_msg,
+            To_number=counter_mobile
+        )
+
+    context = {
+        'original_player': offer_first_name + ' ' + offer_last_name,
+        'original_teetime': offer_date,
+        'original_course': offer_course_name,
+        'original_time_slot' : offer_time_slot,
+        'counter_player': counter_first_name + ' ' + counter_last_name, 
+        'counter_teetime': counter_date,
+        'counter_course': counter_course_name,
+        'counter_course_time_slot': counter_time_slot,
+        'counter_ttid': counter_ttid,
+        'swap_id': swap_id,
+        'comments': comments,
+    }
+    return render(request, 'GRPR/swapcounterreject.html', context)
+
+
+@login_required
 def store_swapfinal_data_view(request):
     if request.method == "GET":
         counter_ttid = request.GET.get('counter_ttid')

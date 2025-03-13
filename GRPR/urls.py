@@ -37,6 +37,7 @@ urlpatterns = [
     path('swapcounter/', views.swapcounter_view, name='swapcounter_view'), 
     path('store_swapcounteraccept_data/', views.store_swapcounteraccept_data_view, name='store_swapcounteraccept_data_view'),
     path('swapcounteraccept/', views.swapcounteraccept_view, name='swapcounteraccept_view'), 
+    path('swapcounterreject/', views.swapcounterreject_view, name='swapcounterreject_view'),
     path('store_swapfinal_data/', views.store_swapfinal_data_view, name='store_swapfinal_data_view'),
     path('swapfinal/', views.swapfinal_view, name='swapfinal_view'),
     path('store_swapcancelconfirm_data/', views.store_swapcancelconfirm_data_view, name='store_swapcancelconfirm_data_view'),

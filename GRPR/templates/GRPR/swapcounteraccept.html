@@ -17,7 +17,21 @@
     <h3 style="color: red; font-weight: bold;">Clicking the Confirm button switches the tee times</h3>
     <br>
 
+    <div class="mb-3">
+        <label for="comment" class="form-label">Comment (Use this if you need to Reject the Proposal)</label>
+        <textarea class="form-control" id="comment" name="comment" rows="3" maxlength="1000"></textarea>
+    </div>
+
     <a href="{% url 'store_swapfinal_data_view' %}?player_id={{ player_id }}&counter_ttid={{ counter_ttid }}&swap_id={{ swap_id }}" class="btn btn-primary btn-sm">Confirm Tee Time Swap</a>
+    <a href="#" onclick="submitRejectForm()" class="btn btn-warning btn-sm">Reject Proposal</a>
     <a href="{% url 'subswap_view' %}" class="btn btn-secondary">Cancel</a>
 </div>
+
+<script>
+    function submitRejectForm() {
+        const comment = document.getElementById('comment').value;
+        const url = "{% url 'swapcounterreject_view' %}?counter_ttid={{ counter_ttid }}&swap_id={{ swap_id }}&comments=" + encodeURIComponent(comment);
+        window.location.href = url;
+    }
+</script>
 {% endblock %}

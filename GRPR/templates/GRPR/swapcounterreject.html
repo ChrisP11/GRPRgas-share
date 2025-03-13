@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+
+{% block title %}Reject Counter Proposal{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Counter Proposal Rejected</h1>
+    <p>You have rejected {{ counter_player }}'s proposed swap of {{ counter_teetime }} at {{ counter_course }} at {{ counter_course_time_slot }}am for your tee time {{ original_teetime }} at {{ original_course }} at {{ original_time_slot }}am' </p>
+    <br>
+    <h4>The following text message has been sent to {{ counter_player }}</h4>
+    <p>{{ original_player }} has rejected your offer to swap tee times.  {{ comments }}</p>
+    <br>
+
+</div>
+{% endblock %}
