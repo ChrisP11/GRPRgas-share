@@ -1760,7 +1760,7 @@ def store_swapcounter_data_view(request):
         player_id = player.id
 
         # Store necessary data in the session
-        request.session['selected_dates'] = selected_dates  # Convert to JSON string
+        request.session['selected_dates'] = selected_dates
         request.session['swap_id'] = swap_id
         request.session['offer_msg'] = offer_msg
         request.session['player_id'] = player_id
@@ -1811,6 +1811,8 @@ def swapcounter_view(request):
     # Fetch the mobile numbers
     offer_mobile = offer_player.Mobile
     counter_mobile = player.Mobile
+    print('offer_mobile', offer_mobile) 
+    print('counter_mobile', counter_mobile)
 
     # Fetch the original offer details
     offer_date = swap_offer.TeeTimeIndID.gDate
@@ -1821,20 +1823,41 @@ def swapcounter_view(request):
     first_name = request.user.first_name
     last_name = request.user.last_name
 
-    # Create messages
-    offer_msg = f"{player.FirstName} {player.LastName} has proposed dates to swap for your tee time on {offer_date} at {offer_course} {offer_timeslot}am."
-    counter_msg = f"{ first_name } { last_name } have proposed dates to swap for {offer_player_first_name} {offer_player_last_name}'s tee time on {offer_date} at {offer_course} {offer_timeslot}am."
+    # Create message
+    offer_msg = f"{ first_name } { last_name } have proposed dates to swap for {offer_player_first_name} {offer_player_last_name}'s tee time on {offer_date} at {offer_course} {offer_timeslot}am."
+    print('counter_msg', counter_msg)
 
     # Send Twilio messages
     if settings.TWILIO_ENABLED:
         client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
 
-        # Send message to offer player
-        message = client.messages.create(from_='+18449472599', body=offer_msg, to=offer_mobile)
-        offer_mID = message.sid
+        # Insert into SubSwap table for each selected date
+        for date in selected_dates:
+
+            counter_date = date['date']
+            counter_time_slot = date['time_slot']
+            counter_course = date['course']
+            counter_msg = f"{player.FirstName} {player.LastName} is willing to swap {counter_date} at {counter_course} at {counter_time_slot}am for your tee time on {offer_date}"
+            print('counter_msg', counter_msg)
+
+            SubSwap.objects.create(
+                RequestDate=timezone.now(),
+                PID=player,
+                nType='Swap',
+                nStatus='Open',
+                SubType='Counter',
+                Msg=counter_msg,
+                OtherPlayers=date['other_players'],
+                SwapID=swap_id,
+                TeeTimeIndID_id=date['tt_id']
+            )
+
+            # Send message to offer player for each counter date
+            message = client.messages.create(from_='+18449472599', body=counter_msg, to=offer_mobile)
+            offer_mID = message.sid
 
         # Send message to counter player
-        message = client.messages.create(from_='+18449472599', body=counter_msg, to=counter_mobile)
+        message = client.messages.create(from_='+18449472599', body=offer_msg, to=counter_mobile)
         counter_mID = message.sid
 
         # Insert into Log table for offer player
@@ -1864,6 +1887,29 @@ def swapcounter_view(request):
         )
     else:
         print('Twilio is not enabled')
+
+        # Insert into SubSwap table for each selected date
+        for date in selected_dates:
+            counter_date = date['date']
+            counter_time_slot = date['time_slot']
+            counter_course = date['course']
+            counter_msg = f"{player.FirstName} {player.LastName} is willing to swap {counter_date} at {counter_course} at {counter_time_slot}am for your tee time on {offer_date}"
+            print('counter_msg', counter_msg)
+
+            SubSwap.objects.create(
+                RequestDate=timezone.now(),
+                PID=player,
+                nType='Swap',
+                nStatus='Open',
+                SubType='Counter',
+                Msg=counter_msg,
+                OtherPlayers=date['other_players'],
+                SwapID=swap_id,
+                TeeTimeIndID_id=date['tt_id']
+            )
+
+
+
         # Insert into Log table for offer player
         Log.objects.create(
             SentDate=timezone.now(),
@@ -1890,19 +1936,6 @@ def swapcounter_view(request):
             Msg=counter_msg
         )
 
-    # Insert into SubSwap table for each selected date
-    for date in selected_dates:
-        SubSwap.objects.create(
-            RequestDate=timezone.now(),
-            PID=player,
-            nType='Swap',
-            nStatus='Open',
-            SubType='Counter',
-            Msg=counter_msg,
-            OtherPlayers=date['other_players'],
-            SwapID=swap_id,
-            TeeTimeIndID_id=date['tt_id']
-        )
 
     # Update SubSwap table.  Change status on the offer row to the counter player to 'Swap Kountered'.  
     # This prevents the same offer showing up in the Counter Players 'Available Swaps' list on subswap.html
