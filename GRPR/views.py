@@ -1515,7 +1515,7 @@ def swaprequestsent_view(request):
         return render(request, 'GRPR/error_msg.html', {'error_msg': error_msg})
 
     # Create the swap_offer message
-    swap_offer = f"{first_name} {last_name} is offering his tee time on {gDate} at {course_name} {course_time_slot} to play with {other_players} to the first person who wants it."
+    swap_offer = f"{first_name} {last_name} is offering to trade his tee time on {gDate} at {course_name} {course_time_slot} playing with {other_players} for one of your tee times.  Please review the Sub Swap page for details."
 
     # Insert the initial Swap Offer into SubSwap
     initial_swap = SubSwap.objects.create(
@@ -1825,7 +1825,6 @@ def swapcounter_view(request):
 
     # Create message
     offer_msg = f"{ first_name } { last_name } have proposed dates to swap for {offer_player_first_name} {offer_player_last_name}'s tee time on {offer_date} at {offer_course} {offer_timeslot}am."
-    print('counter_msg', counter_msg)
 
     # Send Twilio messages
     if settings.TWILIO_ENABLED:
