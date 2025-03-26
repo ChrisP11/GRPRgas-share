@@ -4,41 +4,67 @@
 
 {% block content %}
 <div class="container my-4">
-    <h1>Next Available Tee Times</h1>
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Date</th>
-                <th>Tee Time</th>
-                <th>Course</th>
-                <th>Players</th>
-                <th><input type="checkbox" id="select-all"> Select All</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for tee_time in tee_times %}
-            <tr>
-                <td>{{ tee_time.date }}</td>
-                <td>{{ tee_time.time }}</td>
-                <td>{{ tee_time.course }}</td>
-                <td>{{ tee_time.players }}</td>
-                <td><input type="checkbox" class="select-checkbox"></td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    <div class="d-grid gap-2">
-        <a href="#" class="btn btn-primary" role="button">Invite Players to Game</a>
-        <a href="{% url 'skins_view' %}" class="btn btn-secondary-custom" role="button">Cancel</a>
-    </div>
+    <h1>Nearest Future Tee Time</h1>
+    <form id="invite-form" method="post" action="{% url 'skins_invite_view' %}">
+        {% csrf_token %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Date - Tee Time - Course </th>
+                    <th><input type="checkbox" id="select-all" checked> Select All</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for group in tee_times %}
+                <tr>
+                    <td colspan="5">
+                        <div class="card">
+                            <div class="card-header">
+                                <strong>{{ group.date }} at {{ group.time }} - {{ group.course }}</strong>
+                            </div>
+                            <div class="card-body">
+                                <ul class="list-group">
+                                    {% for player in group.players %}
+                                    <li class="list-group-item">
+                                        {{ player.name }}
+                                        <input type="checkbox" class="player-checkbox" name="selected_players" value="{{ player.player_id }}|{{ player.tt_id }}" checked>
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <input type="hidden" name="gDate" value="{{ tee_times.0.date }}">
+        <div class="d-grid gap-2">
+            <button type="submit" class="btn btn-primary">Invite Players to Game</button>
+            <a href="{% url 'skins_view' %}" class="btn btn-secondary" role="button">Cancel</a>
+        </div>
+    </form>
 </div>
 
 <script>
-    document.getElementById('select-all').addEventListener('change', function() {
-        var checkboxes = document.querySelectorAll('.select-checkbox');
+    document.getElementById('select-all').onclick = function() {
+        var checkboxes = document.querySelectorAll('.player-checkbox');
         for (var checkbox of checkboxes) {
             checkbox.checked = this.checked;
         }
-    });
+    };
+
+    document.querySelector('form').onsubmit = function() {
+        var checkboxes = document.querySelectorAll('.player-checkbox:checked');
+        if (checkboxes.length === 0) {
+            alert('Please select at least one player.');
+            return false;
+        }
+        var selectedPlayers = [];
+        for (var checkbox of checkboxes) {
+            selectedPlayers.push(checkbox.value);
+        }
+        console.log('Selected Players:', selectedPlayers);
+    };
 </script>
 {% endblock %}

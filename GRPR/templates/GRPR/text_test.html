@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="container my-4">
-    <h1 class="mb-4">Send Test Text Message</h1>
+    <h1 class="mb-4">Send Text Message to the Group</h1>
     <form method="post" action="{% url 'text_test_view' %}">
         {% csrf_token %}
         <div class="form-group">

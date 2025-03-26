@@ -68,5 +68,11 @@ urlpatterns = [
     path('scorecard/', views.scorecard_view, name='scorecard_view'),
     path('skins/', views.skins_view, name='skins_view'),
     path('skins/new/', views.new_skins_game_view, name='new_skins_game_view'),
+    path('skins_invite_view/', views.skins_invite_view, name='skins_invite_view'),
+    path('skins/current/', views.skins_game_current_view, name='skins_game_current_view'),
+    path('skins/invite/', views.skins_invite_status_view, name='skins_invite_status_view'),
+    path('skins/accept_decline/', views.skins_accept_decline_view, name='skins_accept_decline_view'),
+    path('skins/start/', views.skins_game_start_view, name='skins_game_start_view'),
+
     
 ]

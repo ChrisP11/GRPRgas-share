@@ -11,7 +11,7 @@ from GRPR.models import Courses
 
 # Data to be inserted
 courses_data = [
-    (1, "The Preserve", "7:10"),
+    (1, "The Preserve", "8:40"),
     (1, "The Preserve", "8:50"),
     (1, "The Preserve", "9:00"),
 ]

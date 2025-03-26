@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+
+{% block title %}Skins Game Invitations{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <h1>Skins - Invitation Groups</h1>
+    {% for group in invites %}
+    <div class="card my-3">
+        <div class="card-header">
+            <strong>{{ group.date }} at {{ group.time }}am - {{ group.course }}</strong>
+        </div>
+        <div class="card-body">
+            <ul class="list-group">
+                {% for player in group.players %}
+                <li class="list-group-item {% if player.status == 'Accepted' %}bg-success text-white{% elif player.status == 'Declined' %}bg-danger text-white{% endif %}">
+                    <div class="row">
+                        <div class="col-md-4">{{ player.player_name }} </div>
+                        <div class="col-md-4">{{ player.status }}</div>
+                        <div class="col-md-4">
+                            <a href="{% url 'skins_accept_decline_view' %}?game_id={{ game_id }}&player_id={{ player.player_id }}&gStatus=Accepted" class="btn btn-sm btn-secondary-custom">Accept</a>
+                            <a href="{% url 'skins_accept_decline_view' %}?game_id={{ game_id }}&player_id={{ player.player_id }}&gStatus=Declined" class="btn btn-sm btn-secondary-custom">Decline</a>
+                        </div>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endfor %}
+    <div class="d-grid gap-2">
+        <a href="{% url 'skins_game_start_view' %}?game_id={{ game_id }}" class="btn btn-primary" role="button">Choose Tees</a>
+        <a href="{% url 'skins_view' %}" class="btn btn-secondary-custom" role="button">Back to Skins</a>
+    </div>
+</div>
+{% endblock %}

@@ -115,3 +115,54 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return self.user.username
+    
+
+### Skins Game
+class ScorecardMeta(models.Model):
+    GameID = models.ForeignKey('Games', on_delete=models.CASCADE)  # Links to Games table, in future DO NOT delete on cascade
+    CreateDate = models.DateField()
+    CreateID = models.IntegerField()  # Links to Users table?
+    PlayDate = models.DateField()
+    PID = models.ForeignKey('Players', on_delete=models.CASCADE)  # Links to Players table
+    CrewID = models.ForeignKey('Crews', on_delete=models.CASCADE)  # Links to Crews table
+    CourseID = models.IntegerField() # will eventually link to Course Data table
+    TeeID = models.IntegerField(null=True, blank=True) # will eventually link to Course Data table
+    GroupID = models.IntegerField() # will probably be time_slot to start
+
+    class Meta:
+        db_table = "ScorecardMeta"
+
+
+class Scorecard(models.Model):
+    smID = models.ForeignKey('ScorecardMeta', on_delete=models.CASCADE)  # Links to ScorecardMeta table
+    CreateDate = models.DateField()
+    AlterDate = models.DateField() # will be same as CreaetDate for now, but will be updated when a score is updated
+    AlterID = models.ForeignKey('Players', on_delete=models.CASCADE)  # Links to Players table for last update
+    Hole = models.IntegerField()
+    RawScore = models.IntegerField()
+    NetScore = models.IntegerField()
+
+    class Meta:
+        db_table = "Scorecard"
+
+
+class Games(models.Model):
+    CreateID = models.ForeignKey('Players', on_delete=models.CASCADE)  # Links to Players table, creator of the game
+    CrewID = models.IntegerField()
+    CreateDate = models.DateField()
+    PlayDate = models.DateField()
+    Status = models.CharField(max_length=32, default='Pending')
+
+    class Meta:
+        db_table = "Games"
+
+
+class GameInvites(models.Model):
+    GameID = models.ForeignKey('Games', on_delete=models.CASCADE)  
+    AlterDate = models.DateField()
+    PID = models.ForeignKey('Players', on_delete=models.CASCADE)  
+    TTID = models.ForeignKey('TeeTimesInd', on_delete=models.CASCADE)
+    Status = models.CharField(max_length=32, default='Pending')
+
+    class Meta:
+        db_table = "GameInvites"

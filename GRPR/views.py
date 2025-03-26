@@ -4,7 +4,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpResponse
 from django.http import HttpResponseBadRequest
 from django.utils import timezone
-from GRPR.models import Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity, SMSResponse, Xdates
+from GRPR.models import Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity, SMSResponse, Xdates, Games, GameInvites
 from datetime import datetime
 from django.conf import settings  # Import settings
 from django.contrib.auth.views import LoginView # added for secure login page creation
@@ -2836,8 +2836,9 @@ def profile_view(request):
     return render(request, 'GRPR/profile.html', context)
 
 
-
-#### Skins game views
+##########################
+#### Skins game views ####
+##########################
 @login_required
 def skins_view(request):
     user = request.user
@@ -2888,16 +2889,29 @@ def new_skins_game_view(request):
 
     # Query the database for tee times on the next closest date
     tee_times_queryset = TeeTimesInd.objects.filter(gDate=next_closest_date).select_related('PID', 'CourseID').order_by('CourseID__courseTimeSlot')
+    print('tee_times_queryset"', tee_times_queryset)
 
-    # Construct the tee times list
+    # Group players by tee time
     tee_times = []
+    current_group = None
     for teetime in tee_times_queryset:
-        tee_times.append({
-            'date': teetime.gDate.strftime('%Y-%m-%d'),
-            'time': teetime.CourseID.courseTimeSlot,
-            'course': teetime.CourseID.courseName,
-            'players': ', '.join([f"{teetime.PID.FirstName} {teetime.PID.LastName}"]),
+        if not current_group or current_group['time'] != teetime.CourseID.courseTimeSlot:
+            current_group = {
+                'date': teetime.gDate.strftime('%Y-%m-%d'),
+                'time': teetime.CourseID.courseTimeSlot,
+                'course': teetime.CourseID.courseName,
+                'players': []
+            }
+            tee_times.append(current_group)
+        current_group['players'].append({
+            'name': f"{teetime.PID.FirstName} {teetime.PID.LastName}",
+            'player_id': teetime.PID.id,
+            'tt_id': teetime.id,
         })
+    
+    print('new_skins_game_view')
+    print('tee_times', tee_times)
+
 
     context = {
         'tee_times': tee_times,
@@ -2905,3 +2919,237 @@ def new_skins_game_view(request):
         'last_name': request.user.last_name,
     }
     return render(request, 'GRPR/new_skins_game.html', context)
+
+
+@login_required
+def skins_invite_view(request):
+    if request.method == 'POST':
+        game_creator = request.user
+        gDate = request.POST.get('gDate')
+        selected_players = request.POST.getlist('selected_players')
+
+        # Filter out any empty values from selected_players
+        selected_players = [player_id for player_id in selected_players if player_id]
+
+        # Fetch the player instance for the logged-in user
+        game_creator_player = get_object_or_404(Players, user=game_creator)
+
+        # Create a new game
+        game = Games.objects.create(
+            CreateID=game_creator_player,
+            CrewID=1,
+            CreateDate=timezone.now().date(),
+            PlayDate=gDate,
+            Status='New',
+        )
+        game_id = game.id
+
+        # Get the first name and last name of the logged-in user
+        invite_msg = f"{game_creator_player.FirstName} {game_creator_player.LastName} is inviting you to a Skins game for your tee time on {gDate}. Respond 'Accept' or 'Decline' to this message"
+
+        # Check if Twilio is enabled
+        twilio_enabled = os.getenv('TWILIO_ENABLED', 'False') == 'True'
+        if twilio_enabled:
+            client = Client(os.getenv('TWILIO_ACCOUNT_SID'), os.getenv('TWILIO_AUTH_TOKEN'))
+
+        # Invite each selected player
+        for player_data in selected_players:
+            player_id, tt_id = player_data.split('|')
+            player = get_object_or_404(Players, id=player_id)
+            invitee_mobile = player.Mobile
+
+            # Create a row in the GameInvites table
+            GameInvites.objects.create(
+                GameID=game,
+                AlterDate=timezone.now().date(),
+                PID=player,
+                TTID_id=tt_id,
+                Status='Invited',
+            )
+
+            # Send the invitation via Twilio if enabled
+            if twilio_enabled:
+                message = client.messages.create(
+                    body=invite_msg,
+                    from_=os.getenv('TWILIO_PHONE_NUMBER'),
+                    to=invitee_mobile
+                )
+                mID = message.sid
+            else:
+                mID = 'Fake'
+
+            # Create a row in the Log table
+            Log.objects.create(
+                SentDate=timezone.now(),
+                Type='Game Invite',
+                MessageID=mID,
+                RequestDate=gDate,
+                OfferID=game_creator_player.id,
+                ReceiveID=player.id,
+                RefID=game_id,
+                Msg=invite_msg,
+                To_number=invitee_mobile
+            )
+
+        # Set game creator row in the GameInvites table to Status = 1:
+        GameInvites.objects.filter(
+            GameID_id=game_id, 
+            PID_id=game_creator_player, 
+            Status='Invited',
+        ).update(Status='Accepted')   
+
+        # Store necessary data in the session
+        request.session['game_id'] = game_id
+
+        return redirect('skins_invite_status_view')   
+    else:
+        return HttpResponseBadRequest("Invalid request.")  
+    
+
+@login_required
+def skins_game_current_view(request):
+    # Fetch the most recent game with status 'New' or 'Live'
+    game = Games.objects.filter(Status__in=['New', 'Live']).order_by('-CreateDate').first()
+
+    if game:
+        # Store the game_id in the session
+        request.session['game_id'] = game.id
+        return redirect('skins_invite_status_view')
+    else:
+        return HttpResponseBadRequest("No current game found.")
+
+
+@login_required
+def skins_invite_status_view(request):
+        game_id = request.session.pop('game_id', None)
+
+        # Fetch the game invites to display on the skins_invite.html page
+        invites_queryset = GameInvites.objects.filter(GameID=game_id).select_related('PID', 'TTID__CourseID')
+
+        # Get distinct CourseID values
+        distinct_course_ids = invites_queryset.values('TTID__CourseID').distinct()
+        # Extract just the CourseID values
+        distinct_course_ids_list = [course['TTID__CourseID'] for course in distinct_course_ids]
+
+        # Group invites by date, course, and tee time
+        invites = []
+        for cid in distinct_course_ids_list:
+            players = []
+            for invite in invites_queryset:
+                course_id = invite.TTID.CourseID_id
+                if cid == course_id:
+                    g_date = invite.TTID.gDate.strftime('%Y-%m-%d')
+                    c_id = invite.TTID.CourseID
+                    tee_time = invite.TTID.CourseID.courseTimeSlot
+                    course_name = invite.TTID.CourseID.courseName
+                    players.append({
+                        'player_name': f"{invite.PID.FirstName} {invite.PID.LastName}",
+                        'player_id': invite.PID_id,
+                        'status': invite.Status,
+                    })
+            invites.append({
+                'date': g_date, 
+                'CID': c_id,
+                'time': tee_time, 
+                'course': course_name,
+                'players': players,
+            })
+
+        context = {
+            'game_id': game_id,
+            'invites': invites,
+            'first_name': request.user.first_name,
+            'last_name': request.user.last_name,
+        }
+        return render(request, 'GRPR/skins_invite.html', context)
+    
+
+@login_required
+def skins_accept_decline_view(request):
+    game_id = request.GET.get('game_id')
+    player_id = request.GET.get('player_id')
+    gStatus = request.GET.get('gStatus')
+
+    if not game_id or not player_id or not gStatus:
+        return HttpResponseBadRequest("Missing parameters.")
+
+    # Update the status in the GameInvites table
+    GameInvites.objects.filter(GameID_id=game_id, PID_id=player_id).update(Status=gStatus)
+
+    # Fetch the necessary data
+    game_invite = GameInvites.objects.select_related('GameID', 'PID').get(GameID_id=game_id, PID_id=player_id)
+    pDate = game_invite.GameID.PlayDate
+    player = game_invite.PID
+    mobile = player.Mobile
+    
+    # Get the player_id for the current logged-in user
+    user = request.user
+    owner = get_object_or_404(Players, user=user)
+    owner_player_id = owner.id
+
+    # Check if Twilio is enabled
+    twilio_enabled = os.getenv('TWILIO_ENABLED', 'False') == 'True'
+    if twilio_enabled:
+        client = Client(os.getenv('TWILIO_ACCOUNT_SID'), os.getenv('TWILIO_AUTH_TOKEN'))
+        message = client.messages.create(
+            body=f"Your invite status has been changed to {gStatus}",
+            from_=os.getenv('TWILIO_PHONE_NUMBER'),
+            to=mobile
+        )
+        mID = message.sid
+    else:
+        mID = 'Fake'
+        mobile = 'None'
+
+    # Insert a new row into the Log table
+    Log.objects.create(
+        SentDate=timezone.now(),
+        Type='Game Response',
+        MessageID=mID,
+        RequestDate=pDate,
+        OfferID=owner_player_id,
+        ReceiveID=player_id,
+        RefID=game_id,
+        Msg=f'Invite status changed to {gStatus}',
+        To_number=mobile
+    )
+
+    # Store the game_id in the session
+    request.session['game_id'] = game_id
+
+    # Redirect to the skins_invite_status_view
+    return redirect('skins_invite_status_view')
+
+
+@login_required
+def skins_game_start_view(request):
+    game_id = request.GET.get('game_id')
+
+    if not game_id:
+        return HttpResponseBadRequest("Missing game_id parameter.")
+
+    # Update the Games table
+    Games.objects.filter(id=game_id, CrewID=1).update(Status='Tees')
+
+    # Fetch the necessary data
+    game = get_object_or_404(Games, id=game_id)
+    pDate = game.PlayDate
+
+    # Get the player_id for the current logged-in user
+    user = request.user
+    player = get_object_or_404(Players, user=user)
+    player_id = player.id
+
+    # Insert a new row into the Log table
+    Log.objects.create(
+        SentDate=timezone.now(),
+        Type='Game Config',
+        MessageID='None',
+        RequestDate=pDate,
+        OfferID=player_id,
+        RefID=game_id,
+        Msg=f'{game_id} is choosing tees'
+    )
+
+    # Render the skins_tees.html page
+    return render(request, 'GRPR/skins_tees.html')

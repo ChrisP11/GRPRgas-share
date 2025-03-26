@@ -162,7 +162,6 @@
                 <td>{{ offer.proposed_by }}</td>
                 <td>
                     <a href="{% url 'store_swapcounteraccept_data_view' %}?swapid={{ offer.swapID }}&swap_ttid={{ offer.swap_ttid }}" class="btn btn-primary btn-sm">Review Offer</a>
-                    <!-- <a href="{% url 'store_swapcounteraccept_data_view' %}?userID={{ user_id }}&original_offer_date={{ offer.original_offer_date }}&offer_other_players={{ offer.offer_other_players }}&proposed_swap_date={{ offer.proposed_swap_date }}&swap_other_players={{ offer.swap_other_players }}&swapid={{ offer.swapID }}&swap_ttid={{ offer.swap_ttid }}" class="btn btn-primary btn-sm">Accept</a> -->
                 </td>
             </tr>
             {% endfor %}
