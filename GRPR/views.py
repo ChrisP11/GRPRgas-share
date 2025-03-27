@@ -22,6 +22,8 @@ from GRPR.utils import get_open_subswap_or_error, check_player_availability, get
 from twilio.rest import Client # Import the Twilio client
 from twilio.twiml.messaging_response import MessagingResponse
 
+today = datetime.now().date()
+
 # for Twilio.  Creates a response to people who reply to outbound text messages
 @csrf_exempt
 def sms_reply(request):
@@ -1407,13 +1409,15 @@ def swaprequest_view(request):
     if not available_players.exists():
         return render(request, 'GRPR/error_msg.html', {'error_msg': 'No Players have available tee times on this date.'})
     
-    # # Fetch the list of future dates for the offering player (player_id)
-    offering_player_future_dates = TeeTimesInd.objects.filter(PID=player_id, gDate__gt=gDate).values_list('gDate', flat=True)
+    # Fetch the list of future dates for the offering player (player_id)
+    offering_player_future_dates = TeeTimesInd.objects.filter(PID=player_id, gDate__gt=today).values_list('gDate', flat=True)
+    print('offering_player_future_dates', offering_player_future_dates)
 
     available_players_with_swap_dates = []
     for player in available_players:
         # Fetch the list of future dates for the current player
-        player_future_dates = TeeTimesInd.objects.filter(PID=player, gDate__gt=gDate).values_list('gDate', flat=True)
+        player_future_dates = TeeTimesInd.objects.filter(PID=player, gDate__gt=today).values_list('gDate', flat=True)
+        print('player', player, 'player_future_dates', player_future_dates)
         
         # Check if all future dates for the current player are in the offering player's future dates
         if all(date in offering_player_future_dates for date in player_future_dates):
@@ -1421,7 +1425,7 @@ def swaprequest_view(request):
             continue
         
         # Check if the player has any available swap dates
-        available_swap_dates = TeeTimesInd.objects.filter(PID=player, gDate__gt=gDate).exists()
+        available_swap_dates = TeeTimesInd.objects.filter(PID=player, gDate__gt=today).exists()
 
         if available_swap_dates:
             available_players_with_swap_dates.append(player)
@@ -1432,8 +1436,8 @@ def swaprequest_view(request):
     # Generate Available Swap Dates for each available player
     filtered_players = []
     for player in available_players:
-        available_player_dates = TeeTimesInd.objects.filter(PID=player, gDate__gt=gDate).values_list('gDate', 'id')
-        swap_request_player_dates = TeeTimesInd.objects.filter(PID=player_id, gDate__gt=gDate).values_list('gDate', flat=True)
+        available_player_dates = TeeTimesInd.objects.filter(PID=player, gDate__gt=today).values_list('gDate', 'id')
+        swap_request_player_dates = TeeTimesInd.objects.filter(PID=player_id, gDate__gt=today).values_list('gDate', flat=True)
         swap_dates = sorted([(d[0], d[1]) for d in available_player_dates if d[0] not in swap_request_player_dates])
 
         if swap_dates:
