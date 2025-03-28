@@ -2625,6 +2625,12 @@ def countercancel_view(request):
     # Update SubSwap table
     SubSwap.objects.filter(id=subswap_table_id, nStatus='Open', SubType='Counter').update(nStatus='Closed', SubStatus='Cancelled')
 
+    # Ack.  Thi is more complicated.  Since a user can have multiple counters out there, cancelling one of them but having the others still alive
+    # could lead to a situation where the original offer is open and can be countered again.  Possibly with the same counter dates currently live
+    # Update SubSwap table original received row and remove the 'Kountered' status so it can be countered again
+    # SubSwap.objects.filter(id=swap_id, nStatus='Open', SubType='Kountered').update(SubStatus='Received')
+    # print('Kounter Cancel:  Original Received swap offer has been changed from Kountered back to Received so it can be countered again')
+
     # Insert a row into Log table
     Log.objects.create(
         SentDate=timezone.now(),
@@ -2661,6 +2667,141 @@ def swapnoneavail_view(request):
         'tt_id': swap_tt_id,
     }
     return render(request, 'GRPR/swapnoneavail.html', context)
+
+
+@login_required
+def subswap_dashboard_view(request):
+
+    # Total number of sub swaps that result in a tee time trade
+    accepted_count = SubSwap.objects.filter(SubStatus='Accepted').count()
+
+    # Open Subs & Swaps Table
+    open_subswap_data = SubSwap.objects.filter(
+        nStatus='Open',
+        SubType='Offer',
+    ).select_related(
+        'TeeTimeIndID', 'TeeTimeIndID__CourseID', 'PID'
+    ).annotate(
+        gDate=F('TeeTimeIndID__gDate'),
+        course_time_slot=F('TeeTimeIndID__CourseID__courseTimeSlot'),
+        FirstName=F('PID__FirstName'),
+        LastName=F('PID__LastName')
+    ).values(
+        'id',
+        'SwapID',
+        'RequestDate',
+        'TeeTimeIndID_id',
+        'FirstName',
+        'LastName',
+        'gDate',
+        'course_time_slot',
+        'nStatus',
+        'SubStatus',
+        'nType',
+        'SubType'
+    ).order_by('-RequestDate')
+    
+    # Closed Swaps Table
+    closed_subswap_data = SubSwap.objects.filter(
+        nStatus='Closed',
+        SubType='Offer'
+    ).select_related(
+        'TeeTimeIndID', 'TeeTimeIndID__CourseID', 'PID'
+    ).annotate(
+        gDate=F('TeeTimeIndID__gDate'),
+        course_time_slot=F('TeeTimeIndID__CourseID__courseTimeSlot'),
+        FirstName=F('PID__FirstName'),
+        LastName=F('PID__LastName')
+    ).values(
+        'id',
+        'SwapID',
+        'RequestDate',
+        'TeeTimeIndID_id',
+        'FirstName',
+        'LastName',
+        'gDate',
+        'course_time_slot',
+        'nStatus',
+        'SubStatus',
+        'nType',
+        'SubType'
+    ).order_by('-RequestDate')
+
+    context = {
+        'accepted_count': accepted_count,
+        'open_subswap_data': open_subswap_data,
+        'closed_subswap_data': closed_subswap_data,
+        'first_name': request.user.first_name,
+        'last_name': request.user.last_name
+    }
+
+    # Render the template
+    return render(request, 'GRPR/subswap_dashboard.html', context)
+
+
+@login_required
+def subswap_details_view(request):
+    swap_id = request.GET.get('swap_id')
+    # Query for the specific SwapID
+    swap_details = SubSwap.objects.filter(
+        SwapID=swap_id
+    ).select_related(
+        'TeeTimeIndID', 'TeeTimeIndID__CourseID', 'PID'
+    ).annotate(
+        gDate=F('TeeTimeIndID__gDate'),
+        course_time_slot=F('TeeTimeIndID__CourseID__courseTimeSlot'),
+        FirstName=F('PID__FirstName'),
+        LastName=F('PID__LastName')
+    ).values(
+        'id',
+        'SwapID',
+        'RequestDate',
+        'TeeTimeIndID_id',
+        'FirstName',
+        'LastName',
+        'gDate',
+        'course_time_slot',
+        'nStatus',
+        'SubStatus',
+        'nType',
+        'SubType'
+    ).order_by('RequestDate')
+    
+    # Query for the Log Messages table (without ReceiveID and related fields)
+    log_messages = Log.objects.filter(
+        RefID=swap_id
+    ).values(
+        'id',
+        'RefID',
+        'OfferID',
+        'SentDate',
+        'Type',
+        'MessageID',
+        'ReceiveID',
+        'RequestDate',
+        'Msg'
+    ).order_by('SentDate')
+
+    # if the sub Swap has been completed, this will allow us to print out a msg of the details
+    accepted_offer = SubSwap.objects.filter(SwapID=swap_id).filter(SubStatus='Accepted').first()
+    if accepted_offer:
+        teetime_swap_details = Log.objects.filter(RefID = swap_id, Type = 'Swap Offer Accept').first()
+        acceptance_msg = teetime_swap_details.Msg
+    else:
+        acceptance_msg = None
+    
+
+    context = {
+        'swap_details': swap_details,
+        'log_messages': log_messages,
+        'acceptance_msg': acceptance_msg,
+        'swap_id': swap_id,
+        'first_name': request.user.first_name,
+        'last_name': request.user.last_name
+    }
+
+    # Render the template
+    return render(request, 'GRPR/subswap_details.html', context)
 
 
 @login_required

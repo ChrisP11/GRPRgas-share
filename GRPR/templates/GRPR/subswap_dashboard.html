@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+
+{% block title %}SubSwap Dashboard{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h3>Successful Subs / Swaps: {{ accepted_count }}</h3>
+    <br>
+    <h3>Open Subs & Swaps</h3>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Sub ID</th>
+                <th>Request Date</th>
+                <th>Player Name</th>
+                <th>Playing Date</th>
+                <th>Tee Time</th>
+                <th>Status</th>
+                <th>Sub Status</th>
+                <th>Type</th>
+                <th>Sub Type</th>
+                <th>Details</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in open_subswap_data %}
+            <tr>
+                <td>{{ entry.SwapID }}</td>
+                <td>{{ entry.RequestDate }}</td>
+                <td>{{ entry.FirstName }} {{ entry.LastName }}</td>
+                <td>{{ entry.gDate }}</td>
+                <td>{{ entry.course_time_slot }}am</td>
+                <td>{{ entry.nStatus }}</td>
+                <td>{{ entry.SubStatus }}</td>
+                <td>{{ entry.nType }}</td>
+                <td>{{ entry.SubType }}</td>
+                <td>
+                    <a href="{% url 'subswap_details' %}?swap_id={{ entry.SwapID }}" class="btn btn-primary btn-sm">Details</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <br>
+    <h3>Closed Subs & Swaps </h3>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Swap ID</th>
+                <th>Request Date</th>
+                <th>Player Name</th>
+                <th>Playing Date</th>
+                <th>Tee Time</th>
+                <th>Status</th>
+                <th>Sub Status</th>
+                <th>Type</th>
+                <th>Sub Type</th>
+                <th>Details</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in closed_subswap_data %}
+            <tr>
+                <td>{{ entry.SwapID }}</td>
+                <td>{{ entry.RequestDate }}</td>
+                <td>{{ entry.FirstName }} {{ entry.LastName }}</td>
+                <td>{{ entry.gDate }}</td>
+                <td>{{ entry.course_time_slot }}am</td>
+                <td>{{ entry.nStatus }}</td>
+                <td>{{ entry.SubStatus }}</td>
+                <td>{{ entry.nType }}</td>
+                <td>{{ entry.SubType }}</td>
+                <td>
+                    <a href="{% url 'subswap_details' %}?swap_id={{ entry.SwapID }}" class="btn btn-primary btn-sm">Details</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

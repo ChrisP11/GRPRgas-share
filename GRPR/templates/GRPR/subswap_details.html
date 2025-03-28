@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+
+{% block title %}SubSwap Details{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h3>Sub Swap Details - ID: {{ swap_id }}</h3>
+    <h4>Acceptance Msg:  {{ acceptance_msg }}</h4>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Swap ID</th>
+                <th>Request Date</th>
+                <th>Player Name</th>
+                <th>Playing Date</th>
+                <th>Tee Time</th>
+                <th>Status</th>
+                <th>Sub Status</th>
+                <th>Type</th>
+                <th>Sub Type</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in swap_details %}
+            <tr>
+                <td>{{ entry.id }}</td>
+                <td>{{ entry.SwapID }}</td>
+                <td>{{ entry.RequestDate }}</td>
+                <td>{{ entry.FirstName }} {{ entry.LastName }}</td>
+                <td>{{ entry.gDate }}</td>
+                <td>{{ entry.course_time_slot }}</td>
+                <td>{{ entry.nStatus }}</td>
+                <td>{{ entry.SubStatus }}</td>
+                <td>{{ entry.nType }}</td>
+                <td>{{ entry.SubType }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h3>Log Messages</h3>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Ref ID</th>
+                <th>Offer ID</th>
+                <th>Sent Date</th>
+                <th>Type</th>
+                <th>Message ID</th>
+                <th>Request Date</th>
+                <th>Receiver ID</th>
+                <th>Message</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in log_messages %}
+            <tr>
+                <td>{{ log.id }}</td>
+                <td>{{ log.RefID }}</td>
+                <td>{{ log.OfferID }}</td>
+                <td>{{ log.SentDate }}</td>
+                <td>{{ log.Type }}</td>
+                <td>{{ log.MessageID }}</td>
+                <td>{{ log.RequestDate }}</td>
+                <td>{{ log.ReceiveID }}</td>
+                <td>{{ log.Msg }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
