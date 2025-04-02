@@ -4,7 +4,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpResponse
 from django.http import HttpResponseBadRequest
 from django.utils import timezone
-from GRPR.models import Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity, SMSResponse, Xdates, Games, GameInvites
+from GRPR.models import Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity, SMSResponse, Xdates, Games, GameInvites, CourseTees, ScorecardMeta, Crews, CourseHoles
 from datetime import datetime
 from django.conf import settings  # Import settings
 from django.contrib.auth.views import LoginView # added for secure login page creation
@@ -15,12 +15,22 @@ from django.contrib.auth.decorators import login_required # added to require cer
 from django.views.decorators.csrf import csrf_exempt # added to allow Twilio to send messages
 from django.contrib.auth.models import User # for user activity tracking on Admin page
 from django.contrib.auth import login as auth_login # for user activity tracking on Admin page
-from django.db.models import Q, Count, F, Func, Subquery, OuterRef, Value
+from django.db.models import Q, Count, F, Func, Subquery, OuterRef
+from django.db import transaction
 from django.urls import reverse_lazy
 from django.core.mail import send_mail
 from GRPR.utils import get_open_subswap_or_error, check_player_availability, get_tee_time_details
 from twilio.rest import Client # Import the Twilio client
 from twilio.twiml.messaging_response import MessagingResponse
+from decimal import Decimal
+import math
+
+# Function to round numbers to the nearest integer
+def custom_round(value):
+    if value >= 0:
+        return math.floor(value + 0.5)  # Round up at .5 for positive numbers
+    else:
+        return math.ceil(value - 0.5)  # Round up at .5 for negative numbers
 
 today = datetime.now().date()
 
@@ -2986,33 +2996,28 @@ def profile_view(request):
 @login_required
 def skins_view(request):
     user = request.user
+    # Discover if there is a current game in process
+    game = Games.objects.exclude(Status='Closed').order_by('-CreateDate').first()
+    gDate = game.PlayDate if game else None
+    game_creator = game.CreateID if game else None
+    game_status = game.Status if game else None
+    game_id = game.id if game else None
 
     context = {
         'first_name': user.first_name,
         'last_name': user.last_name,
+        'game_creator': game_creator,
+        'gDate': gDate, 
+        'game_status': game_status,
+        'game_id': game_id,
     }
 
     return render(request, 'GRPR/skins.html', context)
 
 
-@login_required
-def scorecard_view(request):
-    # Fetch distinct tee times
-    teetimes = TeeTimesInd.objects.values('gDate', 'CourseID__courseName', 'CourseID__courseTimeSlot').distinct().order_by('gDate', 'CourseID__courseTimeSlot')
-
-    # Fetch players for each distinct tee time
-    for teetime in teetimes:
-        teetime['players'] = list(TeeTimesInd.objects.filter(
-            gDate=teetime['gDate'],
-            CourseID__courseName=teetime['CourseID__courseName'],
-            CourseID__courseTimeSlot=teetime['CourseID__courseTimeSlot']
-        ).select_related('PID').values('PID__FirstName', 'PID__LastName'))
-    print('teetime', teetimes)
-
-    return render(request, 'GRPR/scorecard.html', {'teetimes': teetimes})
 
 @login_required
-def new_skins_game_view(request):
+def skins_new_game_view(request):
     # Get today's date
     current_datetime = datetime.now()
 
@@ -3062,7 +3067,7 @@ def new_skins_game_view(request):
         'first_name': request.user.first_name,
         'last_name': request.user.last_name,
     }
-    return render(request, 'GRPR/new_skins_game.html', context)
+    return render(request, 'GRPR/skins_new_game.html', context)
 
 
 @login_required
@@ -3084,7 +3089,7 @@ def skins_invite_view(request):
             CrewID=1,
             CreateDate=timezone.now().date(),
             PlayDate=gDate,
-            Status='New',
+            Status='Invite',
         )
         game_id = game.id
 
@@ -3143,29 +3148,20 @@ def skins_invite_view(request):
         ).update(Status='Accepted')   
 
         # Store necessary data in the session
+        print('game_id', game_id)
         request.session['game_id'] = game_id
 
-        return redirect('skins_invite_status_view')   
+        return redirect('skins_invite_status_view')
     else:
         return HttpResponseBadRequest("Invalid request.")  
     
 
-@login_required
-def skins_game_current_view(request):
-    # Fetch the most recent game with status 'New' or 'Live'
-    game = Games.objects.filter(Status__in=['New', 'Live']).order_by('-CreateDate').first()
-
-    if game:
-        # Store the game_id in the session
-        request.session['game_id'] = game.id
-        return redirect('skins_invite_status_view')
-    else:
-        return HttpResponseBadRequest("No current game found.")
-
 
 @login_required
 def skins_invite_status_view(request):
-        game_id = request.session.pop('game_id', None)
+        game_id = request.GET.get('game_id') or request.session.pop('game_id', None)  # Retrieve from query params or session
+        if not game_id:
+            return HttpResponseBadRequest("Game ID is missing.")
 
         # Fetch the game invites to display on the skins_invite.html page
         invites_queryset = GameInvites.objects.filter(GameID=game_id).select_related('PID', 'TTID__CourseID')
@@ -3265,8 +3261,9 @@ def skins_accept_decline_view(request):
     return redirect('skins_invite_status_view')
 
 
+# this view picks the tees for the Skins game
 @login_required
-def skins_game_start_view(request):
+def skins_choose_tees_view(request):
     game_id = request.GET.get('game_id')
 
     if not game_id:
@@ -3278,22 +3275,247 @@ def skins_game_start_view(request):
     # Fetch the necessary data
     game = get_object_or_404(Games, id=game_id)
     pDate = game.PlayDate
+    ct_id = game.CourseTeesID_id
 
     # Get the player_id for the current logged-in user
     user = request.user
     player = get_object_or_404(Players, user=user)
     player_id = player.id
+    # player_name = f"{player.FirstName} {player.LastName}"
 
-    # Insert a new row into the Log table
-    Log.objects.create(
-        SentDate=timezone.now(),
-        Type='Game Config',
-        MessageID='None',
-        RequestDate=pDate,
-        OfferID=player_id,
-        RefID=game_id,
-        Msg=f'{game_id} is choosing tees'
-    )
+    # # Insert a new row into the Log table
+    # Log.objects.create(
+    #     SentDate=timezone.now(),
+    #     Type='Skins Config',
+    #     MessageID='None',
+    #     RequestDate=pDate,
+    #     OfferID=player_id,
+    #     RefID=game_id,
+    #     Msg=f'{player_name} is on the choosing tees page, game id: {game_id}'
+    # )
+
+    # Fetch the game invites to display on the skins_invite.html page
+    invites_queryset = GameInvites.objects.filter(GameID=game_id, Status='Accepted').select_related('PID', 'TTID__CourseID')
+
+    # Get distinct CourseID values
+    distinct_course_ids = invites_queryset.values('TTID__CourseID').distinct()
+    # Extract just the CourseID values
+    distinct_course_ids_list = [course['TTID__CourseID'] for course in distinct_course_ids]
+
+    # Group invites by date, course, and tee time
+    invites = []
+    for cid in distinct_course_ids_list:
+        players = []
+        for invite in invites_queryset:
+            course_id = invite.TTID.CourseID_id
+            if cid == course_id:
+                g_date = invite.TTID.gDate.strftime('%Y-%m-%d')
+                c_id = invite.TTID.CourseID
+                tee_time = invite.TTID.CourseID.courseTimeSlot
+                course_name = invite.TTID.CourseID.courseName
+                players.append({
+                    'player_name': f"{invite.PID.FirstName} {invite.PID.LastName}",
+                    'player_id': invite.PID_id,
+                    'player_index': invite.PID.Index,
+                })
+        invites.append({
+            'date': g_date, 
+            'CID': c_id,
+            'time': tee_time, 
+            'course': course_name,
+            'players': players,
+        })
+    
+    tee_options = CourseTees.objects.filter(CourseID=ct_id).order_by('TeeID')
+    
+    tee_options_list = []
+    for tee in tee_options:
+        tee_options_list.append({
+            'tee_id': tee,
+            'name': tee.TeeName,
+            'rating': tee.CourseRating,
+            'slope': tee.SlopeRating,
+            'yards': tee.Yards,
+        })
+
+
+    context = {
+        'game_id': game_id,
+        'invites': invites,
+        'tee_options_list': tee_options_list,
+        'first_name': request.user.first_name,
+        'last_name': request.user.last_name,
+    }
 
     # Render the skins_tees.html page
-    return render(request, 'GRPR/skins_tees.html')
+    return render(request, 'GRPR/skins_tees.html', context)
+
+
+@login_required
+def skins_initiate_scorecard_meta_view(request):
+    if request.method == "POST":
+        game_id = request.POST.get("game_id")
+        player_ids = request.POST.getlist("player_ids")
+        print('skins_initiate_scorecard_meta_view - game_id:', game_id)
+        print(player_ids)
+
+        # Update the Games table to set the status to 'Live'
+        Games.objects.filter(id=game_id).update(Status="Live")
+
+        # Get logged-in user's player ID
+        logged_in_user = get_object_or_404(Players, user_id=request.user.id)
+        logged_in_user_player_id = logged_in_user.id
+
+        # Get game details
+        game = get_object_or_404(Games, id=game_id)
+        play_date = game.PlayDate
+        ct_id = game.CourseTeesID_id
+        crew_id = game.CrewID
+        crew = get_object_or_404(Crews, id=crew_id)
+        print('player_ids', player_ids)
+
+        # Process each player
+        with transaction.atomic():
+            for player_id in player_ids:
+                tee_id = request.POST.get(f"tee_ids_{player_id}")  # Get the tee_id for this player
+                print(f"Processing player_id: {player_id}, tee_id: {tee_id}")
+
+                # Convert tee_id to a CourseTees object
+                tee_object = get_object_or_404(CourseTees, id=int(tee_id))
+
+                # Get player index and slope
+                player = get_object_or_404(Players, id=player_id)
+                index = player.Index
+                slope = tee_object.SlopeRating  # Access the SlopeRating directly from the object
+
+                # Calculate raw handicap
+                if index == 0 or index is None:
+                    # Avoid division by zero, if index is 0, set raw handicap to 0
+                    raw_hcdp = 0
+                else:
+                    raw_hcdp = (slope / Decimal(113)) * Decimal(index)
+
+                # Get group ID (courseTimeSlot)
+                group_id = (
+                    GameInvites.objects.filter(GameID=game_id, PID=player_id)
+                    .select_related("TTID__CourseID")
+                    .first()
+                    .TTID.CourseID.courseTimeSlot
+                )
+
+                # Insert into ScorecardMeta
+                ScorecardMeta.objects.create(
+                    GameID=game,
+                    CreateDate=timezone.now(),
+                    CreateID=logged_in_user_player_id,
+                    PlayDate=play_date,
+                    PID=player,
+                    CrewID=crew,
+                    CourseID=ct_id,
+                    TeeID=tee_object,  # Save the CourseTees object
+                    Index=index,
+                    RawHDCP=raw_hcdp,
+                    GroupID=group_id,
+                )
+        
+        # Calculate the NetHDCP for each player
+        scm = ScorecardMeta.objects.filter(GameID=game_id)
+        print('ScorecardMeta entries:', scm)
+
+        # Find the lowest RawHDCP
+        lowest_raw_hdcp = scm.order_by('RawHDCP').first().RawHDCP
+        print('Lowest RawHDCP:', lowest_raw_hdcp)
+
+        # Update NetHDCP for each player
+        for hdcp in scm:
+            pid = hdcp.PID
+            raw_hdcp = hdcp.RawHDCP
+            net_hdcp = custom_round(float(raw_hdcp - lowest_raw_hdcp))
+            hdcp.NetHDCP = net_hdcp
+            hdcp.save()  # Save the updated NetHDCP
+            print(f"Updated NetHDCP for PID {pid}: {net_hdcp}")
+
+        request.session['game_id'] = game_id
+
+        return redirect('skins_leaderboard_view')
+    else:
+        return HttpResponseBadRequest("Invalid request.")
+
+
+@login_required
+def skins_leaderboard_view(request):
+    # Retrieve game_id from session or query parameters
+    game_id = request.GET.get('game_id') or request.session.pop('game_id', None)
+    if not game_id:
+        return HttpResponseBadRequest("Game ID is missing.")
+    print('skins_leaderboard_view game_id', game_id)
+
+    # Query the ScorecardMeta table and join with related models
+    scorecard_meta = ScorecardMeta.objects.filter(
+        GameID_id=game_id
+    ).select_related(
+        'PID',  # Join with Players
+        'TeeID'  # Join with CourseTees
+    ).annotate(
+        first_name=F('PID__FirstName'),  # Player's first name
+        last_name=F('PID__LastName'),  # Player's last name
+        tee_name=F('TeeID__TeeName')  # Tee name
+    )
+
+    # Build a list of dictionaries for the leaderboard
+    leaderboard = []
+    for entry in scorecard_meta:
+        leaderboard.append({
+            'first_name': entry.first_name,
+            'last_name': entry.last_name,
+            'index': entry.Index,
+            'raw_hdcp': entry.RawHDCP,
+            'net_hdcp': entry.NetHDCP,
+            'tee_name': entry.tee_name,
+        })
+
+    # Pass data to the template
+    context = {
+        "game_id": game_id,
+        "leaderboard": leaderboard,  
+        'first_name': request.user.first_name,
+        'last_name': request.user.last_name,
+
+    }
+    return render(request, "GRPR/skins_leaderboard.html", context)
+
+
+## Scorecard work
+
+@login_required
+def select_hole_view(request):
+    # Get the CourseTees object with id = 4
+    course_tees = get_object_or_404(CourseTees, id=4)
+
+    # Query the CourseHoles table for the corresponding CourseTeesID
+    holes = CourseHoles.objects.filter(CourseTeesID=course_tees).order_by('HoleNumber')
+
+    # Pass the data to the template
+    context = {
+        'holes': holes,
+        'course_name': course_tees.CourseName,  # Optional: Display the course name
+    }
+    return render(request, 'GRPR/select_hole.html', context)
+
+@login_required
+def scorecard_view(request):
+    # Fetch distinct tee times
+    teetimes = TeeTimesInd.objects.values('gDate', 'CourseID__courseName', 'CourseID__courseTimeSlot').distinct().order_by('gDate', 'CourseID__courseTimeSlot')
+
+    # Fetch players for each distinct tee time
+    for teetime in teetimes:
+        teetime['players'] = list(TeeTimesInd.objects.filter(
+            gDate=teetime['gDate'],
+            CourseID__courseName=teetime['CourseID__courseName'],
+            CourseID__courseTimeSlot=teetime['CourseID__courseTimeSlot']
+        ).select_related('PID').values('PID__FirstName', 'PID__LastName'))
+    print('teetime', teetimes)
+
+    return render(request, 'GRPR/scorecard.html', {'teetimes': teetimes})
+
+

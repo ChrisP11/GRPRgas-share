@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+
+{% block title %}Skins Leaderboard{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <h2>Skins Leaderboard game id: {{game_id}}</h2>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Player Name</th>
+                <th>Index</th>
+                <th>HDCP</th>
+                <th>Strokes</th>
+                <th>Tee</th>
+                <th>Hole</th>
+                <th>Skins</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for player in leaderboard %}
+            <tr>
+                <td>{{ player.last_name }}</td>
+                <td>{{ player.index }}</td>
+                <td>{{ player.raw_hdcp }}</td>
+                <td>{{ player.net_hdcp }}</td>
+                <td>{{ player.tee_name }}</td>
+                <td></td>
+                <td></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<a href="{% url 'select_hole_view' %}" class="btn btn-primary">Scorecard</a>
+
+
+{% endblock %}

@@ -4,6 +4,88 @@
 
 {% block content %}
 <div class="container my-4">
-    <h1>Future Tee Choice work</h1>
+    <h1>Skins - Choose Tees</h1>
+    {% for group in invites %}
+    <div class="card my-3">
+        <div class="card-header">
+            <div class="row">
+                <div class="col-md-3"><strong>Player Name</strong></div>
+                <div class="col-md-3"><strong>Index</strong></div>
+                <div class="col-md-3"><strong>Tee</strong></div>
+                <div class="col-md-3"><strong>Adj Index</strong></div>
+            </div>
+        </div>
+        <div class="card-body">
+            <ul class="list-group">
+                {% for player in group.players %}
+                <li class="list-group-item">
+                    <div class="row">
+                        <div class="col-md-3">{{ player.player_name }}</div>
+                        <div class="col-md-3">{{ player.player_index }}</div>
+                        <div class="col-md-3">
+                            <select class="form-select tee-dropdown" name="tee_choice_{{ player.player_id }}" data-player-id="{{ player.player_id }}" data-player-index="{{ player.player_index }}">
+                                {% for tee_option in tee_options_list %}
+                                <option value="{{ tee_option.tee_id.id }}" data-slope="{{ tee_option.slope }}" data-tee-name="{{ tee_option.name }}" {% if tee_option.tee_id.id == 4 %}selected{% endif %}>
+                                    {{ tee_option.name }} - {{ tee_option.rating }} - {{ tee_option.slope }} - {{ tee_option.yards }} yds
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <span class="adj-index">0.0</span>
+                        </div>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endfor %}
+    <div class="d-grid gap-2">
+        <form method="POST" action="{% url 'skins_initiate_scorecard_meta_view' %}">
+            {% csrf_token %}
+            <input type="hidden" name="game_id" value="{{ game_id }}">
+            {% for group in invites %}
+                {% for player in group.players %}
+                    <input type="hidden" name="player_ids" value="{{ player.player_id }}">
+                    <input type="hidden" class="tee-id-input" name="tee_ids_{{ player.player_id }}" data-player-id="{{ player.player_id }}" value="4">
+                {% endfor %}
+            {% endfor %}
+            <button type="submit" class="btn btn-primary">Start Game</button>
+        </form>
+        <a href="{% url 'skins_invite_view' %}?game_id={{ game_id }}" class="btn btn-secondary-custom" role="button">Back to Invite Page</a>
+    </div>
 </div>
+
+<script>
+    // JavaScript to dynamically calculate and update the adjusted index and tee_id
+    document.addEventListener('DOMContentLoaded', function () {
+        const teeDropdowns = document.querySelectorAll('.tee-dropdown');
+
+        teeDropdowns.forEach(dropdown => {
+            dropdown.addEventListener('change', function () {
+                const playerIndex = parseFloat(this.getAttribute('data-player-index'));
+                const selectedSlope = parseFloat(this.options[this.selectedIndex].getAttribute('data-slope'));
+                const adjIndexElement = this.closest('.row').querySelector('.adj-index');
+                const playerId = this.getAttribute('data-player-id');
+                const selectedTeeId = this.value;
+
+                // Update the adjusted index display
+                if (!isNaN(playerIndex) && !isNaN(selectedSlope)) {
+                    const adjIndex = Math.round((playerIndex * (selectedSlope / 113)) * 10) / 10;
+                    adjIndexElement.textContent = adjIndex.toFixed(1);
+                }
+
+                // Update the hidden input for tee_id
+                const teeIdInput = document.querySelector(`.tee-id-input[data-player-id="${playerId}"]`);
+                if (teeIdInput) {
+                    teeIdInput.value = selectedTeeId;
+                }
+            });
+
+            // Trigger change event on page load to calculate initial values
+            dropdown.dispatchEvent(new Event('change'));
+        });
+    });
+</script>
 {% endblock %}

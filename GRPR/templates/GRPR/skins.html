@@ -3,11 +3,23 @@
 {% block title %}Skins Game{% endblock %}
 
 {% block content %}
+
+{% if game_status != None %}
+<p>There is a game currently in process.  Status = {{ game_status }}.  Click the 'Go to Current Game button below to access the game.</p>
+{% endif %}
+
 <div class="col-lg-6 col-xxl-4 my-5 mx-auto">
   <div class="d-grid gap-2">
-    <a href="{% url 'new_skins_game_view' %}" class="btn btn-primary" role="button">New Game</a>
-    <a href="{% url 'skins_game_current_view' %}" class="btn btn-primary" role="button">Current Game</a>
-    <a href="#" class="btn btn-secondary-custom" role="button">All Time Leaderboard</a>
+    {% if game_status == 'Live' %}
+    <a href="{% url 'skins_leaderboard_view' %}?game_id={{ game_id }}" class="btn btn-primary" role="button">Current Leaderboard</a>
+    {% elif game_status == 'Tees' %}
+    <a href="{% url 'skins_choose_tees_view' %}?game_id={{ game_id }}" class="btn btn-primary" role="button">Choose Tees for the Game</a>
+    {% elif game_status == 'Invite' %}
+    <a href="{% url 'skins_invite_status_view' %}?game_id={{ game_id }}" class="btn btn-primary" role="button">Check Invite Status</a>
+    {% else %}
+    <a href="{% url 'skins_new_game_view' %}" class="btn btn-primary" role="button">Invite Players to a New Game</a>
+    {% endif %}
+    <a href="#" class="btn btn-secondary-custom" role="button">All Time Stats</a>
   </div>
 </div>
 {% endblock %}

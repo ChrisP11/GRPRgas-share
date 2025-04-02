@@ -39,6 +39,8 @@ class Players(models.Model):
     Mobile = models.CharField(max_length=256)
     SplitPartner = models.IntegerField(null=True)
     Member = models.IntegerField(null=True)
+    GHIN = models.IntegerField(null=True)
+    Index = models.DecimalField(max_digits=3, decimal_places=1, null=True, blank=True)  
 
     class Meta:
         db_table = "Players"
@@ -126,8 +128,11 @@ class ScorecardMeta(models.Model):
     PID = models.ForeignKey('Players', on_delete=models.CASCADE)  # Links to Players table
     CrewID = models.ForeignKey('Crews', on_delete=models.CASCADE)  # Links to Crews table
     CourseID = models.IntegerField() # will eventually link to Course Data table
-    TeeID = models.IntegerField(null=True, blank=True) # will eventually link to Course Data table
-    GroupID = models.IntegerField() # will probably be time_slot to start
+    TeeID = models.ForeignKey('CourseTees', on_delete=models.CASCADE, null=True, blank=True)
+    Index = models.DecimalField(max_digits=3, decimal_places=1,null=True, blank=True)
+    RawHDCP = models.DecimalField(max_digits=3, decimal_places=1, null=True, blank=True) 
+    NetHDCP = models.IntegerField(null=True, blank=True)
+    GroupID = models.CharField(max_length=16, null=True, blank=True)
 
     class Meta:
         db_table = "ScorecardMeta"
@@ -151,6 +156,7 @@ class Games(models.Model):
     CrewID = models.IntegerField()
     CreateDate = models.DateField()
     PlayDate = models.DateField()
+    CourseTeesID = models.ForeignKey('CourseTees', on_delete=models.CASCADE, default=1)  # Links to CourseTees table
     Status = models.CharField(max_length=32, default='Pending')
 
     class Meta:
@@ -166,3 +172,28 @@ class GameInvites(models.Model):
 
     class Meta:
         db_table = "GameInvites"
+
+
+class CourseTees(models.Model):
+    CourseID = models.IntegerField(null=True, blank=True)
+    CourseName = models.CharField(max_length=128)
+    TeeID = models.IntegerField()
+    TeeName = models.CharField(max_length=128)
+    CourseRating = models.DecimalField(max_digits=4, decimal_places=1)  
+    SlopeRating = models.IntegerField()
+    Par = models.IntegerField()
+    Yards = models.IntegerField()
+
+    class Meta:
+        db_table = "CourseTees"
+
+
+class CourseHoles(models.Model):
+    CourseTeesID = models.ForeignKey('CourseTees', on_delete=models.CASCADE, default=1)  # Links to CourseTees table
+    HoleNumber = models.IntegerField()
+    Par = models.IntegerField()
+    Yardage = models.IntegerField()
+    Handicap = models.IntegerField()
+
+    class Meta:
+        db_table = "CourseHoles"

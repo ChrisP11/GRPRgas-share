@@ -121,7 +121,7 @@ LOGIN_URL = '/login/'
 LOGOUT_REDIRECT_URL = '/login/'
 
 # Session settings, recommended settings
-SESSION_COOKIE_AGE = 3600  # Set session duration to 1 hour (3600 seconds), default is 2 weeks, comment out this line to revert to that timeframe
+SESSION_COOKIE_AGE = 86400  # Set session duration to 24 hour (1 hr = 3600 seconds), default is 2 weeks, comment out this line to revert to that timeframe
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True  # Expire session when the browser is closed
 SESSION_COOKIE_SECURE = not DEBUG  # Ensure session cookies are only sent over HTTPS in production
 SESSION_COOKIE_HTTPONLY = True  # Ensure session cookies are inaccessible to JavaScript
@@ -178,3 +178,5 @@ DEFAULT_FROM_EMAIL = os.environ.get('EMAIL_HOST_USER')
 # Environment setting
 ENVIRO = os.environ.get('ENVIRO', 'Prod')
 print(f"Environment: {ENVIRO}")  
+print(f"ENVIRO: {os.environ.get('ENVIRO')}")
+print(f"TWILIO_ENABLED: {os.environ.get('TWILIO_ENABLED')}")
