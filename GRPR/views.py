@@ -1,10 +1,10 @@
 import os
 import json
 from django.shortcuts import render, get_object_or_404, redirect
-from django.http import HttpResponse
-from django.http import HttpResponseBadRequest
+from django.http import HttpResponse, JsonResponse, HttpResponseBadRequest
+# from django.http import HttpResponseBadRequest
 from django.utils import timezone
-from GRPR.models import Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity, SMSResponse, Xdates, Games, GameInvites, CourseTees, ScorecardMeta, Crews, CourseHoles
+from GRPR.models import Crews, Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity, SMSResponse, Xdates, Games, GameInvites, CourseTees, ScorecardMeta, Scorecard, CourseHoles
 from datetime import datetime
 from django.conf import settings  # Import settings
 from django.contrib.auth.views import LoginView # added for secure login page creation
@@ -3478,17 +3478,19 @@ def skins_leaderboard_view(request):
     context = {
         "game_id": game_id,
         "leaderboard": leaderboard,  
-        'first_name': request.user.first_name,
-        'last_name': request.user.last_name,
+        "first_name": request.user.first_name,
+        "last_name": request.user.last_name,
 
     }
     return render(request, "GRPR/skins_leaderboard.html", context)
 
 
-## Scorecard work
+##########################
+#### Scorecard views ####
+##########################
 
 @login_required
-def select_hole_view(request):
+def hole_select_view(request):
     # Get the CourseTees object with id = 4
     course_tees = get_object_or_404(CourseTees, id=4)
 
@@ -3500,22 +3502,195 @@ def select_hole_view(request):
         'holes': holes,
         'course_name': course_tees.CourseName,  # Optional: Display the course name
     }
-    return render(request, 'GRPR/select_hole.html', context)
+    return render(request, 'GRPR/hole_select.html', context)
+
+
+@login_required
+def hole_score_view(request, hole_id, group_id, game_id):
+    # Fetch the specific hole using the provided id
+    hole = get_object_or_404(CourseHoles, id=hole_id)
+
+    # Fetch the players in the specified group
+    players = ScorecardMeta.objects.filter(GameID=game_id, GroupID=group_id).select_related('PID').values(
+        first_name=F('PID__FirstName'),
+        last_name=F('PID__LastName'),
+        pid=F('PID__id'),
+        scm_id=F('id'),  # Include ScorecardMeta ID
+    )
+
+    # Convert players queryset to a list of dictionaries
+    player_list = list(players)
+
+    # Fetch existing scores for the selected hole and players
+    existing_scores = Scorecard.objects.filter(GameID_id=game_id, HoleID_id=hole_id).values(
+        'id', 'RawScore', 'Putts', 'smID_id'
+    )
+
+    # Map existing scores by ScorecardMeta ID (scm_id)
+    scores_map = {score['smID_id']: score for score in existing_scores}
+
+    # Add existing scores and putts to the player list
+    for player in player_list:
+        scm_id = player['scm_id']
+        if scm_id in scores_map:
+            player['existing_score'] = scores_map[scm_id]['RawScore']
+            player['existing_putts'] = scores_map[scm_id]['Putts']
+            player['scorecard_id'] = scores_map[scm_id]['id']  # Include the Scorecard row ID
+        else:
+            player['existing_score'] = None
+            player['existing_putts'] = None
+            player['scorecard_id'] = None
+
+    # Add a flag to check if any player has a scorecard_id
+    has_existing_scores = any(player['scorecard_id'] for player in player_list)
+
+    # Pass the data to the template
+    context = {
+        'hole_obj': hole,
+        'HoleNumber': hole.HoleNumber,
+        'Par': hole.Par,
+        'Yardage': hole.Yardage,
+        'Handicap': hole.Handicap,
+        'player_list': player_list,  # Add players in the group to the context
+        'game_id': game_id,
+        'group_id': group_id,
+        'score_range': range(1, 10),  # Add a range of scores (1 through 9)
+        'putt_range': range(0, 10),  # Add a range of putts (0 through 9)
+        'first_name': request.user.first_name,
+        'last_name': request.user.last_name,
+        'has_existing_scores': has_existing_scores,  # Add the flag to the context
+    }
+    return render(request, 'GRPR/hole_score.html', context)
+
+
+@login_required
+def hole_input_score_view(request):
+    if request.method == 'POST':
+        data = json.loads(request.body)
+        players = data.get('players', [])
+        hole_id = data.get('hole_id')
+        game_id = data.get('game_id')
+
+        # Fetch the logged-in user's Player ID
+        logged_in_user = get_object_or_404(Players, user_id=request.user.id)
+        logged_in_user_id = logged_in_user.id
+
+        for player in players:
+            pid = player['pid']
+            score = player['score']
+            putts = player['putts']
+            scorecard_id = player.get('scorecard_id')  # Get the Scorecard row ID if it exists
+
+            if scorecard_id:  # If a scorecard ID exists, update the row
+                Scorecard.objects.filter(id=scorecard_id).update(
+                    AlterDate=timezone.now(),
+                    RawScore=score,
+                    NetScore=score,
+                    AlterID_id=logged_in_user_id,
+                    Putts=putts
+                )
+            else:  # Otherwise, insert a new row
+                scm = ScorecardMeta.objects.filter(GameID=game_id, PID=pid).first()
+                if not scm:
+                    return JsonResponse({'success': False, 'error': 'ScorecardMeta not found for player.'})
+
+                Scorecard.objects.create(
+                    CreateDate=timezone.now(),
+                    AlterDate=timezone.now(),
+                    RawScore=score,
+                    NetScore=score,
+                    AlterID_id=logged_in_user_id,
+                    smID_id=scm.id,
+                    GameID_id=game_id,
+                    HoleID_id=hole_id,
+                    Putts=putts
+                )
+
+        # Get the next hole
+        current_hole = CourseHoles.objects.get(id=hole_id)
+        next_hole = CourseHoles.objects.filter(
+            CourseTeesID=current_hole.CourseTeesID,
+            HoleNumber=current_hole.HoleNumber + 1
+        ).first()
+
+        if not next_hole:
+            # If no next hole, wrap around to the first hole
+            next_hole = CourseHoles.objects.filter(
+                CourseTeesID=current_hole.CourseTeesID,
+                HoleNumber=1
+            ).first()
+
+        return JsonResponse({'success': True, 'next_hole_id': next_hole.id})
+
+    return JsonResponse({'success': False, 'error': 'Invalid request method.'})
+
 
 @login_required
 def scorecard_view(request):
-    # Fetch distinct tee times
-    teetimes = TeeTimesInd.objects.values('gDate', 'CourseID__courseName', 'CourseID__courseTimeSlot').distinct().order_by('gDate', 'CourseID__courseTimeSlot')
+    # Fetch game_id from GET parameters
+    game_id = request.GET.get('game_id', None)
+    group_id = ScorecardMeta.objects.filter(GameID=game_id, PID__user_id=request.user.id).values_list('GroupID', flat=True).distinct().first()
 
-    # Fetch players for each distinct tee time
-    for teetime in teetimes:
-        teetime['players'] = list(TeeTimesInd.objects.filter(
-            gDate=teetime['gDate'],
-            CourseID__courseName=teetime['CourseID__courseName'],
-            CourseID__courseTimeSlot=teetime['CourseID__courseTimeSlot']
-        ).select_related('PID').values('PID__FirstName', 'PID__LastName'))
-    print('teetime', teetimes)
+    # Fetch players where GameID = game_id and GroupID = group_id
+    players = ScorecardMeta.objects.filter(GameID=game_id, GroupID=group_id).select_related('PID').values(
+        first_name=F('PID__FirstName'),
+        last_name=F('PID__LastName'),
+        pid=F('PID__id'),
+    )
 
-    return render(request, 'GRPR/scorecard.html', {'teetimes': teetimes})
+    # Convert players queryset to a list of dictionaries
+    player_list = list(players)
+
+    # Fetch the most common TeeID_id for the specified GroupID and GameID
+    most_common_tee_id = (
+        ScorecardMeta.objects.filter(GameID=game_id, GroupID=group_id)
+        .values('TeeID_id')
+        .annotate(count=Count('TeeID_id'))
+        .order_by('-count')
+        .first()
+    )
+
+    # Fetch CourseHoles data for the most common TeeID_id
+    course_holes = []
+    course_name = None
+    if most_common_tee_id:
+        course_holes = CourseHoles.objects.filter(CourseTeesID_id=most_common_tee_id['TeeID_id']).order_by('HoleNumber').values(
+            'id', 'HoleNumber', 'Par', 'Yardage', 'Handicap'
+        )
+        # Fetch the CourseName from CourseTees
+        course_name = CourseTees.objects.filter(id=most_common_tee_id['TeeID_id']).values_list('CourseName', flat=True).first()
+
+    # Fetch the PlayDate from Games
+    play_date = Games.objects.filter(id=game_id).values_list('PlayDate', flat=True).first()
+
+    # Fetch scores for each player and hole
+    scores = Scorecard.objects.filter(GameID_id=game_id).select_related('HoleID', 'smID').values(
+        'HoleID__HoleNumber', 'RawScore', 'smID__PID_id'
+    )
+
+    # Organize scores by player and hole
+    player_scores = {}
+    for score in scores:
+        player_id = score['smID__PID_id']
+        hole_number = score['HoleID__HoleNumber']
+        raw_score = score['RawScore']
+
+        if player_id not in player_scores:
+            player_scores[player_id] = {}
+        player_scores[player_id][hole_number] = raw_score
+
+    context = {
+        'game_id': game_id,
+        'group_id': group_id,
+        'player_list': player_list,
+        'course_holes': list(course_holes),
+        'course_name': course_name,
+        'play_date': play_date,
+        'player_scores': player_scores,  # Pass player scores to the template
+        'first_name': request.user.first_name,
+        'last_name': request.user.last_name,
+    }
+
+    return render(request, 'GRPR/scorecard.html', context)
 
 

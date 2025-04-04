@@ -78,8 +78,10 @@ urlpatterns = [
     path('skins/leaderboard/', views.skins_leaderboard_view, name='skins_leaderboard_view'),
 
     ### scorecard work
-    path('select_hole/', views.select_hole_view, name='select_hole_view'),
-    
+    path('hole_select/', views.hole_select_view, name='hole_select_view'),
+    path('hole_score/<int:hole_id>/<str:group_id>/<int:game_id>/', views.hole_score_view, name='hole_score_view'),
+    path('hole_input_score/', views.hole_input_score_view, name='hole_input_score_view'),
+
 
     
 ]

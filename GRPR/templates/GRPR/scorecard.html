@@ -1,11 +1,13 @@
 {% extends 'base.html' %}
 
+{% load custom_filters %}
+
 {% block title %}Scorecard{% endblock %}
 
 {% block content %}
 <div class="container my-4">
-    <h1>Scorecard</h1>
-    <div class="form-group">
+    <h1>Scorecard - {{ course_name }} - {{ play_date }}</h1>
+    <!-- <div class="form-group">
         <label for="teetime-select">Select Tee Time:</label>
         <select id="teetime-select" class="form-control">
             <option value="">Select a tee time</option>
@@ -19,198 +21,101 @@
             {% endfor %}
         </select>
         <button id="load-scorecard" class="btn btn-primary mt-2">Load Scorecard</button>
-    </div>
+    </div> -->
+    
 
     <!-- Section to display selected players' names -->
     <div id="selected-players" class="my-4">
-        {% for teetime in teetimes %}
+        <!-- {% for teetime in teetimes %}
             {% for player in teetime.players %}
                 {{ player.PID__FirstName }} {{ player.PID__LastName }} {% if not forloop.last %}, {% endif %}
             {% endfor %}
-        {% endfor %}
+        {% endfor %} -->
     </div>
 
     <table class="table table-bordered">
         <thead>
             <tr>
-                <th>Hole</th>
-                <th>1</th>
-                <th>2</th>
-                <th>3</th>
-                <th>4</th>
-                <th>5</th>
-                <th>6</th>
-                <th>7</th>
-                <th>8</th>
-                <th>9</th>
-                <th>Out</th>
-                <th>10</th>
-                <th>11</th>
-                <th>12</th>
-                <th>13</th>
-                <th>14</th>
-                <th>15</th>
-                <th>16</th>
-                <th>17</th>
-                <th>18</th>
-                <th>In</th>
-                <th>Total</th>
-                <th>Net</th>
+                <td>Hole</td>
+                {% for hole in course_holes %}
+                <td>
+                    <a href="{% url 'hole_score_view' hole.id group_id game_id %}" class="text-decoration-none">
+                        {{ hole.HoleNumber }}
+                    </a>
+                </td>
+                {% if hole.HoleNumber == 9 %}
+                <td class="gray-column">Out</td>
+                {% endif %}
+                {% endfor %}
+                <td class="gray-column">In</td>
+                <td class="gray-column">Total</td>
+                <td class="gray-column">Net</td>
             </tr>
         </thead>
         <tbody>
             <tr>
+                <td>Par</td>
+                {% for hole in course_holes %}
+                <td>{{ hole.Par }}</td>
+                {% if hole.HoleNumber == 9 %}
+                <td class="gray-column"></td> <!-- Placeholder for "Out" total -->
+                {% endif %}
+                {% endfor %}
+                <td class="gray-column"></td>
+                <td class="gray-column"></td>
+                <td class="gray-column"></td>
+            </tr>
+            <tr>
                 <td>YDG</td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
+                {% for hole in course_holes %}
+                <td>{{ hole.Yardage }}</td>
+                {% if hole.HoleNumber == 9 %}
+                <td class="gray-column"></td> <!-- Placeholder for "Out" total -->
+                {% endif %}
+                {% endfor %}
+                <td class="gray-column"></td>
+                <td class="gray-column"></td>
+                <td class="gray-column"></td>
             </tr>
             <tr>
                 <td>HDCP</td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
+                {% for hole in course_holes %}
+                <td>{{ hole.Handicap }}</td>
+                {% if hole.HoleNumber == 9 %}
+                <td class="gray-column"></td> <!-- Placeholder for "Out" total -->
+                {% endif %}
+                {% endfor %}
+                <td class="gray-column"></td>
+                <td class="gray-column"></td>
+                <td class="gray-column"></td>
             </tr>
+            {% for player in player_list %}
             <tr>
-                <td id="player1">Player 1</td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
+                <td>{{ player.first_name }} {{ player.last_name }}</td>
+                {% for hole in course_holes %}
+                <td>
+                    {% with player_scores|get_item:player.pid|get_item:hole.HoleNumber as score %}
+                        {{ score|default:'' }}
+                    {% endwith %}
+                </td>
+                {% if hole.HoleNumber == 9 %}
+                <td class="gray-column"></td> <!-- Placeholder for "Out" total -->
+                {% endif %}
+                {% endfor %}
+                <td class="gray-column"></td>
+                <td class="gray-column"></td>
+                <td class="gray-column"></td>
             </tr>
-            <tr>
-                <td id="player2">Player 2</td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-            </tr>
-            <tr>
-                <td id="player3">Player 3</td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-            </tr>
-            <tr>
-                <td id="player4">Player 4</td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-            </tr>
+            {% endfor %}
         </tbody>
     </table>
+</div>
+
+<div class="col-lg-6 col-xxl-4 my-5 mx-auto">
+    <div class="d-grid gap-2">
+      <a href="{% url 'skins_leaderboard_view' %}?game_id={{ game_id }}" class="btn btn-primary" role="button">Leaderboard</a>
+      <!-- <a href="{% url 'hole_select_view' %}" class="btn btn-primary">Choose Hole</a> -->
+    </div>
 </div>
 
 <script>
@@ -227,4 +132,5 @@ document.getElementById('load-scorecard').addEventListener('click', function() {
     document.getElementById('player4-name').innerText = playersData[3] ? playersData[3].PID__FirstName + ' ' + playersData[3].PID__LastName : 'Player 4';
 });
 </script>
+
 {% endblock %}

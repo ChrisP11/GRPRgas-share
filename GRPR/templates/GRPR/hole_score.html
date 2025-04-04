@@ -1,0 +1,115 @@
+{% extends 'base.html' %}
+
+{% block title %}Hole Score{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <h1>Hole {{ HoleNumber }}</h1>
+    <h3>Par {{ Par }} - {{ Yardage }} yds - HDCP {{ Handicap }}</h3>
+
+    <table class="table table-bordered">
+        <thead>
+            <tr>
+                <th>Player</th>
+                <th>Score</th>
+                <th>Putts</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for player in player_list %}
+            <tr>
+                <td>
+                    <input type="hidden" class="player-id" value="{{ player.pid }}">
+                    <input type="hidden" class="scorecard-id" value="{{ player.scorecard_id|default:'' }}">
+                    {{ player.first_name }} {{ player.last_name }}
+                </td>
+                <td>
+                    <select class="form-select player-score">
+                        {% for score in score_range %}
+                        <option value="{{ score }}" {% if score == player.existing_score|default:Par %}selected{% endif %}>
+                            {{ score }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </td>
+                <td>
+                    <select class="form-select player-putts">
+                        {% for putt in putt_range %}
+                        <option value="{{ putt }}" {% if putt == player.existing_putts|default_if_none:2 %}selected{% endif %}>
+                            {{ putt }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <button id="save-score-btn" class="btn btn-primary">
+        {% if has_existing_scores %}
+            Update Score
+        {% else %}
+            Save Score
+        {% endif %}
+    </button>
+    <a href="{% url 'scorecard_view' %}?game_id={{ game_id }}" class="btn btn btn-secondary-custom">Scorecard</a>
+</div>
+
+<script>
+    document.getElementById('save-score-btn').addEventListener('click', function(event) {
+        const players = [];
+        let isValid = true;
+
+        document.querySelectorAll('tbody tr').forEach(row => {
+            const playerId = row.querySelector('.player-id').value;
+            const scorecardId = row.querySelector('.scorecard-id').value; // Get the scorecard ID
+            const score = parseInt(row.querySelector('.player-score').value, 10);
+            const putts = parseInt(row.querySelector('.player-putts').value, 10);
+
+            // Validation: Putts must be at least one fewer than the score
+            if (putts >= score) {
+                isValid = false;
+                alert(`Invalid input for player ID ${playerId}: Putts (${putts}) must be fewer than Score (${score}).`);
+            }
+
+            players.push({ pid: playerId, scorecard_id: scorecardId, score: score, putts: putts });
+        });
+
+        if (!isValid) {
+            // Prevent form submission if validation fails
+            event.preventDefault();
+            return;
+        }
+
+        const data = {
+            players: players,
+            logged_in_user_id: "{{ request.user.id }}", // Rendered as a string
+            hole_id: "{{ hole_obj.id }}", // Rendered as a string
+            game_id: "{{ game_id }}", // Rendered as a string
+            csrfmiddlewaretoken: "{{ csrf_token }}"
+        };
+
+        fetch("{% url 'hole_input_score_view' %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': data.csrfmiddlewaretoken // Include CSRF token in headers
+            },
+            body: JSON.stringify(data),
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const nextHoleUrl = "{% url 'hole_score_view' 0 group_id game_id %}"
+                    .replace('0', data.next_hole_id)
+                    .replace('group_id', "{{ group_id }}");
+                window.location.href = nextHoleUrl;
+            } else {
+                alert('Error saving scores: ' + (data.error || 'Unknown error.'));
+            }
+        })
+        .catch(error => console.error('Error:', error));
+    });
+</script>
+{% endblock %}

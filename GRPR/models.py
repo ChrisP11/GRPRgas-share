@@ -140,12 +140,14 @@ class ScorecardMeta(models.Model):
 
 class Scorecard(models.Model):
     smID = models.ForeignKey('ScorecardMeta', on_delete=models.CASCADE)  # Links to ScorecardMeta table
-    CreateDate = models.DateField()
-    AlterDate = models.DateField() # will be same as CreaetDate for now, but will be updated when a score is updated
+    GameID = models.ForeignKey('Games', on_delete=models.CASCADE, null=True, blank=True)  
+    CreateDate = models.DateTimeField()  # Changed to DateTimeField to include time
+    AlterDate = models.DateTimeField()  # will be same as CreaetDate for now, but will be updated when a score is updated
     AlterID = models.ForeignKey('Players', on_delete=models.CASCADE)  # Links to Players table for last update
-    Hole = models.IntegerField()
+    HoleID = models.ForeignKey('CourseHoles', on_delete=models.CASCADE, null=True, blank=True)  
     RawScore = models.IntegerField()
     NetScore = models.IntegerField()
+    Putts = models.IntegerField(null=True, blank=True) 
 
     class Meta:
         db_table = "Scorecard"
