@@ -54,12 +54,12 @@ class Command(BaseCommand):
                     group.append(p)
                 
                 if len(group) == 3:
-                    msg = f'Reminder, you are playing golf Saturday, {gDate}, at {time_slot} at {course_name}, with {group[0]}, {group[1]}, and {group[2]}..'
+                    msg = f'Reminder, you are playing golf Saturday, {gDate}, at {time_slot}am at {course_name}, with {group[0]}, {group[1]}, and {group[2]}..'
                     email_msg += f'\n{mobile} {msg}'
                     
                     # Generate text message and send 
-                    to_number = '13122961817'  # Hardcoded for now
-                    # to_number = player.Mobile
+                    # to_number = '13122961817'  # Hardcoded for now
+                    to_number = mobile
                     message = client.messages.create(from_='+18449472599', body=msg, to=to_number)
                     mID = message.sid
 
@@ -73,7 +73,7 @@ class Command(BaseCommand):
                         RequestDate=teeTime,
                         OfferID=pID,
                         Msg=msg,
-                        To_number=mobile
+                        To_number=to_number
                     )
                 else:
                     print(f'something is wrong, the foursome has the wrong number of players, PID: {pID} {gDate} / {time_slot} / {course_name} / {group})')
