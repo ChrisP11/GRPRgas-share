@@ -12,7 +12,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **kwargs):
         # Check if today is Tuesday
-        if timezone.now().weekday() != 3:  # 0 = Monday, 1 = Tuesday, ..., 6 = Sunday
+        if timezone.now().weekday() != 1:  # 0 = Monday, 1 = Tuesday, ..., 6 = Sunday
             self.stdout.write(self.style.WARNING('Today is not Tuesday. This job only runs on Tuesdays.'))
             return
 
@@ -128,6 +128,6 @@ class Command(BaseCommand):
             body=message,
             to=mobile
         )
-        mID = twilio_message.sid
+        # mID = twilio_message.sid
 
         self.stdout.write(self.style.SUCCESS(f"Text sent to {mobile}: SID {twilio_message.sid}"))
