@@ -4,6 +4,7 @@ from django.core.mail import send_mail
 from django.db.models import Q
 from GRPR.models import SubSwap, TeeTimesInd, Players, Log
 from twilio.rest import Client
+from django.conf import settings  # Import settings
 import os
 
 class Command(BaseCommand):
@@ -40,10 +41,10 @@ class Command(BaseCommand):
         twilio_enabled = os.getenv('TWILIO_ENABLED', 'False') == 'True'
         self.stdout.write(f"Twilio enabled: {twilio_enabled}")
         if twilio_enabled:
-            twilio_account_sid = os.getenv('TWILIO_ACCOUNT_SID')
-            twilio_auth_token = os.getenv('TWILIO_AUTH_TOKEN')
-            twilio_phone_number = os.getenv('TWILIO_PHONE_NUMBER')
+            twilio_account_sid = settings.TWILIO_ACCOUNT_SID
+            twilio_auth_token = settings.TWILIO_AUTH_TOKEN
             client = Client(twilio_account_sid, twilio_auth_token)
+
         self.stdout.write(f"Number of open swaps found: {open_swaps.count()}")
         open_swaps = list(open_swaps)
 
@@ -81,11 +82,7 @@ class Command(BaseCommand):
             # Notify the offer player
             offer_player_msg = f"Your Swap request for {playing_date} has been converted to a Sub. Anyone available can claim your tee time without offering you a tee time in trade."
             if twilio_enabled:
-                message = client.messages.create(
-                    body=offer_player_msg,
-                    from_=twilio_phone_number,
-                    to=offer_player_mobile
-                )
+                message = client.messages.create(from_='+18449472599', body=offer_player_msg, to=offer_player_mobile)
                 mID = message.sid
             else:
                 mID = 'Twilio disabled'
@@ -117,11 +114,7 @@ class Command(BaseCommand):
                 print(f"Sending message to {avail_to_number}: {avail_players_msg}")
 
                 if twilio_enabled:
-                    message = client.messages.create(
-                        body=avail_players_msg,
-                        from_=twilio_phone_number,
-                        to=avail_to_number
-                    )
+                    message = client.messages.create(from_='+18449472599', body=avail_players_msg, to=avail_to_number)
                     mID = message.sid
                 else:
                     mID = 'Twilio disabled'
