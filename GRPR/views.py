@@ -15,6 +15,7 @@ from django.contrib.auth.decorators import login_required # added to require cer
 from django.views.decorators.csrf import csrf_exempt # added to allow Twilio to send messages
 from django.contrib.auth.models import User # for user activity tracking on Admin page
 from django.contrib.auth import login as auth_login # for user activity tracking on Admin page
+from django.template.loader import render_to_string  # used on hole_input_score_view
 from django.db.models import Q, Count, F, Func, Subquery, OuterRef
 from django.db import transaction
 from django.urls import reverse_lazy
@@ -754,11 +755,11 @@ def subrequestsent_view(request):
     first_name = request.user.first_name
     last_name = request.user.last_name
 
-    player = get_object_or_404(Players, user_id=user_id)
-    player_id = player.id
+    offer_player = get_object_or_404(Players, user_id=user_id)
+    offer_player_id = player.id
 
     # Fetch the TeeTimeInd instance and other players using the utility function
-    tee_time_details = get_tee_time_details(tt_id, player_id)
+    tee_time_details = get_tee_time_details(tt_id, offer_player_id)
     gDate = tee_time_details['gDate']
     tt_pid = tee_time_details['tt_pid']
     course_name = tee_time_details['course_name']
@@ -766,7 +767,7 @@ def subrequestsent_view(request):
     other_players = tee_time_details['other_players']
 
     # GATE: Verify the logged in user owns this tee time (abundance of caution here)
-    if tt_pid != player_id:
+    if tt_pid != offer_player_id:
         error_msg = 'It appears you are not the owner of this tee time.  Please return to the Sub Swap page and try again.'
         return render(request, 'GRPR/error_msg.html', {'error_msg': error_msg})
     
@@ -781,7 +782,7 @@ def subrequestsent_view(request):
     # Insert the initial Sub Offer into SubSwap
     initial_sub = SubSwap.objects.create(
         RequestDate=timezone.now(),
-        PID_id=player_id,
+        PID_id=offer_player_id,
         TeeTimeIndID_id=tt_id,
         nType="Sub",
         SubType="Offer",
@@ -813,7 +814,7 @@ def subrequestsent_view(request):
 
         # Generate text message and send to Sub Offering player
         msg = "This msg has been sent to all of the players available for your request date: '" + sub_offer + "'      you will be able to see this offer and status on the sub swap page."
-        to_number = player.Mobile
+        to_number = offer_player.Mobile
         message = client.messages.create(from_='+18449472599', body=msg, to=to_number)
         mID = message.sid
 
@@ -823,7 +824,7 @@ def subrequestsent_view(request):
             Type="Sub Offer",
             MessageID=mID,
             RequestDate=gDate,
-            OfferID=player_id,
+            OfferID=offer_player_id,
             RefID=swap_id,
             Msg=sub_offer,
             To_number=to_number
@@ -858,7 +859,7 @@ def subrequestsent_view(request):
                 Type="Sub Offer Sent",
                 MessageID=mID,
                 RequestDate=gDate,
-                OfferID=player_id,
+                OfferID=offer_player_id,
                 ReceiveID=avail_id,
                 RefID=swap_id,
                 Msg=sub_offer,
@@ -872,7 +873,7 @@ def subrequestsent_view(request):
             Type="Sub Offer",
             MessageID='fake mID',
             RequestDate=gDate,
-            OfferID=player_id,
+            OfferID=offer_player_id,
             RefID=swap_id,
             Msg=sub_offer,
             To_number=to_number
@@ -902,7 +903,7 @@ def subrequestsent_view(request):
                 Type="Sub Offer Sent",
                 MessageID='fake mID',
                 RequestDate=gDate,
-                OfferID=player_id,
+                OfferID=offer_player_id,
                 ReceiveID=avail_id,
                 RefID=swap_id,
                 Msg=sub_offer,
@@ -1507,11 +1508,11 @@ def swaprequestsent_view(request):
     first_name = request.user.first_name
     last_name = request.user.last_name
 
-    player = get_object_or_404(Players, user_id=user_id)
-    player_id = player.id
+    offer_player = get_object_or_404(Players, user_id=user_id)
+    offer_player_id = player.id
 
     # Fetch the TeeTimeInd instance and other players using the utility function
-    tee_time_details = get_tee_time_details(tt_id, player_id)
+    tee_time_details = get_tee_time_details(tt_id, offer_player_id)
     gDate = tee_time_details['gDate']
     tt_pid = tee_time_details['tt_pid']
     course_name = tee_time_details['course_name']
@@ -1519,7 +1520,7 @@ def swaprequestsent_view(request):
     other_players = tee_time_details['other_players']
 
     # GATE: Verify the logged in user owns this tee time (abundance of caution here)
-    if tt_pid != player_id:
+    if tt_pid != offer_player_id:
         error_msg = 'It appears you are not the owner of this tee time.  Please return to the Sub Swap page and try again.'
         return render(request, 'GRPR/error_msg.html', {'error_msg': error_msg})
     
@@ -1534,7 +1535,7 @@ def swaprequestsent_view(request):
     # Insert the initial Swap Offer into SubSwap
     initial_swap = SubSwap.objects.create(
         RequestDate=timezone.now(),
-        PID_id=player_id,
+        PID_id=offer_player_id,
         TeeTimeIndID_id=tt_id,
         nType="Swap",
         SubType="Offer",
@@ -1565,7 +1566,7 @@ def swaprequestsent_view(request):
 
         # Generate text message and send to Swap Offering player
         msg = "This msg has been sent to all of the players available for your request date: '" + swap_offer + "'      you will be able to see this offer and status on the sub swap page."
-        to_number = player.Mobile
+        to_number = offer_player.Mobile
         message = client.messages.create(from_='+18449472599', body=msg, to=to_number)
         mID = message.sid
 
@@ -1575,7 +1576,7 @@ def swaprequestsent_view(request):
             Type="Swap Offer",
             MessageID=mID,
             RequestDate=gDate,
-            OfferID=player_id,
+            OfferID=offer_player_id,
             RefID=swap_id,
             Msg=swap_offer,
             To_number=to_number
@@ -1610,7 +1611,7 @@ def swaprequestsent_view(request):
                 Type="Swap Offer Sent",
                 MessageID=mID,
                 RequestDate=gDate,
-                OfferID=player_id,
+                OfferID=offer_player_id,
                 ReceiveID=avail_id,
                 RefID=swap_id,
                 Msg=swap_offer,
@@ -1625,7 +1626,7 @@ def swaprequestsent_view(request):
             Type="Swap Offer",
             MessageID='fake mID',
             RequestDate=gDate,
-            OfferID=player_id,
+            OfferID=offer_player_id,
             RefID=swap_id,
             Msg=swap_offer,
             To_number=to_number
@@ -1655,7 +1656,7 @@ def swaprequestsent_view(request):
                 Type="Swap Offer Sent",
                 MessageID='fake mID',
                 RequestDate=gDate,
-                OfferID=player_id,
+                OfferID=offer_player_id,
                 ReceiveID=avail_id,
                 RefID=swap_id,
                 Msg=swap_offer,
@@ -3506,7 +3507,36 @@ def hole_select_view(request):
 
 
 @login_required
-def hole_score_view(request, hole_id, group_id, game_id):
+def hole_score_data_view(request):
+    # Get the required parameters from the query string
+    hole_id = request.GET.get('hole_id')
+    game_id = request.GET.get('game_id')
+    group_id = request.GET.get('group_id')
+
+    # Validate that all required parameters are present
+    if not hole_id or not game_id or not group_id:
+        return HttpResponseBadRequest("Missing required parameters: hole_id, game_id, or group_id.")
+
+    # Store the parameters in the session
+    request.session['hole_id'] = hole_id
+    request.session['game_id'] = game_id
+    request.session['group_id'] = group_id
+
+    # Redirect to hole_score_view
+    return redirect('hole_score_view')
+
+
+@login_required
+def hole_score_view(request):
+    # Retrieve the parameters from the session
+    hole_id = request.session.pop('hole_id', None)
+    game_id = request.session.pop('game_id', None)
+    group_id = request.session.pop('group_id', None)
+
+    # Validate that all required parameters are present
+    if not hole_id or not game_id or not group_id:
+        return HttpResponseBadRequest("Missing required session data: hole_id, game_id, or group_id.")
+
     # Fetch the specific hole using the provided id
     hole = get_object_or_404(CourseHoles, id=hole_id)
 
@@ -3581,11 +3611,31 @@ def hole_input_score_view(request):
             putts = player['putts']
             scorecard_id = player.get('scorecard_id')  # Get the Scorecard row ID if it exists
 
+            # Fetch the Handicap for the hole
+            hole = get_object_or_404(CourseHoles, id=hole_id)
+            handicap = hole.Handicap
+
+            # Fetch the NetHDCP for the player
+            net_hdcp = ScorecardMeta.objects.filter(GameID=game_id, PID=pid).values_list('NetHDCP', flat=True).first()
+            if net_hdcp is None:
+                return JsonResponse({'success': False, 'error': 'NetHDCP not found for player.'})
+
+            # Calculate the stroke variable
+            if handicap <= net_hdcp:
+                stroke = 1
+                if handicap + 18 <= net_hdcp:
+                    stroke = 2
+            else:
+                stroke = 0
+
+            # Calculate the NetScore
+            net_score = score - stroke
+
             if scorecard_id:  # If a scorecard ID exists, update the row
                 Scorecard.objects.filter(id=scorecard_id).update(
                     AlterDate=timezone.now(),
                     RawScore=score,
-                    NetScore=score,
+                    NetScore=net_score,
                     AlterID_id=logged_in_user_id,
                     Putts=putts
                 )
@@ -3598,7 +3648,7 @@ def hole_input_score_view(request):
                     CreateDate=timezone.now(),
                     AlterDate=timezone.now(),
                     RawScore=score,
-                    NetScore=score,
+                    NetScore=net_score,
                     AlterID_id=logged_in_user_id,
                     smID_id=scm.id,
                     GameID_id=game_id,
@@ -3606,23 +3656,62 @@ def hole_input_score_view(request):
                     Putts=putts
                 )
 
-        # Get the next hole
-        current_hole = CourseHoles.objects.get(id=hole_id)
-        next_hole = CourseHoles.objects.filter(
-            CourseTeesID=current_hole.CourseTeesID,
-            HoleNumber=current_hole.HoleNumber + 1
-        ).first()
+        print('hole_input_score_view - players', players)
+        print('hole_input_score_view - hole_id', hole_id)
+        print('hole_input_score_view - game_id', game_id)
 
-        if not next_hole:
-            # If no next hole, wrap around to the first hole
-            next_hole = CourseHoles.objects.filter(
-                CourseTeesID=current_hole.CourseTeesID,
-                HoleNumber=1
-            ).first()
+        # Fetch updated player scores for the hole
+        player_scores = Scorecard.objects.filter(GameID_id=game_id, HoleID_id=hole_id).select_related('smID__PID').values(
+            'smID__PID__FirstName', 'smID__PID__LastName', 'RawScore', 'NetScore', 'Putts'
+        )
 
-        return JsonResponse({'success': True, 'next_hole_id': next_hole.id})
+        # Fetch the hole details
+        hole = get_object_or_404(CourseHoles, id=hole_id)
+
+        # Render the hole_display.html template
+        context = {
+            'hole': hole,
+            'player_scores': player_scores,
+            'game_id': game_id,
+            'group_id': request.session.get('group_id'),  # Retrieve group_id from session
+        }
+        return render(request, 'GRPR/hole_display.html', context)
 
     return JsonResponse({'success': False, 'error': 'Invalid request method.'})
+
+
+@login_required
+def hole_display_view(request):
+    # Get the required data from the request
+    hole_id = request.GET.get('hole_id')
+    game_id = request.GET.get('game_id')
+    print('hole_display_view - hole_id', hole_id)
+
+    # Fetch the hole details
+    hole = get_object_or_404(CourseHoles, id=hole_id)
+
+    # Fetch player scores for the hole
+    player_scores = Scorecard.objects.filter(GameID_id=game_id, HoleID_id=hole_id).select_related('smID__PID').values(
+        'smID__PID__FirstName', 'smID__PID__LastName', 'RawScore', 'NetScore', 'Putts'
+    )
+
+    # Calculate the next hole ID
+    next_hole = CourseHoles.objects.filter(
+        CourseTeesID=hole.CourseTeesID, HoleNumber__gt=hole.HoleNumber
+    ).order_by('HoleNumber').first()
+
+    next_hole_id = next_hole.id if next_hole else None
+    print('hole_display_view - next_hole_id', next_hole_id)
+
+    context = {
+        'hole': hole,
+        'player_scores': player_scores,
+        'game_id': game_id,
+        'group_id': request.session.get('group_id'),  # Retrieve group_id from session
+        'next_hole_id': next_hole_id,  # Pass the next hole ID to the template
+    }
+
+    return render(request, 'GRPR/hole_display.html', context)
 
 
 @login_required
@@ -3636,6 +3725,7 @@ def scorecard_view(request):
         first_name=F('PID__FirstName'),
         last_name=F('PID__LastName'),
         pid=F('PID__id'),
+        net_hdcp=F('NetHDCP'), 
     )
 
     # Convert players queryset to a list of dictionaries
@@ -3665,7 +3755,7 @@ def scorecard_view(request):
 
     # Fetch scores for each player and hole
     scores = Scorecard.objects.filter(GameID_id=game_id).select_related('HoleID', 'smID').values(
-        'HoleID__HoleNumber', 'RawScore', 'smID__PID_id'
+        'HoleID__HoleNumber', 'NetScore', 'smID__PID_id'
     )
 
     # Organize scores by player and hole
@@ -3673,11 +3763,40 @@ def scorecard_view(request):
     for score in scores:
         player_id = score['smID__PID_id']
         hole_number = score['HoleID__HoleNumber']
-        raw_score = score['RawScore']
+        net_score = score['NetScore']
 
         if player_id not in player_scores:
             player_scores[player_id] = {}
-        player_scores[player_id][hole_number] = raw_score
+        player_scores[player_id][hole_number] = net_score
+
+    # Calculate strokes for each player
+    player_strokes = {}
+    for player in player_list:
+        player_id = player['pid']
+
+        # Get NetHDCP for the player
+        net_hdcp = ScorecardMeta.objects.filter(GameID=game_id, PID_id=player_id).values_list('NetHDCP', flat=True).first()
+
+        if net_hdcp is not None:
+            # Calculate base_strokes and addl_strokes
+            base_strokes, addl_strokes = divmod(net_hdcp, 18)
+
+            # Get holes where the player gets an additional stroke
+            stroke_holes = CourseHoles.objects.filter(
+                CourseTeesID_id=most_common_tee_id['TeeID_id'],
+                Handicap__lte=addl_strokes
+            ).values_list('HoleNumber', flat=True)
+
+            # Assign strokes for each hole
+            strokes = {}
+            for hole in course_holes:
+                hole_number = hole['HoleNumber']
+                if hole_number in stroke_holes:
+                    strokes[hole_number] = base_strokes + 1
+                else:
+                    strokes[hole_number] = base_strokes
+
+            player_strokes[player_id] = strokes
 
     context = {
         'game_id': game_id,
@@ -3686,11 +3805,10 @@ def scorecard_view(request):
         'course_holes': list(course_holes),
         'course_name': course_name,
         'play_date': play_date,
-        'player_scores': player_scores,  # Pass player scores to the template
+        'player_scores': player_scores,  # Pass player scores (NetScore) to the template
+        'player_strokes': player_strokes,  # Pass player strokes to the template
         'first_name': request.user.first_name,
         'last_name': request.user.last_name,
     }
 
     return render(request, 'GRPR/scorecard.html', context)
-
-

@@ -7,31 +7,6 @@
 {% block content %}
 <div class="container my-4">
     <h1>Scorecard - {{ course_name }} - {{ play_date }}</h1>
-    <!-- <div class="form-group">
-        <label for="teetime-select">Select Tee Time:</label>
-        <select id="teetime-select" class="form-control">
-            <option value="">Select a tee time</option>
-            {% for teetime in teetimes %}
-                <option value="{{ teetime.gDate }}|{{ teetime.CourseID__courseName }}|{{ teetime.CourseID__courseTimeSlot }}" data-players="{{ teetime.players|escapejs }}">
-                    {{ teetime.gDate }} - {{ teetime.CourseID__courseName }} - {{ teetime.CourseID__courseTimeSlot }} - 
-                    {% for player in teetime.players %}
-                        {{ player.PID__FirstName }} {{ player.PID__LastName }}{% if not forloop.last %}, {% endif %}
-                    {% endfor %}
-                </option>
-            {% endfor %}
-        </select>
-        <button id="load-scorecard" class="btn btn-primary mt-2">Load Scorecard</button>
-    </div> -->
-    
-
-    <!-- Section to display selected players' names -->
-    <div id="selected-players" class="my-4">
-        <!-- {% for teetime in teetimes %}
-            {% for player in teetime.players %}
-                {{ player.PID__FirstName }} {{ player.PID__LastName }} {% if not forloop.last %}, {% endif %}
-            {% endfor %}
-        {% endfor %} -->
-    </div>
 
     <table class="table table-bordered">
         <thead>
@@ -39,7 +14,7 @@
                 <td>Hole</td>
                 {% for hole in course_holes %}
                 <td>
-                    <a href="{% url 'hole_score_view' hole.id group_id game_id %}" class="text-decoration-none">
+                    <a href="{% url 'hole_score_data_view' %}?hole_id={{ hole.id }}&game_id={{ game_id }}&group_id={{ group_id }}" class="text-decoration-none">
                         {{ hole.HoleNumber }}
                     </a>
                 </td>
@@ -91,13 +66,17 @@
             </tr>
             {% for player in player_list %}
             <tr>
-                <td>{{ player.first_name }} {{ player.last_name }}</td>
+                <td>{{ player.last_name }} - {{ player.net_hdcp }}</td>
                 {% for hole in course_holes %}
-                <td>
-                    {% with player_scores|get_item:player.pid|get_item:hole.HoleNumber as score %}
-                        {{ score|default:'' }}
-                    {% endwith %}
+                {% with player_strokes|get_item:player.pid|get_item:hole.HoleNumber as strokes %}
+                {% with player_scores|get_item:player.pid|get_item:hole.HoleNumber as net_score %}
+                <td style="
+                    {% if strokes == 1 %}background-color: #FFF8DC;{% elif strokes == 2 %}background-color: #D0F0C0;{% elif strokes == 3 %}background-color: #9ACD32;{% endif %}
+                ">
+                    {{ net_score|default:'' }}
                 </td>
+                {% endwith %}
+                {% endwith %}
                 {% if hole.HoleNumber == 9 %}
                 <td class="gray-column"></td> <!-- Placeholder for "Out" total -->
                 {% endif %}
@@ -114,7 +93,6 @@
 <div class="col-lg-6 col-xxl-4 my-5 mx-auto">
     <div class="d-grid gap-2">
       <a href="{% url 'skins_leaderboard_view' %}?game_id={{ game_id }}" class="btn btn-primary" role="button">Leaderboard</a>
-      <!-- <a href="{% url 'hole_select_view' %}" class="btn btn-primary">Choose Hole</a> -->
     </div>
 </div>
 

@@ -79,8 +79,10 @@ urlpatterns = [
 
     ### scorecard work
     path('hole_select/', views.hole_select_view, name='hole_select_view'),
-    path('hole_score/<int:hole_id>/<str:group_id>/<int:game_id>/', views.hole_score_view, name='hole_score_view'),
+    path('hole_score_data/', views.hole_score_data_view, name='hole_score_data_view'),
+    path('hole_score/', views.hole_score_view, name='hole_score_view'),
     path('hole_input_score/', views.hole_input_score_view, name='hole_input_score_view'),
+    path('hole_display/', views.hole_display_view, name='hole_display_view'),
 
 
     

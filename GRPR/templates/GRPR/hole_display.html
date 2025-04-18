@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+
+{% block title %}Hole Display{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <h1>Hole {{ hole.HoleNumber }}</h1>
+    <p>Par: {{ hole.Par }} | Yards: {{ hole.Yardage }} | HDCP: {{ hole.Handicap }}</p>
+
+    <table class="table table-bordered">
+        <thead>
+            <tr>
+                <th>Player</th>
+                <th>Raw</th>
+                <th>Net</th>
+                <th>Putts</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for player in player_scores %}
+            <tr>
+                <td>{{ player.smID__PID__FirstName|slice:":1" }} {{ player.smID__PID__LastName }}</td>
+                <td>{{ player.RawScore }}</td>
+                <td>{{ player.NetScore }}</td>
+                <td>{{ player.Putts }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="d-flex justify-content-between mt-4">
+        {% if next_hole_id %}
+            <a href="{% url 'hole_score_data_view' %}?hole_id={{ next_hole_id }}&game_id={{ game_id }}&group_id={{ group_id }}" class="btn btn-primary">
+                Next Hole
+            </a>
+        {% else %}
+            <button class="btn btn-primary" disabled>No More Holes</button>
+        {% endif %}
+        <a href="{% url 'hole_score_data_view' %}?hole_id={{ hole.id }}&game_id={{ game_id }}&group_id={{ group_id }}" class="btn btn-secondary-custom">
+            Re-Enter Score
+        </a>
+    </div>
+</div>
+{% endblock %}
