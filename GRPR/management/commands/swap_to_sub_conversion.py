@@ -13,7 +13,7 @@ class Command(BaseCommand):
         # Verify today is Friday
         today = timezone.now().date()
         self.stdout.write(f"Today's date: {today}")
-        if today.weekday() != 3:  # 4 = Friday
+        if today.weekday() != 4:  # 4 = Friday
             self.stdout.write("Today is not Thursday. Exiting.")
             return
 
