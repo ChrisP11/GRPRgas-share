@@ -3023,7 +3023,7 @@ def skins_game_close_view(request):
         return HttpResponseBadRequest("Game ID is missing.")
 
     # Update the Games table to set the status to 'Complete'
-    Games.objects.filter(id=game_id).update(Status='Complete')
+    Games.objects.filter(id=game_id).update(Status='Closed')
 
     # Fetch the logged-in user's details for the context
     user = request.user
