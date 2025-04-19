@@ -3374,7 +3374,7 @@ def skins_choose_tees_view(request):
     tee_options_list = []
     for tee in tee_options:
         tee_options_list.append({
-            'tee_id': tee,
+            'tee_id': tee.id,
             'name': tee.TeeName,
             'rating': tee.CourseRating,
             'slope': tee.SlopeRating,
@@ -3384,7 +3384,6 @@ def skins_choose_tees_view(request):
 
     context = {
         'game_id': game_id,
-        'ct_id': ct_id,
         'invites': invites,
         'tee_options_list': tee_options_list,
         'first_name': request.user.first_name,
