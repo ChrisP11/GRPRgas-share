@@ -25,7 +25,10 @@
                         <div class="col-md-3">
                             <select class="form-select tee-dropdown" name="tee_choice_{{ player.player_id }}" data-player-id="{{ player.player_id }}" data-player-index="{{ player.player_index }}">
                                 {% for tee_option in tee_options_list %}
-                                <option value="{{ tee_option.tee_id.id }}" data-slope="{{ tee_option.slope }}" data-tee-name="{{ tee_option.name }}" {% if tee_option.tee_id.id == 4 %}selected{% endif %}>
+                                <!-- <option value="{{ tee_option.tee_id.id }}" data-slope="{{ tee_option.slope }}" data-tee-name="{{ tee_option.name }}" {% if tee_option.tee_id.id == 4 %}selected{% endif %}>
+                                    {{ tee_option.name }} - {{ tee_option.rating }} - {{ tee_option.slope }} - {{ tee_option.yards }} yds
+                                </option> -->
+                                <option value="{{ tee_option.tee_id }}" data-slope="{{ tee_option.slope }}" data-tee-name="{{ tee_option.name }}" {% if tee_option.tee_id == 4 %}selected{% endif %}>
                                     {{ tee_option.name }} - {{ tee_option.rating }} - {{ tee_option.slope }} - {{ tee_option.yards }} yds
                                 </option>
                                 {% endfor %}
