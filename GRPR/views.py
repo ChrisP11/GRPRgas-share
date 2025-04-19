@@ -2,7 +2,6 @@ import os
 import json
 from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpResponse, JsonResponse, HttpResponseBadRequest
-# from django.http import HttpResponseBadRequest
 from django.utils import timezone
 from GRPR.models import Crews, Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity, SMSResponse, Xdates, Games, GameInvites, CourseTees, ScorecardMeta, Scorecard, CourseHoles
 from datetime import datetime
@@ -16,9 +15,9 @@ from django.views.decorators.csrf import csrf_exempt # added to allow Twilio to 
 from django.contrib.auth.models import User # for user activity tracking on Admin page
 from django.contrib.auth import login as auth_login # for user activity tracking on Admin page
 from django.template.loader import render_to_string  # used on hole_input_score_view
-from django.db.models import Q, Count, F, Func, Subquery, OuterRef
+from django.db.models import Q, Count, F, Func, Subquery, OuterRef, Max, Min
 from django.db import transaction
-from django.urls import reverse_lazy
+from django.urls import reverse_lazy, reverse
 from django.core.mail import send_mail
 from GRPR.utils import get_open_subswap_or_error, check_player_availability, get_tee_time_details
 from twilio.rest import Client # Import the Twilio client
@@ -2995,6 +2994,58 @@ def profile_view(request):
 #### Skins game views ####
 ##########################
 @login_required
+def skins_admin_view(request):
+    user = request.user
+    # Discover if there is a current game in process
+    game = Games.objects.exclude(Status='Closed').order_by('-CreateDate').first()
+    gDate = game.PlayDate if game else None
+    game_creator = game.CreateID if game else None
+    game_status = game.Status if game else None
+    game_id = game.id if game else None
+
+    context = {
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+        'game_creator': game_creator,
+        'gDate': gDate, 
+        'game_status': game_status,
+        'game_id': game_id,
+    }
+
+    return render(request, 'GRPR/skins_admin.html', context)
+
+# just for a game close button for skins
+@login_required
+def skins_game_close_view(request):
+    game_id = request.GET.get('game_id')
+
+    if not game_id:
+        return HttpResponseBadRequest("Game ID is missing.")
+
+    # Update the Games table to set the status to 'Complete'
+    Games.objects.filter(id=game_id).update(Status='Complete')
+
+    # Fetch the logged-in user's details for the context
+    user = request.user
+    game = Games.objects.filter(id=game_id).first()
+    gDate = game.PlayDate if game else None
+    game_creator = game.CreateID if game else None
+    game_status = game.Status if game else None
+
+    context = {
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+        'game_creator': game_creator,
+        'gDate': gDate,
+        'game_status': game_status,
+        'game_id': game_id,
+    }
+
+    # Render the skins_admin.html page
+    return render(request, 'GRPR/skins_admin.html', context)
+
+
+@login_required
 def skins_view(request):
     user = request.user
     # Discover if there is a current game in process
@@ -3284,17 +3335,6 @@ def skins_choose_tees_view(request):
     player_id = player.id
     # player_name = f"{player.FirstName} {player.LastName}"
 
-    # # Insert a new row into the Log table
-    # Log.objects.create(
-    #     SentDate=timezone.now(),
-    #     Type='Skins Config',
-    #     MessageID='None',
-    #     RequestDate=pDate,
-    #     OfferID=player_id,
-    #     RefID=game_id,
-    #     Msg=f'{player_name} is on the choosing tees page, game id: {game_id}'
-    # )
-
     # Fetch the game invites to display on the skins_invite.html page
     invites_queryset = GameInvites.objects.filter(GameID=game_id, Status='Accepted').select_related('PID', 'TTID__CourseID')
 
@@ -3460,12 +3500,23 @@ def skins_leaderboard_view(request):
     ).annotate(
         first_name=F('PID__FirstName'),  # Player's first name
         last_name=F('PID__LastName'),  # Player's last name
-        tee_name=F('TeeID__TeeName')  # Tee name
+        tee_name=F('TeeID__TeeName'),  # Tee name
+        skins=F('Skins'),
     )
 
     # Build a list of dictionaries for the leaderboard
     leaderboard = []
     for entry in scorecard_meta:
+        player_id = entry.PID.id
+
+        # Query the Scorecard table to find the largest HoleNumber for the player
+        current_hole = (
+            Scorecard.objects.filter(GameID=game_id, smID__PID_id=player_id)
+            .select_related('HoleID')
+            .aggregate(max_hole=Max('HoleID__HoleNumber'))
+        )['max_hole']
+
+        # Add the player's data to the leaderboard
         leaderboard.append({
             'first_name': entry.first_name,
             'last_name': entry.last_name,
@@ -3473,6 +3524,8 @@ def skins_leaderboard_view(request):
             'raw_hdcp': entry.RawHDCP,
             'net_hdcp': entry.NetHDCP,
             'tee_name': entry.tee_name,
+            'current_hole': current_hole if current_hole else 0,
+            'skins': entry.skins if entry.skins else 0, 
         })
 
     # Pass data to the template
@@ -3600,7 +3653,8 @@ def hole_input_score_view(request):
         players = data.get('players', [])
         hole_id = data.get('hole_id')
         game_id = data.get('game_id')
-
+        group_id = data.get('group_id')
+        
         # Fetch the logged-in user's Player ID
         logged_in_user = get_object_or_404(Players, user_id=request.user.id)
         logged_in_user_id = logged_in_user.id
@@ -3631,7 +3685,19 @@ def hole_input_score_view(request):
             # Calculate the NetScore
             net_score = score - stroke
 
+            # Fetch the ScorecardMeta object for the player
+            scm = ScorecardMeta.objects.filter(GameID=game_id, PID=pid).first()
+            if not scm:
+                return JsonResponse({'success': False, 'error': 'ScorecardMeta not found for player.'})
+
             if scorecard_id:  # If a scorecard ID exists, update the row
+                # Fetch the current scores from the Scorecard table
+                current_scorecard = Scorecard.objects.filter(id=scorecard_id).values('RawScore', 'NetScore', 'Putts').first()
+                current_raw_score = current_scorecard['RawScore']
+                current_net_score = current_scorecard['NetScore']
+                current_putts = current_scorecard['Putts']
+
+                # Update the Scorecard table
                 Scorecard.objects.filter(id=scorecard_id).update(
                     AlterDate=timezone.now(),
                     RawScore=score,
@@ -3639,11 +3705,22 @@ def hole_input_score_view(request):
                     AlterID_id=logged_in_user_id,
                     Putts=putts
                 )
-            else:  # Otherwise, insert a new row
-                scm = ScorecardMeta.objects.filter(GameID=game_id, PID=pid).first()
-                if not scm:
-                    return JsonResponse({'success': False, 'error': 'ScorecardMeta not found for player.'})
 
+                # Update ScorecardMeta based on the hole number
+                if 1 <= hole.HoleNumber <= 9:
+                    scm.RawOUT += score - current_raw_score
+                    scm.NetOUT += net_score - current_net_score
+                elif 10 <= hole.HoleNumber <= 18:
+                    scm.RawIN += score - current_raw_score
+                    scm.NetIN += net_score - current_net_score
+
+                scm.RawTotal += score - current_raw_score
+                scm.NetTotal += net_score - current_net_score
+                scm.Putts += putts - current_putts
+                scm.save()
+
+            else:  # Otherwise, insert a new row
+                # Insert a new row into the Scorecard table
                 Scorecard.objects.create(
                     CreateDate=timezone.now(),
                     AlterDate=timezone.now(),
@@ -3656,26 +3733,72 @@ def hole_input_score_view(request):
                     Putts=putts
                 )
 
+                # Update ScorecardMeta based on the hole number
+                if 1 <= hole.HoleNumber <= 9:
+                    scm.RawOUT += score
+                    scm.NetOUT += net_score
+                elif 10 <= hole.HoleNumber <= 18:
+                    scm.RawIN += score
+                    scm.NetIN += net_score
+
+                scm.RawTotal += score
+                scm.NetTotal += net_score
+                scm.Putts += putts
+                scm.save()
+
         print('hole_input_score_view - players', players)
         print('hole_input_score_view - hole_id', hole_id)
         print('hole_input_score_view - game_id', game_id)
+        print('hole_input_score_view - group_id', group_id)
 
-        # Fetch updated player scores for the hole
-        player_scores = Scorecard.objects.filter(GameID_id=game_id, HoleID_id=hole_id).select_related('smID__PID').values(
-            'smID__PID__FirstName', 'smID__PID__LastName', 'RawScore', 'NetScore', 'Putts'
+        # Reset the Skins column for all players in the game
+        ScorecardMeta.objects.filter(GameID=game_id).update(Skins=0)
+
+        # Process skins after all scores are updated
+        skins_results = Scorecard.objects.filter(GameID_id=game_id).values('HoleID_id').annotate(
+            min_net_score=Min('NetScore')
         )
 
-        # Fetch the hole details
-        hole = get_object_or_404(CourseHoles, id=hole_id)
+        print()
+        print('skins_results', skins_results)
+        print()
 
-        # Render the hole_display.html template
-        context = {
-            'hole': hole,
-            'player_scores': player_scores,
-            'game_id': game_id,
-            'group_id': request.session.get('group_id'),  # Retrieve group_id from session
-        }
-        return render(request, 'GRPR/hole_display.html', context)
+        # Dictionary to track skins for each player
+        player_skins = {}
+
+        for result in skins_results:
+            skins_hole_id = result['HoleID_id']
+            min_net_score = result['min_net_score']
+
+            # Find all players with the lowest NetScore for this hole
+            players_with_lowest_score = Scorecard.objects.filter(
+                GameID_id=game_id,
+                HoleID_id=skins_hole_id,
+                NetScore=min_net_score
+            ).values('smID__PID_id')
+
+            if players_with_lowest_score.count() == 1:
+                # Only one player has the lowest score, award a skin
+                player_id = players_with_lowest_score.first()['smID__PID_id']
+                print(f"For hole {skins_hole_id}, player {player_id} scored {min_net_score} and receives 1 skin.")
+                player_skins[player_id] = player_skins.get(player_id, 0) + 1
+            else:
+                # Multiple players have the lowest score, no skins awarded
+                print(f"For hole {hole_id}, there are no skins.")
+        
+        print()
+        print('player_skins', player_skins)
+        print()
+        
+        # Update the Skins column in the ScorecardMeta table
+        for player_id, skins in player_skins.items():
+            ScorecardMeta.objects.filter(GameID=game_id, PID_id=player_id).update(Skins=skins)
+
+
+        return JsonResponse({
+            'success': True,
+            'redirect_url': f"{reverse('hole_display_view')}?hole_id={hole_id}&game_id={game_id}&group_id={group_id}"
+        })
 
     return JsonResponse({'success': False, 'error': 'Invalid request method.'})
 
@@ -3685,13 +3808,18 @@ def hole_display_view(request):
     # Get the required data from the request
     hole_id = request.GET.get('hole_id')
     game_id = request.GET.get('game_id')
+    group_id = request.GET.get('group_id')
     print('hole_display_view - hole_id', hole_id)
 
     # Fetch the hole details
     hole = get_object_or_404(CourseHoles, id=hole_id)
 
     # Fetch player scores for the hole
-    player_scores = Scorecard.objects.filter(GameID_id=game_id, HoleID_id=hole_id).select_related('smID__PID').values(
+    player_scores = Scorecard.objects.filter(
+        GameID_id=game_id,
+        HoleID_id=hole_id,
+        smID__GroupID=group_id  # Join with ScorecardMeta and filter by GroupID
+    ).select_related('smID__PID').values(
         'smID__PID__FirstName', 'smID__PID__LastName', 'RawScore', 'NetScore', 'Putts'
     )
 
@@ -3707,7 +3835,7 @@ def hole_display_view(request):
         'hole': hole,
         'player_scores': player_scores,
         'game_id': game_id,
-        'group_id': request.session.get('group_id'),  # Retrieve group_id from session
+        'group_id': group_id, 
         'next_hole_id': next_hole_id,  # Pass the next hole ID to the template
     }
 
@@ -3726,10 +3854,17 @@ def scorecard_view(request):
         last_name=F('PID__LastName'),
         pid=F('PID__id'),
         net_hdcp=F('NetHDCP'), 
+        raw_out=F('RawOUT'),
+        net_out=F('NetOUT'),
+        raw_in=F('RawIN'),
+        net_in=F('NetIN'),
+        raw_total=F('RawTotal'),
+        net_total=F('NetTotal'),
     )
 
     # Convert players queryset to a list of dictionaries
     player_list = list(players)
+    print('player_list', player_list)
 
     # Fetch the most common TeeID_id for the specified GroupID and GameID
     most_common_tee_id = (
@@ -3758,17 +3893,51 @@ def scorecard_view(request):
         'HoleID__HoleNumber', 'NetScore', 'smID__PID_id'
     )
 
-    # Organize scores by player and hole
-    player_scores = {}
+    # Initialize player_scores with empty dictionaries for all players
+    player_scores = {player['pid']: {} for player in player_list}
+
+    # Ensure player_scores includes all player_ids from scores
+    for score in scores:
+        player_id = score['smID__PID_id']
+        if player_id not in player_scores:
+            player_scores[player_id] = {}
+            
+    print()
+    print('player_scores', player_scores)
+    print()
+    print('scores', scores)
+    print()
+    
+    # Populate player_scores with actual scores if they exist
     for score in scores:
         player_id = score['smID__PID_id']
         hole_number = score['HoleID__HoleNumber']
         net_score = score['NetScore']
 
-        if player_id not in player_scores:
-            player_scores[player_id] = {}
         player_scores[player_id][hole_number] = net_score
+    
+    # Fetch additional fields from ScorecardMeta and add them to player_scores
+    scorecard_meta_data = ScorecardMeta.objects.filter(GameID=game_id, GroupID=group_id).values(
+        'PID_id', 'RawOUT', 'NetOUT', 'RawIN', 'NetIN', 'RawTotal', 'NetTotal'
+    )
+    for meta in scorecard_meta_data:
+        pid = meta['PID_id']
+        if pid in player_scores:
+            player_scores[pid]['RawOUT'] = meta['RawOUT']
+            player_scores[pid]['NetOUT'] = meta['NetOUT']
+            player_scores[pid]['RawIN'] = meta['RawIN']
+            player_scores[pid]['NetIN'] = meta['NetIN']
+            player_scores[pid][50505050] = meta['RawTotal']
+            player_scores[pid]['NetTotal'] = meta['NetTotal']
+    print()
+    print()
+    print('player_scores post meta', player_scores)
+    print()
 
+    # Initialize player_scores as an empty dictionary if no scores exist
+    if not player_scores:
+        player_scores = {}
+    
     # Calculate strokes for each player
     player_strokes = {}
     for player in player_list:
@@ -3798,6 +3967,10 @@ def scorecard_view(request):
 
             player_strokes[player_id] = strokes
 
+    # Initialize player_strokes as an empty dictionary if no strokes exist
+    if not player_strokes:
+        player_strokes = {}
+    
     context = {
         'game_id': game_id,
         'group_id': group_id,
@@ -3812,3 +3985,137 @@ def scorecard_view(request):
     }
 
     return render(request, 'GRPR/scorecard.html', context)
+
+
+## big version of the scorecard
+@login_required
+def scorecard_big_view(request):
+    # Fetch game_id from GET parameters
+    game_id = request.GET.get('game_id', None)
+
+    # Fetch all players where GameID = game_id (no filtering by group_id)
+    players = ScorecardMeta.objects.filter(GameID=game_id).select_related('PID').values(
+        first_name=F('PID__FirstName'),
+        last_name=F('PID__LastName'),
+        pid=F('PID__id'),
+        net_hdcp=F('NetHDCP'), 
+        raw_out=F('RawOUT'),
+        net_out=F('NetOUT'),
+        raw_in=F('RawIN'),
+        net_in=F('NetIN'),
+        raw_total=F('RawTotal'),
+        net_total=F('NetTotal'),
+    )
+
+    # Convert players queryset to a list of dictionaries
+    player_list = list(players)
+    print('player_list', player_list)
+
+    # Fetch the most common TeeID_id for the specified GameID
+    most_common_tee_id = (
+        ScorecardMeta.objects.filter(GameID=game_id)
+        .values('TeeID_id')
+        .annotate(count=Count('TeeID_id'))
+        .order_by('-count')
+        .first()
+    )
+
+    # Fetch CourseHoles data for the most common TeeID_id
+    course_holes = []
+    course_name = None
+    if most_common_tee_id:
+        course_holes = CourseHoles.objects.filter(CourseTeesID_id=most_common_tee_id['TeeID_id']).order_by('HoleNumber').values(
+            'id', 'HoleNumber', 'Par', 'Yardage', 'Handicap'
+        )
+        # Fetch the CourseName from CourseTees
+        course_name = CourseTees.objects.filter(id=most_common_tee_id['TeeID_id']).values_list('CourseName', flat=True).first()
+
+    # Fetch the PlayDate from Games
+    play_date = Games.objects.filter(id=game_id).values_list('PlayDate', flat=True).first()
+
+    # Fetch scores for each player and hole
+    scores = Scorecard.objects.filter(GameID_id=game_id).select_related('HoleID', 'smID').values(
+        'HoleID__HoleNumber', 'NetScore', 'smID__PID_id'
+    )
+
+    # Initialize player_scores with empty dictionaries for all players
+    player_scores = {player['pid']: {} for player in player_list}
+    print('player_scores', player_scores)
+    print('scores', scores)
+    
+    # Populate player_scores with actual scores if they exist
+    for score in scores:
+        player_id = score['smID__PID_id']
+        hole_number = score['HoleID__HoleNumber']
+        net_score = score['NetScore']
+
+        player_scores[player_id][hole_number] = net_score
+    
+    # Fetch additional fields from ScorecardMeta and add them to player_scores
+    scorecard_meta_data = ScorecardMeta.objects.filter(GameID=game_id).values(
+        'PID_id', 'RawOUT', 'NetOUT', 'RawIN', 'NetIN', 'RawTotal', 'NetTotal'
+    )
+    for meta in scorecard_meta_data:
+        pid = meta['PID_id']
+        if pid in player_scores:
+            player_scores[pid]['RawOUT'] = meta['RawOUT']
+            player_scores[pid]['NetOUT'] = meta['NetOUT']
+            player_scores[pid]['RawIN'] = meta['RawIN']
+            player_scores[pid]['NetIN'] = meta['NetIN']
+            player_scores[pid][50505050] = meta['RawTotal']
+            player_scores[pid]['NetTotal'] = meta['NetTotal']
+    print()
+    print()
+    print('player_scores post meta', player_scores)
+    print()
+
+    # Initialize player_scores as an empty dictionary if no scores exist
+    if not player_scores:
+        player_scores = {}
+    
+    # Calculate strokes for each player
+    player_strokes = {}
+    for player in player_list:
+        player_id = player['pid']
+
+        # Get NetHDCP for the player
+        net_hdcp = ScorecardMeta.objects.filter(GameID=game_id, PID_id=player_id).values_list('NetHDCP', flat=True).first()
+
+        if net_hdcp is not None:
+            # Calculate base_strokes and addl_strokes
+            base_strokes, addl_strokes = divmod(net_hdcp, 18)
+
+            # Get holes where the player gets an additional stroke
+            stroke_holes = CourseHoles.objects.filter(
+                CourseTeesID_id=most_common_tee_id['TeeID_id'],
+                Handicap__lte=addl_strokes
+            ).values_list('HoleNumber', flat=True)
+
+            # Assign strokes for each hole
+            strokes = {}
+            for hole in course_holes:
+                hole_number = hole['HoleNumber']
+                if hole_number in stroke_holes:
+                    strokes[hole_number] = base_strokes + 1
+                else:
+                    strokes[hole_number] = base_strokes
+
+            player_strokes[player_id] = strokes
+
+    # Initialize player_strokes as an empty dictionary if no strokes exist
+    if not player_strokes:
+        player_strokes = {}
+    
+    context = {
+        'game_id': game_id,
+        'player_list': player_list,
+        'course_holes': list(course_holes),
+        'course_name': course_name,
+        'play_date': play_date,
+        'player_scores': player_scores,  # Pass player scores (NetScore) to the template
+        'player_strokes': player_strokes,  # Pass player strokes to the template
+        'first_name': request.user.first_name,
+        'last_name': request.user.last_name,
+    }
+
+    return render(request, 'GRPR/scorecard_big.html', context)

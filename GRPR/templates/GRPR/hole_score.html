@@ -86,6 +86,7 @@
             players: players,
             hole_id: "{{ hole_obj.id }}", // Rendered as a string
             game_id: "{{ game_id }}", // Rendered as a string
+            group_id: "{{ group_id }}", // Add group_id
             csrfmiddlewaretoken: "{{ csrf_token }}"
         };
 
@@ -100,8 +101,8 @@
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                // Redirect to the correct URL for hole_display_view
-                window.location.href = "{% url 'hole_display_view' %}?hole_id={{ hole_obj.id }}&game_id={{ game_id }}";
+                // Redirect to the URL provided in the JSON response
+                window.location.href = data.redirect_url;
             } else {
                 alert('Error saving scores: ' + (data.error || 'Unknown error.'));
             }

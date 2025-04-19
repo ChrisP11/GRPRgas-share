@@ -67,8 +67,9 @@ urlpatterns = [
     path('sms/reply/', sms_reply, name='sms_reply'),
 
     ### Skins Game
-    path('scorecard/', views.scorecard_view, name='scorecard_view'),
     path('skins/', views.skins_view, name='skins_view'),
+    path('skins_admin/', views.skins_admin_view, name='skins_admin_view'),
+    path('skins_game_close/', views.skins_game_close_view, name='skins_game_close_view'),
     path('skins/new/', views.skins_new_game_view, name='skins_new_game_view'),
     path('skins_invite_view/', views.skins_invite_view, name='skins_invite_view'),
     path('skins/invite/', views.skins_invite_status_view, name='skins_invite_status_view'),
@@ -78,11 +79,14 @@ urlpatterns = [
     path('skins/leaderboard/', views.skins_leaderboard_view, name='skins_leaderboard_view'),
 
     ### scorecard work
+    path('scorecard/', views.scorecard_view, name='scorecard_view'),
+    path('scorecard_big/', views.scorecard_big_view, name='scorecard_big_view'),
     path('hole_select/', views.hole_select_view, name='hole_select_view'),
     path('hole_score_data/', views.hole_score_data_view, name='hole_score_data_view'),
     path('hole_score/', views.hole_score_view, name='hole_score_view'),
     path('hole_input_score/', views.hole_input_score_view, name='hole_input_score_view'),
     path('hole_display/', views.hole_display_view, name='hole_display_view'),
+
 
 
     

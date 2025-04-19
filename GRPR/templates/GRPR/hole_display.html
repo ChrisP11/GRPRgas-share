@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="container my-4">
-    <h1>Hole {{ hole.HoleNumber }}</h1>
+    <h1>Hole {{ hole.HoleNumber }} - Scores</h1>
     <p>Par: {{ hole.Par }} | Yards: {{ hole.Yardage }} | HDCP: {{ hole.Handicap }}</p>
 
     <table class="table table-bordered">
@@ -34,7 +34,9 @@
                 Next Hole
             </a>
         {% else %}
-            <button class="btn btn-primary" disabled>No More Holes</button>
+            <a href="{% url 'scorecard_view' %}?game_id={{ game_id }}" class="btn btn-primary">
+                Scorecard
+            </a>
         {% endif %}
         <a href="{% url 'hole_score_data_view' %}?hole_id={{ hole.id }}&game_id={{ game_id }}&group_id={{ group_id }}" class="btn btn-secondary-custom">
             Re-Enter Score

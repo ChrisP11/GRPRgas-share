@@ -133,6 +133,14 @@ class ScorecardMeta(models.Model):
     RawHDCP = models.DecimalField(max_digits=3, decimal_places=1, null=True, blank=True) 
     NetHDCP = models.IntegerField(null=True, blank=True)
     GroupID = models.CharField(max_length=16, null=True, blank=True)
+    RawIN = models.IntegerField(null=True, blank=True, default=0)
+    NetIN = models.IntegerField(null=True, blank=True, default=0)
+    RawOUT = models.IntegerField(null=True, blank=True, default=0)
+    NetOUT = models.IntegerField(null=True, blank=True, default=0)
+    RawTotal = models.IntegerField(null=True, blank=True, default=0)
+    NetTotal = models.IntegerField(null=True, blank=True, default=0)
+    Putts = models.IntegerField(null=True, blank=True, default=0)
+    Skins = models.IntegerField(null=True, blank=True, default=0)
 
     class Meta:
         db_table = "ScorecardMeta"

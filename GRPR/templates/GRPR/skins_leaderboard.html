@@ -25,8 +25,8 @@
                 <td>{{ player.raw_hdcp }}</td>
                 <td>{{ player.net_hdcp }}</td>
                 <td>{{ player.tee_name }}</td>
-                <td></td>
-                <td></td>
+                <td>{% if player.current_hole != 0 %}{{ player.current_hole }}{% endif %}</td>
+                <td>{% if player.skins != 0 %}{{ player.skins }}{% endif %}</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -34,6 +34,7 @@
 </div>
 
 <a href="{% url 'scorecard_view' %}?game_id={{ game_id }}" class="btn btn-primary">Scorecard</a>
+<a href="{% url 'scorecard_big_view' %}?game_id={{ game_id }}" class="btn btn btn-secondary-custom">Big Scorecard</a>
 <!-- <a href="{% url 'hole_select_view' %}" class="btn btn-primary">Choose Hole</a> -->
 
 
