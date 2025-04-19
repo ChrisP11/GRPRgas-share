@@ -3368,6 +3368,8 @@ def skins_choose_tees_view(request):
         })
     
     tee_options = CourseTees.objects.filter(CourseID=ct_id).order_by('TeeID')
+    print('ct_id', ct_id)
+    print('tee_options', tee_options)
     
     tee_options_list = []
     for tee in tee_options:
@@ -3382,6 +3384,7 @@ def skins_choose_tees_view(request):
 
     context = {
         'game_id': game_id,
+        'ct_id': ct_id,
         'invites': invites,
         'tee_options_list': tee_options_list,
         'first_name': request.user.first_name,
