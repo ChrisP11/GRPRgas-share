@@ -3169,15 +3169,16 @@ def skins_invite_view(request):
             )
 
             # Send the invitation via Twilio if enabled
-            if twilio_enabled:
-                message = client.messages.create(
-                    body=invite_msg,
-                    from_=os.getenv('TWILIO_PHONE_NUMBER'),
-                    to=invitee_mobile
-                )
-                mID = message.sid
-            else:
-                mID = 'Fake'
+            # if twilio_enabled:
+            #     message = client.messages.create(
+            #         body=invite_msg,
+            #         from_=os.getenv('TWILIO_PHONE_NUMBER'),
+            #         to=invitee_mobile
+            #     )
+            #     mID = message.sid
+            # else:
+            #     mID = 'Fake'
+            mID = 'Fake'
 
             # Create a row in the Log table
             Log.objects.create(
@@ -3281,17 +3282,20 @@ def skins_accept_decline_view(request):
 
     # Check if Twilio is enabled
     twilio_enabled = os.getenv('TWILIO_ENABLED', 'False') == 'True'
-    if twilio_enabled:
-        client = Client(os.getenv('TWILIO_ACCOUNT_SID'), os.getenv('TWILIO_AUTH_TOKEN'))
-        message = client.messages.create(
-            body=f"Your invite status has been changed to {gStatus}",
-            from_=os.getenv('TWILIO_PHONE_NUMBER'),
-            to=mobile
-        )
-        mID = message.sid
-    else:
-        mID = 'Fake'
-        mobile = 'None'
+    # if twilio_enabled:
+    #     client = Client(os.getenv('TWILIO_ACCOUNT_SID'), os.getenv('TWILIO_AUTH_TOKEN'))
+    #     message = client.messages.create(
+    #         body=f"Your invite status has been changed to {gStatus}",
+    #         from_=os.getenv('TWILIO_PHONE_NUMBER'),
+    #         to=mobile
+    #     )
+    #     mID = message.sid
+    # else:
+    #     mID = 'Fake'
+    #     mobile = 'None'
+
+    mID = 'Fake'
+    mobile = 'None'
 
     # Insert a new row into the Log table
     Log.objects.create(
