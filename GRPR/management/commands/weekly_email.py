@@ -68,10 +68,8 @@ class Command(BaseCommand):
 
         coogans_corner = (
             f"-- Coogan's Corner -- \n"
-            f"Have a Great Opening Day!  Looking forward to a great season with everyone\n"
-            f"Just FYI - if you have an outstanding Swap offered for this weekend, be aware that it will become a 'Sub' at 11:59p on Thursday.  "
-            f"IE, it will become a tee time anyone can grab without giving you a future date in trade.  This makes it easier to use all spots.  "
-            f"If you want to keep the tee time and play instead, just cancel your offer in the Sub / Swap section of gasgolf.org\n"
+            f"Congrats to low Net Brad 'full gummy' Hunter for shooting 79 and successfully negotiating high handicaps for his partners.\n"
+            f"We have a permanent 1 pm table for 12 at preserves/greenway tap restaurant immediately following Golf if anyone wants to join"
         )
         
         # Prepare the email details

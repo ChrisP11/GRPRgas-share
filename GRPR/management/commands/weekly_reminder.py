@@ -89,4 +89,4 @@ class Command(BaseCommand):
 
         send_mail(subject, email_message, from_email, recipient_list)
         
-        self.stdout.write(self.style.SUCCESS('Successfully sent test email to cprouty@gmail.com'))
+        self.stdout.write(self.style.SUCCESS('Successfully sent weekyl reminder email to cprouty@gmail.com'))

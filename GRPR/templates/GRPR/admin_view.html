@@ -5,14 +5,22 @@
 {% block content %}
 
 <div class="container my-4">
+    <h1>Admin Page</h1>
     <!-- Add the link to the email test page -->
     <div class="nav-links">
-        <a href="{% url 'email_test_view' %}">Send Email</a> |
-        <a href="{% url 'text_test_view' %}">Send Text</a> |
-        <a href="{% url 'skins_view' %}">Skins Game</a> |
-        <a href="{% url 'skins_admin_view' %}">Skins Admin</a> |
-        <a href="{% url 'subswap_dashboard_view' %}">SubSwap Dashboard</a>
+        <!-- <a href="{% url 'email_test_view' %}">Send Email</a> | -->
     </div>
+
+
+    <div class="col-lg-6 col-xxl-4 my-5 mx-auto">
+        <div class="d-grid gap-2">
+          <a href="{% url 'skins_view' %}" class="btn btn-primary" role="button">Skins Game</a>
+          <a href="{% url 'skins_admin_view' %}"class="btn btn-secondary-custom" role="button">Skins Admin</a>
+          <a href="{% url 'subswap_dashboard_view' %}" class="btn btn-primary" role="button">SubSwap Dashboard</a>
+          <a href="{% url 'text_test_view' %}" class="btn btn-primary" role="button">Sned Text</a>
+          <a href="{% url 'email_test_view' %}" class="btn btn-primary" role="button">Send Email</a>
+        </div>
+      </div>
     <br>
     <br>
 

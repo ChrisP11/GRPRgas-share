@@ -4,7 +4,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpResponse, JsonResponse, HttpResponseBadRequest
 from django.utils import timezone
 from GRPR.models import Crews, Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity, SMSResponse, Xdates, Games, GameInvites, CourseTees, ScorecardMeta, Scorecard, CourseHoles
-from datetime import datetime
+from datetime import datetime, date
 from django.conf import settings  # Import settings
 from django.contrib.auth.views import LoginView # added for secure login page creation
 from django.contrib.auth.views import PasswordChangeView
@@ -3055,6 +3055,12 @@ def skins_view(request):
     game_status = game.Status if game else None
     game_id = game.id if game else None
 
+    print('skins_view - game_id', game_id)
+    print('skins_view - game_status', game_status)
+    print('skins_view - gDate', gDate)
+    print('skins_view - game_creator', game_creator)
+
+
     context = {
         'first_name': user.first_name,
         'last_name': user.last_name,
@@ -3075,6 +3081,11 @@ def skins_new_game_view(request):
 
     # Query the next closest future date in the TeeTimesInd table
     next_closest_date = TeeTimesInd.objects.filter(gDate__gte=current_datetime).order_by('gDate').values('gDate').first()
+    print('next_closest_date', next_closest_date)
+    # hard code a date:
+    next_closest_date = {'gDate': date(2025, 4, 19)}
+    print('hard coded next_closest_date', next_closest_date)
+    print('')
 
     # If no future date is found, return an empty context
     if not next_closest_date:
@@ -3090,7 +3101,9 @@ def skins_new_game_view(request):
 
     # Query the database for tee times on the next closest date
     tee_times_queryset = TeeTimesInd.objects.filter(gDate=next_closest_date).select_related('PID', 'CourseID').order_by('CourseID__courseTimeSlot')
+    print()
     print('tee_times_queryset"', tee_times_queryset)
+    print()
 
     # Group players by tee time
     tee_times = []
@@ -3112,7 +3125,7 @@ def skins_new_game_view(request):
     
     print('new_skins_game_view')
     print('tee_times', tee_times)
-
+    print()
 
     context = {
         'tee_times': tee_times,
@@ -3128,6 +3141,10 @@ def skins_invite_view(request):
         game_creator = request.user
         gDate = request.POST.get('gDate')
         selected_players = request.POST.getlist('selected_players')
+        print('skins_invite_view - selected_players', selected_players)
+        print('skins_invite_view - gDate', gDate)
+        print('skins_invite_view - game_creator', game_creator)
+        print()
 
         # Filter out any empty values from selected_players
         selected_players = [player_id for player_id in selected_players if player_id]
@@ -3333,6 +3350,10 @@ def skins_choose_tees_view(request):
     pDate = game.PlayDate
     ct_id = game.CourseTeesID_id
 
+    print()
+    print('skins_choose_tees_view - pDate', pDate)
+    print()
+
     # Get the player_id for the current logged-in user
     user = request.user
     player = get_object_or_404(Players, user=user)
@@ -3341,6 +3362,8 @@ def skins_choose_tees_view(request):
 
     # Fetch the game invites to display on the skins_invite.html page
     invites_queryset = GameInvites.objects.filter(GameID=game_id, Status='Accepted').select_related('PID', 'TTID__CourseID')
+    print('skins_choose_tees_view - invites_queryset', invites_queryset)
+    print()
 
     # Get distinct CourseID values
     distinct_course_ids = invites_queryset.values('TTID__CourseID').distinct()
@@ -3370,6 +3393,9 @@ def skins_choose_tees_view(request):
             'course': course_name,
             'players': players,
         })
+    
+    print('skins_choose_tees_view - invites', invites)
+    print()
     
     tee_options = CourseTees.objects.filter(CourseID=ct_id).order_by('TeeID')
     print('ct_id', ct_id)
