@@ -1508,7 +1508,7 @@ def swaprequestsent_view(request):
     last_name = request.user.last_name
 
     offer_player = get_object_or_404(Players, user_id=user_id)
-    offer_player_id = player.id
+    offer_player_id = offer_player.id
 
     # Fetch the TeeTimeInd instance and other players using the utility function
     tee_time_details = get_tee_time_details(tt_id, offer_player_id)
