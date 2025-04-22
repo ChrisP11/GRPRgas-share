@@ -87,8 +87,7 @@ class Command(BaseCommand):
             else:
                 mID = 'Twilio disabled'
             self.stdout.write(f"Notified offer player: {offer_player_name} at {offer_player_mobile}")
-            
-            print(f"Sending message to {offer_player_mobile}: {offer_player_msg}")
+            self.stdout.write(f"Sending message to {offer_player_mobile}: {offer_player_msg}")
 
             # Log the change
             Log.objects.create(
@@ -103,24 +102,46 @@ class Command(BaseCommand):
             )
 
             # Find available players
-            playing_players = TeeTimesInd.objects.filter(gDate=playing_date).values_list('PID_id', flat=True)
-            available_players = Players.objects.filter(Member=1).exclude(id__in=list(playing_players))
+            available_players = Players.objects.filter(Member=1).exclude(id__in=TeeTimesInd.objects.filter(gDate=playing_date).values('PID_id'))
+
+            # Create a new Sub row for each available player
+            sub_swap_rows = []
+            log_rows = []
 
             # Notify available players
             for player in available_players:
                 avail_to_number = player.Mobile
                 avail_players_msg = f"{offer_player_name}'s Swap has been converted to a Sub. {playing_date} {tee_time}am with {other_players} is immediately available to the first person who claims it."
 
-                print(f"Sending message to {avail_to_number}: {avail_players_msg}")
+                self.stdout.write(f"Sending message to {avail_to_number}: {avail_players_msg}")
+                
 
                 if twilio_enabled:
-                    message = client.messages.create(from_='+18449472599', body=avail_players_msg, to=avail_to_number)
-                    mID = message.sid
-                else:
-                    mID = 'Twilio disabled'
+                    try:
+                        if twilio_enabled:
+                            message = client.messages.create(from_='+18449472599', body=avail_players_msg, to=avail_to_number)
+                            mID = message.sid
+                        else:
+                            mID = 'Twilio disabled'
+                    except Exception as e:
+                        self.stderr.write(f"Error sending Twilio message to {avail_to_number}: {e}")
+                        mID = 'Twilio error'
 
-                # Log the notification
-                Log.objects.create(
+                # Add SubSwap row to the list for creation of Sub Rcvd row for each available player
+                sub_swap_rows.append(SubSwap(
+                    RequestDate=timezone.now(),
+                    PID_id=player.id,
+                    TeeTimeIndID_id=tt_id,
+                    nType="Sub",
+                    SubType="Received",
+                    nStatus="Open",
+                    Msg=avail_players_msg,
+                    OtherPlayers=other_players,
+                    SwapID=sub_id
+                ))
+
+                # Add Log row to the list
+                log_rows.append(Log(
                     SentDate=timezone.now(),
                     Type="Swap to Sub",
                     MessageID=mID,
@@ -130,12 +151,17 @@ class Command(BaseCommand):
                     RefID=sub_id,
                     Msg=avail_players_msg,
                     To_number=avail_to_number
-                )
+                ))
+
+            # Bulk create SubSwap and Log rows
+            SubSwap.objects.bulk_create(sub_swap_rows)
+            Log.objects.bulk_create(log_rows)
 
         # Notify the admin
         email = 'cprouty@gmail.com'
         subject = f"Swap-to-Sub Conversion Completed for {playing_date}"
-        message = f"All open Swaps for {playing_date} have been converted to Subs.  Open Swaps list:  { open_swaps }"
+        swap_details = "\n".join([f"SwapID: {swap.SwapID}, Player: {swap.PID.FirstName} {swap.PID.LastName}" for swap in open_swaps])
+        message = f"All open Swaps for {playing_date} have been converted to Subs. Details:\n{swap_details}"
         from_email = os.environ.get('EMAIL_HOST_USER')
 
         try:
