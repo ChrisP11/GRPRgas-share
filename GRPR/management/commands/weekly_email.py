@@ -32,6 +32,9 @@ class Command(BaseCommand):
             gDate__range=[saturday, sunday]
         ).select_related('PID', 'CourseID').order_by('gDate', 'CourseID__courseTimeSlot')
 
+        print()
+        print('tee_times', tee_times)
+
         if not tee_times:
             self.stdout.write(self.style.WARNING('No tee times found to send the weekly email.'))
             return
@@ -60,12 +63,18 @@ class Command(BaseCommand):
                 grouped_times[key].append(time['player'])
             for key, players in grouped_times.items():
                 schedule_text += f"  {key}: {', '.join(players)}\n"
+        
+        print()
+        print('schedule_text', schedule_text)
 
         # Query for messages created today and not yet sent
         messages = AutomatedMessages.objects.filter(
             CreateDate__date=now().date(),  # Filter by today's date
             SentVia__isnull=True          # SentDate is NULL
         ).order_by('-CreateDate').values('CreateDate','CreatePerson', 'Msg', 'id').first()
+
+        print()
+        print('messages', messages)
 
         coogans_corner = f"Coogan's Corner:\n{messages['Msg']}\n"
         message_id = messages['id']

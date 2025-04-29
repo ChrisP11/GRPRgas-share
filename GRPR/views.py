@@ -265,6 +265,8 @@ def automated_msg_sent_view(request):
     # Retrieve the message and user name from the session
     logged_in_user_name = request.session.pop('logged_in_user_name', None)
     msg = request.session.pop('msg', None)
+    print('logged_in_user_name', logged_in_user_name)
+    print('msg', msg)
 
     # Ensure the required data is present
     if not logged_in_user_name or not msg:
