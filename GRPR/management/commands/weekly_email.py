@@ -2,8 +2,9 @@ import os
 from django.core.management.base import BaseCommand
 from django.utils.timezone import now, localtime
 from django.utils import timezone
+from django.db.models import Q
 from datetime import timedelta
-from datetime import date
+# from datetime import date
 from GRPR.models import Players, TeeTimesInd, AutomatedMessages
 from django.core.mail import send_mail
 
@@ -70,7 +71,7 @@ class Command(BaseCommand):
         # Query for messages created today and not yet sent
         messages = AutomatedMessages.objects.filter(
             CreateDate__date=now().date(),  # Filter by today's date
-            SentDate__isnull=True          # SentDate is NULL
+            SentVia=''  # SentVia is NULL or blank
         ).order_by('-CreateDate').values('CreateDate','CreatePerson', 'Msg', 'id').first()
 
         print()
