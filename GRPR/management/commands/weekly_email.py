@@ -81,7 +81,7 @@ class Command(BaseCommand):
                 # Prepare the email details
                 subject = f"VERIFICATION EMAIL - This is what the GAS Weekly for {saturday.strftime('%B %d, %Y')} will look like"
                 from_email = os.environ.get('EMAIL_HOST_USER', 'gasgolf2025@gmail.com')
-                recipient_list = ('cprouty@gmail.com',)
+                recipient_list = ('cprouty@gmail.com', 'Christopher_Coogan@rush.edu')
 
                 # Email body
                 email_body = (
