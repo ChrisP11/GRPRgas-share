@@ -36,7 +36,7 @@ fi
 git remote add $GIT_REMOTE https://git.heroku.com/$APP_NAME.git
 
 # Deploy code to Heroku
-git push $GIT_REMOTE main
+git push $GIT_REMOTE skins-game-v2:main #main
 
 # Reminder to manually set sensitive environment variables
 echo "Please set the following sensitive environment variables manually:"
@@ -56,8 +56,8 @@ heroku run python /app/demo_Players_Users_data.py --app $APP_NAME
 heroku run python /app/demo_Courses_insert_data.py --app $APP_NAME
 heroku run python /app/demo_Crews_insert_data.py --app $APP_NAME
 heroku run python /app/demo_Xdates_insert_data.py --app $APP_NAME
-heroku run python /app/demo_CourseHoles_insert_data.py --app $APP_NAME
 heroku run python /app/demo_CourseTees_insert_data.py --app $APP_NAME
+heroku run python /app/demo_CourseHoles_insert_data.py --app $APP_NAME
 heroku run python /app/demo_Players_updates.py --app $APP_NAME
 
 # get cprouty added to Players
