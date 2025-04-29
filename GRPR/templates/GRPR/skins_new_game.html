@@ -26,7 +26,7 @@
                                 <ul class="list-group">
                                     {% for player in group.players %}
                                     <li class="list-group-item">
-                                        {{ player.name }}
+                                        {{ player.name }} (<strong>{{ player.index }}</strong>)
                                         <input type="checkbox" class="player-checkbox" name="selected_players" value="{{ player.player_id }}|{{ player.tt_id }}" checked>
                                     </li>
                                     {% endfor %}

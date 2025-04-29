@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+
+{% block title %}Close Game{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <h2>Payout</h2>
+    <!-- Wager Input Section -->
+    <div class="d-flex align-items-center mb-3">
+        <label for="wager" class="form-label me-2">Wager/Player $</label>
+        <input type="text" id="wager" class="form-control form-control-sm me-2" style="width: 100px;" placeholder="Enter wager amount">
+        <button id="calculate-payout" class="btn btn-primary btn-sm">Calculate Payout</button>
+    </div>
+    <div id="wager-error" class="text-danger mt-1" style="display: none;">Please enter an integer for the wager.</div>
+
+
+    <!-- Payout Table -->
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Skins</th>
+                <th>Holes</th>
+                <th>Payout</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for player in leaderboard|dictsortreversed:"skins" %}
+            <tr>
+                <td>{{ player.name }}</td>
+                <td>{% if player.skins != 0 %}{{ player.skins }}{% else %}&nbsp;{% endif %}</td>
+                <td>{% if player.holes != "None" %}{{ player.holes }}{% else %}&nbsp;{% endif %}</td>
+                <td>{{ player.payout }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+    document.getElementById('calculate-payout').addEventListener('click', function () {
+        const wagerInput = document.getElementById('wager');
+        const wagerError = document.getElementById('wager-error');
+        const wagerValue = wagerInput.value;
+
+        // Check if the input is a valid integer
+        if (!/^\d+$/.test(wagerValue)) {
+            wagerError.style.display = 'block'; // Show error message
+        } else {
+            wagerError.style.display = 'none'; // Hide error message
+
+            // Redirect to the same view with wager and game_id
+            const gameId = "{{ game_id }}";
+            const url = `{% url 'skins_close_view' %}?game_id=${gameId}&wager=${wagerValue}`;
+            window.location.href = url;
+        }
+    });
+</script>
+{% endblock %}

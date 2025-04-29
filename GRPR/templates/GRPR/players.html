@@ -12,7 +12,7 @@
             <th>Name</th>
             <th>Mobile</th>
             <th>Email</th>
-            <th></th>
+            <th>Index</th>
             <th>Played (incl 2024)</th>
             <th>Scheduled</th>
         </tr>
@@ -20,10 +20,11 @@
     <tbody>
         {% for player in players_data %}
             <tr>
-                <td>{{ player.first_name }} {{ player.last_name }}</td>
+                <!-- <td>{{ player.first_name }} {{ player.last_name }}</td> -->
+                <td><a href="{% url 'profile_view' %}?first_name={{ player.first_name }}&last_name={{ player.last_name }}" role="button">{{ player.first_name }} {{ player.last_name }}</a></td>
                 <td>{{ player.mobile|slice:"1:4" }}-{{ player.mobile|slice:"4:7" }}-{{ player.mobile|slice:"7:11" }}</td>
                 <td>{{ player.email }}</td>
-                <td></td> <!-- Index column, no data for now -->
+                <td>{{ player.index|default_if_none:"" }}</td>
                 <td>{{ player.rounds_played }}</td>
                 <td>{{ player.rounds_scheduled }}</td>
             </tr>

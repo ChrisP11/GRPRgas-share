@@ -4,14 +4,13 @@
 
 {% block content %}
 <div class="container my-4">
-    <h2>Skins Leaderboard</h2>
+    <h2>Leaderboard - {{ play_date }}</h2>
     <table class="table table-striped">
         <thead>
             <tr>
-                <th>Player Name</th>
-                <th>Index</th>
-                <th>HDCP</th>
-                <th>Strokes</th>
+                <th>Player</th>
+                <th>HDP</th>
+                <th>S</th>
                 <th>Tee</th>
                 <th>Hole</th>
                 <th>Skins</th>
@@ -21,7 +20,6 @@
             {% for player in leaderboard %}
             <tr>
                 <td>{{ player.last_name }}</td>
-                <td>{{ player.index }}</td>
                 <td>{{ player.raw_hdcp }}</td>
                 <td>{{ player.net_hdcp }}</td>
                 <td>{{ player.tee_name }}</td>
@@ -33,9 +31,26 @@
     </table>
 </div>
 
-<a href="{% url 'scorecard_view' %}?game_id={{ game_id }}" class="btn btn-primary">Scorecard</a>
-<a href="{% url 'scorecard_big_view' %}?game_id={{ game_id }}" class="btn btn btn-secondary-custom">Big Scorecard</a>
-<!-- <a href="{% url 'hole_select_view' %}" class="btn btn-primary">Choose Hole</a> -->
-
+<!-- Group Buttons -->
+<div class="d-flex justify-content-between mb-3">
+    <div>
+        {% if game_status == 'Live' %}
+            {% for button in group_buttons %}
+            <a href="{% url 'scorecard_view' %}?game_id={{ game_id }}&group_id={{ button.group_id }}" class="btn btn-primary">
+                {{ button.label }}
+            </a>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div>
+        {% if game_status == 'Live' and scorecard_complete %}
+        <a href="{% url 'skins_close_view' %}?game_id={{ game_id }}" class="btn btn-danger float-end me-2">Close Game</a>
+        {% endif %}
+        <a href="{% url 'scorecard_view' %}?game_id={{ game_id }}" class="btn btn-secondary-custom float-end">Big Scorecard</a>
+        {% if game_status == 'Closed' and play_date == fake_date %}
+        <a href="{% url 'skins_reopen_game_view' %}?game_id={{ game_id }}" class="btn btn-warning float-end me-2">Re-Open Game</a>
+        {% endif %}
+    </div>
+</div>
 
 {% endblock %}

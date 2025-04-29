@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+
+{% block title %}Confirm Coogan's Corner Message{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <h1 class="mb-4">Confirm Coogan's Corner Message</h1>
+    <p><strong>From:</strong> {{ logged_in_user_name }}</p>
+    <p><strong>Message:</strong></p>
+    <div class="border p-3 mb-4">
+        <pre>{{ msg }}</pre>
+    </div>
+    <div class="d-flex justify-content-between mb-3">
+    <form method="post" action="{% url 'automated_msg_sent_view' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary">Confirm Send</button>
+    </form>
+    <form method="post" action="{% url 'automated_msg_admin_view' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn btn-secondary-custom">Go Back</button>
+    </form>
+</div>
+{% endblock %}

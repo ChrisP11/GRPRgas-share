@@ -11,7 +11,7 @@
         <thead>
             <tr>
                 <th>Player</th>
-                <th>Raw</th>
+                <th>Gross</th>
                 <th>Net</th>
                 <th>Putts</th>
             </tr>
@@ -34,7 +34,7 @@
                 Next Hole
             </a>
         {% else %}
-            <a href="{% url 'scorecard_view' %}?game_id={{ game_id }}" class="btn btn-primary">
+            <a href="{% url 'scorecard_view' %}?game_id={{ game_id }}&group_id={{ group_id }}" class="btn btn-primary">
                 Scorecard
             </a>
         {% endif %}

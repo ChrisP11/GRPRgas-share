@@ -20,7 +20,7 @@
     {% else %}
     <a href="{% url 'skins_new_game_view' %}" class="btn btn-primary" role="button">Invite Players to a New Game</a>
     {% endif %}
-    <!-- <a href="#" class="btn btn-secondary-custom" role="button">All Time Stats</a> -->
+    <a href="{% url 'skins_closed_games_view' %}" class="btn btn-secondary-custom" role="button">Previous Games</a>
   </div>
 </div>
 {% endblock %}

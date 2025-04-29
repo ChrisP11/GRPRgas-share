@@ -119,7 +119,22 @@ class UserProfile(models.Model):
         return self.user.username
     
 
-### Skins Game
+class AutomatedMessages(models.Model):
+    CreateDate = models.DateTimeField(auto_now_add=True)
+    CreatePerson = models.CharField(max_length=64)
+    AlterDate = models.DateTimeField(null=True, blank=True)
+    AlterPerson = models.CharField(max_length=64, null=True, blank=True)
+    SentDate = models.DateTimeField(null=True, blank=True)
+    SentPerson = models.CharField(max_length=64, null=True, blank=True)
+    SentVia = models.CharField(max_length=64, null=True, blank=True)
+    Msg = models.CharField(max_length=2048)
+
+    class Meta:
+        db_table = "AutomatedMessages"
+
+    
+
+### Scorecard Tables
 class ScorecardMeta(models.Model):
     GameID = models.ForeignKey('Games', on_delete=models.CASCADE)  # Links to Games table, in future DO NOT delete on cascade
     CreateDate = models.DateField()
@@ -160,6 +175,8 @@ class Scorecard(models.Model):
     class Meta:
         db_table = "Scorecard"
 
+
+### Skins Game Tables
 
 class Games(models.Model):
     CreateID = models.ForeignKey('Players', on_delete=models.CASCADE)  # Links to Players table, creator of the game
@@ -207,3 +224,14 @@ class CourseHoles(models.Model):
 
     class Meta:
         db_table = "CourseHoles"
+
+
+class Skins(models.Model):
+    GameID = models.ForeignKey('Games', on_delete=models.CASCADE)  # Links to the Games table
+    PlayerID = models.ForeignKey('Players', on_delete=models.CASCADE)  # Links to the Players table
+    HoleNumber = models.ForeignKey('CourseHoles', on_delete=models.CASCADE)  # The hole number where the skin was won
+    SkinDate = models.DateField(auto_now_add=True)  # Date when the skin was recorded
+
+    class Meta:
+        db_table = "Skins"
+        unique_together = ('GameID', 'PlayerID', 'HoleNumber')  # Prevent duplicate entries

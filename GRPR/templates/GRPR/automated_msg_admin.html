@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+
+{% block title %}Automated Test Msg Admin Page{% endblock %}
+
+{% block content %}
+
+<div class="container my-4">
+    <h1 class="mb-4">Create Coogan's Corner Message</h1>
+    <form method="post" action="{% url 'automated_msg_admin_view' %}">
+        {% csrf_token %}
+        <div class="form-group">
+            <label for="message">Message:</label>
+            <textarea class="form-control" id="message" name="message" rows="5" required></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Confirm Msg</button>
+    </form>
+    {% if success_message %}
+        <div class="alert alert-success mt-3">{{ success_message }}</div>
+    {% endif %}
+    {% if error_message %}
+        <div class="alert alert-danger mt-3">{{ error_message }}</div>
+    {% endif %}
+</div>
+
+{% endblock %}

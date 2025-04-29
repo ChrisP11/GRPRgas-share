@@ -56,6 +56,8 @@ heroku run python /app/demo_Players_Users_data.py --app $APP_NAME
 heroku run python /app/demo_Courses_insert_data.py --app $APP_NAME
 heroku run python /app/demo_Crews_insert_data.py --app $APP_NAME
 heroku run python /app/demo_Xdates_insert_data.py --app $APP_NAME
+heroku run python /app/demo_CourseHoles_insert_data.py --app $APP_NAME
+heroku run python /app/demo_CourseTees_insert_data.py --app $APP_NAME
 heroku run python /app/demo_Players_updates.py --app $APP_NAME
 
 # get cprouty added to Players

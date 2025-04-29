@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+
+{% block title %}Completed Games{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <h1>Completed Games</h1>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Course</th>
+                <th>Winners</th>
+                <th>Results</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for game in games_data %}
+            <tr>
+                <td>{{ game.date }}</td>
+                <td>{{ game.course }}</td>
+                <td>{{ game.winners }}</td>
+                <td>
+                    <a href="{% url 'skins_leaderboard_view' %}?game_id={{ game.game_id }}" class="btn btn-primary btn-sm">Leaderboard</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

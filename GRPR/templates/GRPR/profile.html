@@ -3,18 +3,35 @@
 {% block title %}Player Profile{% endblock %}
 
 {% block content %}
+{% if success_message %}
+<div class="alert alert-success mt-3">{{ success_message }}</div>
+{% endif %}
 
 <div class="container mt-4">
     <h1>Player Profile</h1>
     <br>
-    <h4><strong>First Name&nbsp;&nbsp;&nbsp;&nbsp;</strong> {{ first_name }}</h4>
-    <h4><strong>Last Name&nbsp;&nbsp;&nbsp;&nbsp;</strong> {{ last_name }}</h4>
-    <h4><strong>Username&nbsp;&nbsp;&nbsp;&nbsp;</strong> {{ user_name }}</h4>
+    <h4><strong>First Name&nbsp;&nbsp;&nbsp;&nbsp;</strong> {{ player_first_name }}</h4>
+    <h4><strong>Last Name&nbsp;&nbsp;&nbsp;&nbsp;</strong> {{ player_last_name }}</h4>
     <h4><strong>Email Address&nbsp;&nbsp;&nbsp;&nbsp;</strong> {{ email_address }}</h4>
     <h4><strong>Mobile&nbsp;&nbsp;&nbsp;&nbsp;</strong> {{ mobile|slice:"1:4" }}-{{ mobile|slice:"4:7" }}-{{ mobile|slice:"7:11" }}</h4>
-    <h4><strong>Index&nbsp;&nbsp;&nbsp;&nbsp;</strong> </h4>
+    <h4>
+        <strong>Index&nbsp;&nbsp;&nbsp;&nbsp;</strong> {{ index }}
+        {% if user.is_authenticated and user.username == 'cprouty' %}
+        <form method="post" action="{% url 'player_update_view' %}" class="d-inline-block">
+            {% csrf_token %}
+            <input type="hidden" name="player_id" value="{{ player_id }}">
+            <input type="hidden" name="player_first_name" value="{{ player_first_name }}">
+            <input type="hidden" name="player_last_name" value="{{ player_last_name }}">
+            <input type="hidden" name="index" value="{{ index }}">
+            <input type="text" name="new_index" class="form-control d-inline-block" style="width: 100px; margin-left: 10px;" placeholder="New Index" pattern="^\d+(\.\d{1})?$" title="Enter a decimal number with up to one decimal place" required>
+            <button type="submit" class="btn btn-primary d-inline-block" style="margin-left: 10px;">Update Index</button>
+        </form>
+        {% endif %}
+    </h4>
     <h4><strong>GHIN&nbsp;&nbsp;&nbsp;&nbsp;</strong> </h4>
     <br>
+    {% if user.is_authenticated and player_username == user.username or user.username == 'cprouty' %}
     <a href="{% url 'password_change' %}" class="btn btn-primary">Change Password</a>
+    {% endif %}
 </div>
 {% endblock %}

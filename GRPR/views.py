@@ -3,7 +3,7 @@ import json
 from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpResponse, JsonResponse, HttpResponseBadRequest
 from django.utils import timezone
-from GRPR.models import Crews, Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity, SMSResponse, Xdates, Games, GameInvites, CourseTees, ScorecardMeta, Scorecard, CourseHoles
+from GRPR.models import Crews, Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity, SMSResponse, Xdates, Games, GameInvites, CourseTees, ScorecardMeta, Scorecard, CourseHoles, Skins, AutomatedMessages
 from datetime import datetime, date
 from django.conf import settings  # Import settings
 from django.contrib.auth.views import LoginView # added for secure login page creation
@@ -19,6 +19,7 @@ from django.db.models import Q, Count, F, Func, Subquery, OuterRef, Max, Min
 from django.db import transaction
 from django.urls import reverse_lazy, reverse
 from django.core.mail import send_mail
+from django.core.management import call_command
 from GRPR.utils import get_open_subswap_or_error, check_player_availability, get_tee_time_details
 from twilio.rest import Client # Import the Twilio client
 from twilio.twiml.messaging_response import MessagingResponse
@@ -169,8 +170,8 @@ def about_view(request):
 # Admin page
 @login_required
 def admin_view(request):
-    if request.user.username != 'cprouty':
-        return redirect('home_page')  # Redirect to home if the user is not cprouty
+    if request.user.username not in ['cprouty', 'Christopher_Coogan@rush.edu']:
+        return redirect('home_page')  # Redirect to home if unauthorized
     
     # Fetch user activity
     users = User.objects.all().values('username', 'date_joined', 'last_login').order_by('-last_login')
@@ -200,6 +201,100 @@ def admin_view(request):
         'responses': responses,
     }
     return render(request, 'admin_view.html', context)
+
+
+# automated msg admin page - aka Coogan's Corner
+@login_required
+def automated_msg_admin_view(request):
+    # Check if the logged-in user is 'cprouty' or 'ccoogan'
+    if request.user.username not in ['cprouty', 'Christopher_Coogan@rush.edu']:
+        return redirect('home_page')  # Redirect to home if unauthorized
+
+    if request.method == 'POST':
+        # Get the logged-in user's name
+        logged_in_user_name = f"{request.user.first_name} {request.user.last_name}"
+
+        # Get the message from the form
+        msg = request.POST.get('message', '').strip()
+
+        # Validate the message length
+        if len(msg) > 2048:
+            error_message = "Message exceeds the 2048 character limit. Please shorten your message."
+            return render(request, 'automated_msg_admin.html', {
+                'error_message': error_message,
+                'first_name': request.user.first_name,
+                'last_name': request.user.last_name,
+            })
+
+        # Store the message and user name in the session
+        request.session['logged_in_user_name'] = logged_in_user_name
+        request.session['msg'] = msg
+
+        # Redirect to the confirmation page
+        return redirect('automated_msg_confirm_view')
+
+    # Render the initial page for GET requests
+    return render(request, 'automated_msg_admin.html', {
+        'first_name': request.user.first_name,
+        'last_name': request.user.last_name,
+    })
+
+
+# Coogan's Corner Confirm view
+@login_required
+def automated_msg_confirm_view(request):
+    # Retrieve the message and user name from the session
+    logged_in_user_name = request.session.get('logged_in_user_name')
+    msg = request.session.get('msg')
+
+    if not logged_in_user_name or not msg:
+        return redirect('automated_msg_admin_view')  # Redirect back if data is missing
+
+    # Render the confirmation page
+    return render(request, 'automated_msg_confirm.html', {
+        'logged_in_user_name': logged_in_user_name,
+        'msg': msg,
+        'first_name': request.user.first_name,
+        'last_name': request.user.last_name,
+    })
+
+
+# Sets the DB msg and sends a test email to Coogan and Prouty
+@login_required
+def automated_msg_sent_view(request):
+    # Retrieve the message and user name from the session
+    logged_in_user_name = request.session.pop('logged_in_user_name', None)
+    msg = request.session.pop('msg', None)
+
+    # Ensure the required data is present
+    if not logged_in_user_name or not msg:
+        return redirect('automated_msg_admin_view')  # Redirect back if data is missing
+
+    # Insert the message into the AutomatedMessages table
+    AutomatedMessages.objects.create(
+        CreateDate=now(),
+        CreatePerson=logged_in_user_name,
+        Msg=msg
+    )
+
+    # Run the weekly_email.py management command
+    try:
+        call_command('weekly_email') # This will execute the weekly_email.py code
+        print('call was a success?')  
+    except Exception as e:
+        return render(request, 'admin_view.html', {
+            'error_message': f"Message was logged, but the weekly email failed to send: {e}",
+            'first_name': request.user.first_name,
+            'last_name': request.user.last_name,
+        })
+
+    # Redirect to the admin page
+    return render(request, 'admin_view.html', {
+        'success_message': "Message successfully sent and logged.",
+        'first_name': request.user.first_name,
+        'last_name': request.user.last_name,
+    })
+
 
 # Email test page
 @login_required
@@ -1130,6 +1225,13 @@ def subfinal_view(request):
             RefID=ss_swap_id,
             Msg="Sub Swap was superseded by another Sub Swap for the same date that was accepted by this player",
         )
+    
+    # Find all other players in SubSwap for this SwapID except the Offer Player and Sub Accept Player - allows us to send them a msg the Sub is closed
+    other_subswap_players = SubSwap.objects.filter(
+        SwapID=swap_id
+    ).exclude(
+        PID__in=[offer_player_id, player_id]
+    ).select_related('PID')
 
 
     # Check if Twilio is enabled
@@ -1175,9 +1277,28 @@ def subfinal_view(request):
             Msg=accept_msg,
             To_number=to_number
         )
+
+        # Send text to all other players
+        for sub in other_subswap_players:
+            sub_closed_msg = f"Sub Closed: {first_name} {last_name} has taken {offer_player_first_name} {offer_player_last_name}'s tee time on {gDate}."
+            to_number = sub.PID.Mobile
+            message = client.messages.create(from_='+18449472599', body=sub_closed_msg, to=to_number)
+
+            # Insert row into Log for each player
+            Log.objects.create(
+                SentDate=timezone.now(),
+                Type="Sub Closed Notification",
+                MessageID=message.sid,
+                RequestDate=gDate,
+                OfferID=offer_player_id,
+                ReceiveID=sub.PID.id,
+                RefID=swap_id,
+                Msg=sub_closed_msg,
+                To_number=to_number
+            )
+
     else:
         offer_msg = f"Sub Accepted: {first_name} {last_name} is taking your tee time on {gDate} at {course_name} {course_time_slot}."
-        to_number = offer_player_mobile
 
         # Insert row into Log for offer player
         Log.objects.create(
@@ -1189,11 +1310,10 @@ def subfinal_view(request):
             ReceiveID=player_id,
             RefID=swap_id,
             Msg=offer_msg,
-            To_number=to_number
+            To_number=offer_player_mobile
         )
 
         accept_msg = f"Sub Accepted: { first_name } { last_name } is taking {offer_player_first_name} {offer_player_last_name}'s tee time on {gDate} at {course_name} {course_time_slot}."
-        to_number = player_mobile
 
         # Insert row into Log for Sub Accept Player
         Log.objects.create(
@@ -1205,8 +1325,22 @@ def subfinal_view(request):
             ReceiveID=player_id,
             RefID=swap_id,
             Msg=accept_msg,
-            To_number=to_number
+            To_number=player_mobile
         )
+
+        for sub in other_subswap_players:
+            sub_closed_msg = f"Sub Closed: {first_name} {last_name} has taken {offer_player_first_name} {offer_player_last_name}'s tee time on {gDate}."
+            Log.objects.create(
+                SentDate=timezone.now(),
+                Type="Sub Closed Notification",
+                MessageID='fake mID',
+                RequestDate=gDate,
+                OfferID=offer_player_id,
+                ReceiveID=sub.PID.id,
+                RefID=swap_id,
+                Msg=sub_closed_msg,
+                To_number=sub.PID.Mobile
+            )
 
     # Update TeeTimesInd table
     TeeTimesInd.objects.filter(id=tt_id).update(PID=player_id)
@@ -2795,7 +2929,7 @@ def subswap_details_view(request):
     # if the sub Swap has been completed, this will allow us to print out a msg of the details
     accepted_offer = SubSwap.objects.filter(SwapID=swap_id).filter(SubStatus='Accepted').first()
     if accepted_offer:
-        teetime_swap_details = Log.objects.filter(RefID = swap_id, Type = 'Swap Offer Accept').first()
+        teetime_swap_details = Log.objects.filter(RefID=swap_id).first()
         acceptance_msg = teetime_swap_details.Msg
     else:
         acceptance_msg = None
@@ -2962,6 +3096,7 @@ def players_view(request):
             'last_name': player.LastName,
             'mobile': player.Mobile,
             'email': player.Email,
+            'index': player.Index,
             'rounds_played': rounds_played,
             'rounds_scheduled': rounds_scheduled,
         })
@@ -2977,17 +3112,79 @@ def players_view(request):
 
 @login_required
 def profile_view(request):
+    player_first_name = request.GET.get('first_name')
+    player_last_name = request.GET.get('last_name')
+    player = Players.objects.get(FirstName=player_first_name, LastName=player_last_name)
     user = request.user
-    player = Players.objects.get(user_id=user.id)
+    first_name = user.first_name
+    last_name = user.last_name
+    username = user.username
+    logged_in_user_id = user.id
+    
 
     context = {
-        'first_name': user.first_name,
-        'last_name': user.last_name,
-        'user_name': user.username,
+        'player_first_name': player_first_name,
+        'player_last_name': player_last_name,
+        'player_username': player.Email,
         'email_address': player.Email,
         'mobile': player.Mobile,
+        'index': player.Index,
+        'player_id': player.id,
+        'first_name': first_name,
+        'last_name': last_name,
+        'username': username,
+        'logged_in_user_id': logged_in_user_id,
     }
     return render(request, 'GRPR/profile.html', context)
+
+
+## Allows Player data to be updated via the profile page.  only HDCP so far
+@login_required
+def player_update_view(request):
+    if request.method == 'POST':
+        # Retrieve form data
+        player_id = request.POST.get('player_id')
+        player_first_name = request.POST.get('player_first_name')
+        player_last_name = request.POST.get('player_last_name')
+        index = request.POST.get('index')
+        new_index = request.POST.get('new_index')
+        logged_in_user_id = request.user.id
+        first_name = request.user.first_name
+        last_name = request.user.last_name
+        username = request.user.username
+
+        # Update the Players table
+        Players.objects.filter(id=player_id).update(Index=new_index)
+
+        player = Players.objects.get(id=player_id)
+
+        # Insert a new row into the Log table
+        log_message = f"{first_name} {last_name} updated the Index for {player_first_name} {player_last_name} from {index} to {new_index}"
+        Log.objects.create(
+            SentDate=now(),
+            Type='Player Update',
+            OfferID=logged_in_user_id,
+            ReceiveID=player_id,
+            Msg=log_message
+        )
+
+        # Render profile.html with a success message
+        success_message = f"Index for {player_first_name} {player_last_name} successfully updated from {index} to {new_index}."
+        return render(request, 'GRPR/profile.html', {
+            'player_first_name': player_first_name,
+            'player_last_name': player_last_name,
+            'email_address': player.Email,
+            'mobile': player.Mobile,
+            'index': new_index,
+            'success_message': success_message,
+            'player_id': player.id,
+            'first_name': first_name,
+            'last_name': last_name,
+            'username': username,
+            'logged_in_user_id': logged_in_user_id,
+        })
+
+    return redirect('profile_view')
 
 
 ##########################
@@ -3083,7 +3280,7 @@ def skins_new_game_view(request):
     next_closest_date = TeeTimesInd.objects.filter(gDate__gte=current_datetime).order_by('gDate').values('gDate').first()
     print('next_closest_date', next_closest_date)
     # hard code a date:
-    next_closest_date = {'gDate': date(2025, 4, 19)}
+    next_closest_date = {'gDate': date(2025, 4, 26)}
     print('hard coded next_closest_date', next_closest_date)
     print('')
 
@@ -3121,6 +3318,7 @@ def skins_new_game_view(request):
             'name': f"{teetime.PID.FirstName} {teetime.PID.LastName}",
             'player_id': teetime.PID.id,
             'tt_id': teetime.id,
+            'index': teetime.PID.Index,
         })
     
     print('new_skins_game_view')
@@ -3523,6 +3721,16 @@ def skins_leaderboard_view(request):
         return HttpResponseBadRequest("Game ID is missing.")
     print('skins_leaderboard_view game_id', game_id)
 
+    # Get the Status and PlayDate of the game in a single query
+    game_data = Games.objects.filter(id=game_id).values('Status', 'PlayDate').first()
+    if not game_data:
+        return HttpResponseBadRequest("Game not found.")
+
+    game_status = game_data['Status']
+    play_date = game_data['PlayDate']
+    print('skins_leaderboard_view game_status:', game_status)
+    print('skins_leaderboard_view play_date:', play_date)
+
     # Query the ScorecardMeta table and join with related models
     scorecard_meta = ScorecardMeta.objects.filter(
         GameID_id=game_id
@@ -3535,6 +3743,9 @@ def skins_leaderboard_view(request):
         tee_name=F('TeeID__TeeName'),  # Tee name
         skins=F('Skins'),
     )
+
+    print()
+    print('skins_leaderboard.html - scorecard_meta', scorecard_meta)
 
     # Build a list of dictionaries for the leaderboard
     leaderboard = []
@@ -3559,16 +3770,219 @@ def skins_leaderboard_view(request):
             'current_hole': current_hole if current_hole else 0,
             'skins': entry.skins if entry.skins else 0, 
         })
+    
+        # Check if all players have completed their rounds
+    scorecard_data = Scorecard.objects.filter(GameID_id=game_id).values(
+        'smID__PID_id'
+    ).annotate(
+        hole_count=Count('id'),  # Count the number of rows per player
+        max_hole=Max('HoleID__HoleNumber')  # Get the maximum HoleNumber per player
+    )
+
+    # Determine if all players have completed their rounds
+    scorecard_complete = all(
+        player['hole_count'] == 18 and player['max_hole'] == 18
+        for player in scorecard_data
+    )
+
+    print()
+    print('scorecard_complete:', scorecard_complete)
+
+    # Get all distinct group_ids for the game
+    group_ids = ScorecardMeta.objects.filter(GameID_id=game_id).values_list('GroupID', flat=True).distinct().order_by('GroupID')
+
+    # Determine if the logged-in user is a member of any group
+    user_player = get_object_or_404(Players, user=request.user)
+    user_group_id = ScorecardMeta.objects.filter(GameID_id=game_id, PID=user_player).values_list('GroupID', flat=True).first()
+
+    # Build the list of group buttons
+    group_buttons = []
+    if user_group_id:
+        # Add the user's group first, labeled as "My Scorecard"
+        group_buttons.append({
+            'group_id': user_group_id,
+            'label': 'My Scorecard',
+        })
+
+    # Add the remaining groups
+    for group_id in group_ids:
+        if group_id != user_group_id:
+            group_buttons.append({
+                'group_id': group_id,
+                'label': f"{group_id}a Scorecard",
+            })
+
 
     # Pass data to the template
     context = {
         "game_id": game_id,
-        "leaderboard": leaderboard,  
+        "leaderboard": leaderboard,
+        "group_buttons": group_buttons,
+        "scorecard_complete": scorecard_complete,
+        "game_status": game_status,
+        "play_date": play_date,
         "first_name": request.user.first_name,
         "last_name": request.user.last_name,
-
     }
+
     return render(request, "GRPR/skins_leaderboard.html", context)
+
+
+# This process closes a completed Skins game and calculates the payouts
+@login_required
+def skins_close_view(request):
+    # Retrieve game_id and wager from query parameters
+    game_id = request.GET.get('game_id')
+    wager = request.GET.get('wager')  # Optional
+
+    if not game_id:
+        return HttpResponseBadRequest("Game ID is missing.")
+    
+    # Convert wager to an integer if it exists (this already gate kept on the page, but good practice)
+    try:
+        wager = int(wager) if wager else None
+    except ValueError:
+        return HttpResponseBadRequest("Invalid wager value. Please enter a valid integer.")
+
+
+    # Query ScorecardMeta to get player names
+    players = ScorecardMeta.objects.filter(GameID_id=game_id).select_related('PID').values(
+        'PID__FirstName', 'PID__LastName', 'PID_id'
+    )
+
+    # Initialize leaderboard data
+    leaderboard = []
+
+    # Query Skins table for each player
+    for player in players:
+        player_id = player['PID_id']
+        first_name = player['PID__FirstName']
+        last_name = player['PID__LastName']
+
+        # Get the number of skins and the list of holes
+        skins_data = Skins.objects.filter(GameID_id=game_id, PlayerID_id=player_id).select_related('HoleNumber').values(
+            'HoleNumber__HoleNumber'
+        )
+        skins_count = skins_data.count()
+        holes_list = [entry['HoleNumber__HoleNumber'] for entry in skins_data]
+
+        # Default payout is blank unless wager is provided
+        payout_value = ""
+
+        # Calculate payout if wager is provided
+        if wager is not None:
+            num_players = ScorecardMeta.objects.filter(GameID_id=game_id).count()
+            num_skins = Skins.objects.filter(GameID_id=game_id).count()
+            pot = wager * num_players
+            skin_payout = round(pot / num_skins, 2) if num_skins > 0 else 0
+
+            if skins_count > 0:
+                payout_value = round(skin_payout * skins_count - wager, 2)
+            else:
+                payout_value = -wager
+
+            # Format payout as currency
+            payout_value = f"${payout_value:.2f}"
+
+        # Add player data to leaderboard
+        leaderboard.append({
+            'name': f"{first_name} {last_name}",
+            'skins': skins_count,
+            'holes': ', '.join(map(str, holes_list)) if holes_list else 'None',
+            'payout': payout_value,
+        })
+
+    # Update the Games table to set the status to 'Closed' only if wager is provided
+    if wager is not None:
+        Games.objects.filter(id=game_id).update(Status='Closed')
+
+    # Pass data to the template
+    context = {
+        'game_id': game_id,
+        'leaderboard': leaderboard,
+        'first_name': request.user.first_name,
+        'last_name': request.user.last_name,
+    }
+
+    return render(request, 'GRPR/skins_close.html', context)
+
+
+@login_required
+def skins_closed_games_view(request):
+    # Query for completed games
+    completed_games = Games.objects.filter(Status='Closed').select_related('CourseTeesID').values(
+        'id',  # GameID
+        'PlayDate',
+        'CourseTeesID__CourseName'  # Course name
+    )
+
+    # Initialize data for the table
+    games_data = []
+
+    # Iterate through completed games to compile winners
+    for game in completed_games:
+        game_id = game['id']
+        play_date = game['PlayDate']
+        course_name = game['CourseTeesID__CourseName']
+
+        # Query for winners and their skin counts
+        winners_query = Skins.objects.filter(GameID_id=game_id).select_related('PlayerID').values(
+            'PlayerID__LastName'
+        ).annotate(
+            skin_count=Count('id')
+        ).order_by('-skin_count', 'PlayerID__LastName')
+
+        # Compile winners into a single string
+        winners = ', '.join([f"{winner['PlayerID__LastName']} {winner['skin_count']}" for winner in winners_query])
+
+        # Add game data to the list
+        games_data.append({
+            'game_id': game_id,  
+            'date': play_date,
+            'course': course_name,
+            'winners': winners if winners else 'No Skins Won'
+        })
+
+    # Pass data to the template
+    context = {
+        'games_data': games_data,
+        'first_name': request.user.first_name,
+        'last_name': request.user.last_name,
+    }
+
+    return render(request, 'GRPR/skins_closed_games.html', context)
+
+
+from django.utils.timezone import now
+
+@login_required
+def skins_reopen_game_view(request):
+    # Retrieve game_id from query parameters
+    game_id = request.GET.get('game_id')
+    if not game_id:
+        return HttpResponseBadRequest("Game ID is missing.")
+
+    # Update the game status to 'Live'
+    Games.objects.filter(id=game_id).update(Status='Live')
+
+    # Get the logged-in user's details
+    user = request.user
+    player = Players.objects.filter(user=user).values('id', 'FirstName', 'LastName').first()
+    if not player:
+        return HttpResponseBadRequest("Player not found for the logged-in user.")
+
+    # Insert a new row into the Log table
+    Log.objects.create(
+        SentDate=now(),
+        Type='Skins game re-opened',
+        RequestDate=Games.objects.filter(id=game_id).values_list('PlayDate', flat=True).first(),
+        OfferID=player['id'],
+        RefID=game_id,
+        Msg=f"{player['FirstName']} {player['LastName']} re-opened Skins game id {game_id} for {player['RequestDate']}"
+    )
+
+    # Redirect to skins.html
+    return redirect('skins_view')
 
 
 ##########################
@@ -3717,12 +4131,13 @@ def hole_input_score_view(request):
             # Calculate the NetScore
             net_score = score - stroke
 
+            # Checks to see if the jhole has already had a score saved
             # Fetch the ScorecardMeta object for the player
             scm = ScorecardMeta.objects.filter(GameID=game_id, PID=pid).first()
             if not scm:
                 return JsonResponse({'success': False, 'error': 'ScorecardMeta not found for player.'})
 
-            if scorecard_id:  # If a scorecard ID exists, update the row
+            if scorecard_id:  # If a scorecard ID exists, a score has previously been entered, will update the existing row
                 # Fetch the current scores from the Scorecard table
                 current_scorecard = Scorecard.objects.filter(id=scorecard_id).values('RawScore', 'NetScore', 'Putts').first()
                 current_raw_score = current_scorecard['RawScore']
@@ -3751,7 +4166,7 @@ def hole_input_score_view(request):
                 scm.Putts += putts - current_putts
                 scm.save()
 
-            else:  # Otherwise, insert a new row
+            else:  # Otherwise, no scores have been previously entered for this hole, insert a new row
                 # Insert a new row into the Scorecard table
                 Scorecard.objects.create(
                     CreateDate=timezone.now(),
@@ -3783,10 +4198,11 @@ def hole_input_score_view(request):
         print('hole_input_score_view - game_id', game_id)
         print('hole_input_score_view - group_id', group_id)
 
-        # Reset the Skins column for all players in the game
+        # Reset the Skins column for all players in the game since this process checks for all skins everywhere
         ScorecardMeta.objects.filter(GameID=game_id).update(Skins=0)
+        Skins.objects.filter(GameID=game_id).delete()
 
-        # Process skins after all scores are updated
+        # Skins process done after all scores are updated - will find if there is a skin per hole and who won it
         skins_results = Scorecard.objects.filter(GameID_id=game_id).values('HoleID_id').annotate(
             min_net_score=Min('NetScore')
         )
@@ -3795,8 +4211,17 @@ def hole_input_score_view(request):
         print('skins_results', skins_results)
         print()
 
+        # Fetch the Games instance once
+        game_obj = Games.objects.get(id=game_id)
+        # Prefetch all Players and CourseHoles instances
+        players_map = {player.id: player for player in Players.objects.filter(id__in=Scorecard.objects.filter(GameID_id=game_id).values_list('smID__PID_id', flat=True))}
+        # holes_map = {hole.id: hole for hole in CourseHoles.objects.filter(id__in=Scorecard.objects.filter(GameID_id=game_id).values_list('HoleID_id', flat=True))}
+
         # Dictionary to track skins for each player
         player_skins = {}
+
+        # Collect all Skins entries in a list
+        skins_to_create = []
 
         for result in skins_results:
             skins_hole_id = result['HoleID_id']
@@ -3812,11 +4237,19 @@ def hole_input_score_view(request):
             if players_with_lowest_score.count() == 1:
                 # Only one player has the lowest score, award a skin
                 player_id = players_with_lowest_score.first()['smID__PID_id']
+                player_obj = players_map[player_id]  # Use pre-fetched Players instance
+                # hole_obj = holes_map[skins_hole_id]  # Use pre-fetched CourseHoles instance
+
+                hole_obj = CourseHoles.objects.get(id=skins_hole_id)  # Fetch the CourseHoles instance
+                skins_to_create.append(Skins(GameID=game_obj, PlayerID=player_obj, HoleNumber=hole_obj))
                 print(f"For hole {skins_hole_id}, player {player_id} scored {min_net_score} and receives 1 skin.")
                 player_skins[player_id] = player_skins.get(player_id, 0) + 1
             else:
                 # Multiple players have the lowest score, no skins awarded
-                print(f"For hole {hole_id}, there are no skins.")
+                print(f"For hole {skins_hole_id}, there are no skins.")
+
+        # Perform bulk insert for all the Skins table data
+        Skins.objects.bulk_create(skins_to_create)
         
         print()
         print('player_skins', player_skins)
@@ -3878,34 +4311,40 @@ def hole_display_view(request):
 def scorecard_view(request):
     # Fetch game_id from GET parameters
     game_id = request.GET.get('game_id', None)
-    group_id = ScorecardMeta.objects.filter(GameID=game_id, PID__user_id=request.user.id).values_list('GroupID', flat=True).distinct().first()
+    group_id = request.GET.get('group_id', None)
+    print()
+    print('scorecard_view - game_id', game_id)
+    print('scorecard_view - group_id', group_id)
 
     # Fetch players where GameID = game_id and GroupID = group_id
-    players = ScorecardMeta.objects.filter(GameID=game_id, GroupID=group_id).select_related('PID').values(
+    ### GroupID=group_id
+    players = ScorecardMeta.objects.filter(GameID=game_id).select_related('PID').values(
         first_name=F('PID__FirstName'),
         last_name=F('PID__LastName'),
         pid=F('PID__id'),
         net_hdcp=F('NetHDCP'), 
-        raw_out=F('RawOUT'),
-        net_out=F('NetOUT'),
-        raw_in=F('RawIN'),
-        net_in=F('NetIN'),
-        raw_total=F('RawTotal'),
-        net_total=F('NetTotal'),
     )
+
+    # Conditionally filter by group_id if it exists - sometimes it will be passed (4 person scorecard) and sometimes it won't (Big Scorecard)
+    if group_id:
+        players = players.filter(GroupID=group_id)
 
     # Convert players queryset to a list of dictionaries
     player_list = list(players)
     print('player_list', player_list)
 
     # Fetch the most common TeeID_id for the specified GroupID and GameID
+    ### GroupID=group_id
     most_common_tee_id = (
-        ScorecardMeta.objects.filter(GameID=game_id, GroupID=group_id)
+        ScorecardMeta.objects.filter(GameID=game_id)
         .values('TeeID_id')
         .annotate(count=Count('TeeID_id'))
         .order_by('-count')
         .first()
     )
+
+    print()
+    print('most_common_tee_id', most_common_tee_id)
 
     # Fetch CourseHoles data for the most common TeeID_id
     course_holes = []
@@ -3917,58 +4356,119 @@ def scorecard_view(request):
         # Fetch the CourseName from CourseTees
         course_name = CourseTees.objects.filter(id=most_common_tee_id['TeeID_id']).values_list('CourseName', flat=True).first()
 
+    print()
+    print('course_holes', course_holes)
+
     # Fetch the PlayDate from Games
     play_date = Games.objects.filter(id=game_id).values_list('PlayDate', flat=True).first()
 
-    # Fetch scores for each player and hole
-    scores = Scorecard.objects.filter(GameID_id=game_id).select_related('HoleID', 'smID').values(
-        'HoleID__HoleNumber', 'NetScore', 'smID__PID_id'
+    print()
+    print('play_date', play_date)
+
+    ### smID__GroupID=group_id
+    # Fetch scores for the game
+    scores = Scorecard.objects.filter(
+        GameID_id=game_id
+    ).select_related('HoleID', 'smID').values(
+        'HoleID__HoleNumber', 'NetScore', 'RawScore', 'smID__PID_id'
     )
+
+    # Conditionally filter by group_id if it exists - sometimes it will be passed (4 person scorecard) and sometimes it won't (Big Scorecard)
+    if group_id:
+        scores = scores.filter(smID__GroupID=group_id)
+
+    print()
+    print('scores', scores)
 
     # Initialize player_scores with empty dictionaries for all players
     player_scores = {player['pid']: {} for player in player_list}
-
-    # Ensure player_scores includes all player_ids from scores
-    for score in scores:
-        player_id = score['smID__PID_id']
-        if player_id not in player_scores:
-            player_scores[player_id] = {}
-            
     print()
-    print('player_scores', player_scores)
-    print()
-    print('scores', scores)
-    print()
+    print('player_scores pre meta', player_scores)
     
     # Populate player_scores with actual scores if they exist
     for score in scores:
         player_id = score['smID__PID_id']
         hole_number = score['HoleID__HoleNumber']
         net_score = score['NetScore']
+        raw_score = score['RawScore']
 
-        player_scores[player_id][hole_number] = net_score
+        print()
+        print('score in scores', player_id, hole_number, net_score, raw_score)
+
+        player_scores[player_id][hole_number] = {
+            'net': net_score if net_score is not None else '',
+            'raw': raw_score if raw_score is not None else '',
+            'skin': False  # Initialize skin flag as False
+        }
+    print()    
+    print('player_scores', player_scores)
+
+    # Ensure all holes, "Out," "In," and "Total" columns are initialized
+    for player_id in player_scores:
+        for hole in course_holes:
+            hole_number = hole['HoleNumber']
+            if hole_number not in player_scores[player_id]:
+                player_scores[player_id][hole_number] = {'net': '', 'raw': ''}
+
+        # Initialize "Out," "In," and "Total" columns
+        player_scores[player_id]['Out'] = {'net': '', 'raw': '', 'skin': False}
+        player_scores[player_id]['In'] = {'net': '', 'raw': '', 'skin': False}
+        player_scores[player_id]['Total'] = {'net': '', 'raw': '', 'skin': False}
     
+    print()
+    print('player_scores post init', player_scores)
+
     # Fetch additional fields from ScorecardMeta and add them to player_scores
-    scorecard_meta_data = ScorecardMeta.objects.filter(GameID=game_id, GroupID=group_id).values(
+    scorecard_meta_data = ScorecardMeta.objects.filter(GameID=game_id).values(
         'PID_id', 'RawOUT', 'NetOUT', 'RawIN', 'NetIN', 'RawTotal', 'NetTotal'
     )
+
+    # Conditionally filter by group_id if it exists
+    if group_id:
+        scorecard_meta_data = scorecard_meta_data.filter(GroupID=group_id)
+        
     for meta in scorecard_meta_data:
         pid = meta['PID_id']
         if pid in player_scores:
-            player_scores[pid]['RawOUT'] = meta['RawOUT']
-            player_scores[pid]['NetOUT'] = meta['NetOUT']
-            player_scores[pid]['RawIN'] = meta['RawIN']
-            player_scores[pid]['NetIN'] = meta['NetIN']
-            player_scores[pid][50505050] = meta['RawTotal']
-            player_scores[pid]['NetTotal'] = meta['NetTotal']
+            player_scores[pid]['Out'] = {
+                'net': meta['NetOUT'] if meta['NetOUT'] is not None else '',
+                'raw': meta['RawOUT'] if meta['RawOUT'] is not None else '',
+                'skin': False
+            }
+            player_scores[pid]['In'] = {
+                'net': meta['NetIN'] if meta['NetIN'] is not None else '',
+                'raw': meta['RawIN'] if meta['RawIN'] is not None else '',
+                'skin': False
+            }
+            player_scores[pid]['Total'] = {
+                'net': meta['NetTotal'] if meta['NetTotal'] is not None else '',
+                'raw': meta['RawTotal'] if meta['RawTotal'] is not None else '',
+                'skin': False
+            }
     print()
     print()
     print('player_scores post meta', player_scores)
+
+        # Fetch skins data
+    skins = Skins.objects.filter(GameID=game_id).select_related('HoleNumber').values(
+        'HoleNumber__HoleNumber', 'PlayerID_id'
+    )
+
+    # Mark skins in player_scores
+    for skin in skins:
+        hole_number = skin['HoleNumber__HoleNumber']
+        player_id = skin['PlayerID_id']
+        if player_id in player_scores and hole_number in player_scores[player_id]:
+            player_scores[player_id][hole_number]['skin'] = True
+
     print()
+    print('player_scores post skins', player_scores)
 
     # Initialize player_scores as an empty dictionary if no scores exist
     if not player_scores:
         player_scores = {}
+    print()
+    print('player_scores post check for p_s existience', player_scores)
     
     # Calculate strokes for each player
     player_strokes = {}
@@ -4010,7 +4510,7 @@ def scorecard_view(request):
         'course_holes': list(course_holes),
         'course_name': course_name,
         'play_date': play_date,
-        'player_scores': player_scores,  # Pass player scores (NetScore) to the template
+        'player_scores': player_scores,  # Pass player scores to the template
         'player_strokes': player_strokes,  # Pass player strokes to the template
         'first_name': request.user.first_name,
         'last_name': request.user.last_name,
@@ -4020,134 +4520,134 @@ def scorecard_view(request):
 
 
 ## big version of the scorecard
-@login_required
-def scorecard_big_view(request):
-    # Fetch game_id from GET parameters
-    game_id = request.GET.get('game_id', None)
+# @login_required
+# def scorecard_big_view(request):
+#     # Fetch game_id from GET parameters
+#     game_id = request.GET.get('game_id', None)
 
-    # Fetch all players where GameID = game_id (no filtering by group_id)
-    players = ScorecardMeta.objects.filter(GameID=game_id).select_related('PID').values(
-        first_name=F('PID__FirstName'),
-        last_name=F('PID__LastName'),
-        pid=F('PID__id'),
-        net_hdcp=F('NetHDCP'), 
-        raw_out=F('RawOUT'),
-        net_out=F('NetOUT'),
-        raw_in=F('RawIN'),
-        net_in=F('NetIN'),
-        raw_total=F('RawTotal'),
-        net_total=F('NetTotal'),
-    )
+#     # Fetch all players where GameID = game_id (no filtering by group_id)
+#     players = ScorecardMeta.objects.filter(GameID=game_id).select_related('PID').values(
+#         first_name=F('PID__FirstName'),
+#         last_name=F('PID__LastName'),
+#         pid=F('PID__id'),
+#         net_hdcp=F('NetHDCP'), 
+#         raw_out=F('RawOUT'),
+#         net_out=F('NetOUT'),
+#         raw_in=F('RawIN'),
+#         net_in=F('NetIN'),
+#         raw_total=F('RawTotal'),
+#         net_total=F('NetTotal'),
+#     )
 
-    # Convert players queryset to a list of dictionaries
-    player_list = list(players)
-    print('player_list', player_list)
+#     # Convert players queryset to a list of dictionaries
+#     player_list = list(players)
+#     print('player_list', player_list)
 
-    # Fetch the most common TeeID_id for the specified GameID
-    most_common_tee_id = (
-        ScorecardMeta.objects.filter(GameID=game_id)
-        .values('TeeID_id')
-        .annotate(count=Count('TeeID_id'))
-        .order_by('-count')
-        .first()
-    )
+#     # Fetch the most common TeeID_id for the specified GameID
+#     most_common_tee_id = (
+#         ScorecardMeta.objects.filter(GameID=game_id)
+#         .values('TeeID_id')
+#         .annotate(count=Count('TeeID_id'))
+#         .order_by('-count')
+#         .first()
+#     )
 
-    # Fetch CourseHoles data for the most common TeeID_id
-    course_holes = []
-    course_name = None
-    if most_common_tee_id:
-        course_holes = CourseHoles.objects.filter(CourseTeesID_id=most_common_tee_id['TeeID_id']).order_by('HoleNumber').values(
-            'id', 'HoleNumber', 'Par', 'Yardage', 'Handicap'
-        )
-        # Fetch the CourseName from CourseTees
-        course_name = CourseTees.objects.filter(id=most_common_tee_id['TeeID_id']).values_list('CourseName', flat=True).first()
+#     # Fetch CourseHoles data for the most common TeeID_id
+#     course_holes = []
+#     course_name = None
+#     if most_common_tee_id:
+#         course_holes = CourseHoles.objects.filter(CourseTeesID_id=most_common_tee_id['TeeID_id']).order_by('HoleNumber').values(
+#             'id', 'HoleNumber', 'Par', 'Yardage', 'Handicap'
+#         )
+#         # Fetch the CourseName from CourseTees
+#         course_name = CourseTees.objects.filter(id=most_common_tee_id['TeeID_id']).values_list('CourseName', flat=True).first()
 
-    # Fetch the PlayDate from Games
-    play_date = Games.objects.filter(id=game_id).values_list('PlayDate', flat=True).first()
+#     # Fetch the PlayDate from Games
+#     play_date = Games.objects.filter(id=game_id).values_list('PlayDate', flat=True).first()
 
-    # Fetch scores for each player and hole
-    scores = Scorecard.objects.filter(GameID_id=game_id).select_related('HoleID', 'smID').values(
-        'HoleID__HoleNumber', 'NetScore', 'smID__PID_id'
-    )
+#     # Fetch scores for each player and hole
+#     scores = Scorecard.objects.filter(GameID_id=game_id).select_related('HoleID', 'smID').values(
+#         'HoleID__HoleNumber', 'NetScore', 'smID__PID_id'
+#     )
 
-    # Initialize player_scores with empty dictionaries for all players
-    player_scores = {player['pid']: {} for player in player_list}
-    print('player_scores', player_scores)
-    print('scores', scores)
+#     # Initialize player_scores with empty dictionaries for all players
+#     player_scores = {player['pid']: {} for player in player_list}
+#     print('player_scores', player_scores)
+#     print('scores', scores)
     
-    # Populate player_scores with actual scores if they exist
-    for score in scores:
-        player_id = score['smID__PID_id']
-        hole_number = score['HoleID__HoleNumber']
-        net_score = score['NetScore']
+#     # Populate player_scores with actual scores if they exist
+#     for score in scores:
+#         player_id = score['smID__PID_id']
+#         hole_number = score['HoleID__HoleNumber']
+#         net_score = score['NetScore']
 
-        player_scores[player_id][hole_number] = net_score
+#         player_scores[player_id][hole_number] = net_score
     
-    # Fetch additional fields from ScorecardMeta and add them to player_scores
-    scorecard_meta_data = ScorecardMeta.objects.filter(GameID=game_id).values(
-        'PID_id', 'RawOUT', 'NetOUT', 'RawIN', 'NetIN', 'RawTotal', 'NetTotal'
-    )
-    for meta in scorecard_meta_data:
-        pid = meta['PID_id']
-        if pid in player_scores:
-            player_scores[pid]['RawOUT'] = meta['RawOUT']
-            player_scores[pid]['NetOUT'] = meta['NetOUT']
-            player_scores[pid]['RawIN'] = meta['RawIN']
-            player_scores[pid]['NetIN'] = meta['NetIN']
-            player_scores[pid][50505050] = meta['RawTotal']
-            player_scores[pid]['NetTotal'] = meta['NetTotal']
-    print()
-    print()
-    print('player_scores post meta', player_scores)
-    print()
+#     # Fetch additional fields from ScorecardMeta and add them to player_scores
+#     scorecard_meta_data = ScorecardMeta.objects.filter(GameID=game_id).values(
+#         'PID_id', 'RawOUT', 'NetOUT', 'RawIN', 'NetIN', 'RawTotal', 'NetTotal'
+#     )
+#     for meta in scorecard_meta_data:
+#         pid = meta['PID_id']
+#         if pid in player_scores:
+#             player_scores[pid]['RawOUT'] = meta['RawOUT']
+#             player_scores[pid]['NetOUT'] = meta['NetOUT']
+#             player_scores[pid]['RawIN'] = meta['RawIN']
+#             player_scores[pid]['NetIN'] = meta['NetIN']
+#             player_scores[pid][50505050] = meta['RawTotal']
+#             player_scores[pid]['NetTotal'] = meta['NetTotal']
+#     print()
+#     print()
+#     print('player_scores post meta', player_scores)
+#     print()
 
-    # Initialize player_scores as an empty dictionary if no scores exist
-    if not player_scores:
-        player_scores = {}
+#     # Initialize player_scores as an empty dictionary if no scores exist
+#     if not player_scores:
+#         player_scores = {}
     
-    # Calculate strokes for each player
-    player_strokes = {}
-    for player in player_list:
-        player_id = player['pid']
+#     # Calculate strokes for each player
+#     player_strokes = {}
+#     for player in player_list:
+#         player_id = player['pid']
 
-        # Get NetHDCP for the player
-        net_hdcp = ScorecardMeta.objects.filter(GameID=game_id, PID_id=player_id).values_list('NetHDCP', flat=True).first()
+#         # Get NetHDCP for the player
+#         net_hdcp = ScorecardMeta.objects.filter(GameID=game_id, PID_id=player_id).values_list('NetHDCP', flat=True).first()
 
-        if net_hdcp is not None:
-            # Calculate base_strokes and addl_strokes
-            base_strokes, addl_strokes = divmod(net_hdcp, 18)
+#         if net_hdcp is not None:
+#             # Calculate base_strokes and addl_strokes
+#             base_strokes, addl_strokes = divmod(net_hdcp, 18)
 
-            # Get holes where the player gets an additional stroke
-            stroke_holes = CourseHoles.objects.filter(
-                CourseTeesID_id=most_common_tee_id['TeeID_id'],
-                Handicap__lte=addl_strokes
-            ).values_list('HoleNumber', flat=True)
+#             # Get holes where the player gets an additional stroke
+#             stroke_holes = CourseHoles.objects.filter(
+#                 CourseTeesID_id=most_common_tee_id['TeeID_id'],
+#                 Handicap__lte=addl_strokes
+#             ).values_list('HoleNumber', flat=True)
 
-            # Assign strokes for each hole
-            strokes = {}
-            for hole in course_holes:
-                hole_number = hole['HoleNumber']
-                if hole_number in stroke_holes:
-                    strokes[hole_number] = base_strokes + 1
-                else:
-                    strokes[hole_number] = base_strokes
+#             # Assign strokes for each hole
+#             strokes = {}
+#             for hole in course_holes:
+#                 hole_number = hole['HoleNumber']
+#                 if hole_number in stroke_holes:
+#                     strokes[hole_number] = base_strokes + 1
+#                 else:
+#                     strokes[hole_number] = base_strokes
 
-            player_strokes[player_id] = strokes
+#             player_strokes[player_id] = strokes
 
-    # Initialize player_strokes as an empty dictionary if no strokes exist
-    if not player_strokes:
-        player_strokes = {}
+#     # Initialize player_strokes as an empty dictionary if no strokes exist
+#     if not player_strokes:
+#         player_strokes = {}
     
-    context = {
-        'game_id': game_id,
-        'player_list': player_list,
-        'course_holes': list(course_holes),
-        'course_name': course_name,
-        'play_date': play_date,
-        'player_scores': player_scores,  # Pass player scores (NetScore) to the template
-        'player_strokes': player_strokes,  # Pass player strokes to the template
-        'first_name': request.user.first_name,
-        'last_name': request.user.last_name,
-    }
+#     context = {
+#         'game_id': game_id,
+#         'player_list': player_list,
+#         'course_holes': list(course_holes),
+#         'course_name': course_name,
+#         'play_date': play_date,
+#         'player_scores': player_scores,  # Pass player scores (NetScore) to the template
+#         'player_strokes': player_strokes,  # Pass player strokes to the template
+#         'first_name': request.user.first_name,
+#         'last_name': request.user.last_name,
+#     }
 
-    return render(request, 'GRPR/scorecard_big.html', context)
+#     return render(request, 'GRPR/scorecard_big.html', context)
