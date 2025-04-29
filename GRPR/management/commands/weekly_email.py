@@ -70,7 +70,7 @@ class Command(BaseCommand):
         # Query for messages created today and not yet sent
         messages = AutomatedMessages.objects.filter(
             CreateDate__date=now().date(),  # Filter by today's date
-            SentVia__isnull=True          # SentDate is NULL
+            SentDate__isnull=True          # SentDate is NULL
         ).order_by('-CreateDate').values('CreateDate','CreatePerson', 'Msg', 'id').first()
 
         print()
