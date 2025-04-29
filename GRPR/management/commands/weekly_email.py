@@ -71,7 +71,7 @@ class Command(BaseCommand):
         # Query for messages created today and not yet sent
         messages = AutomatedMessages.objects.filter(
             CreateDate__date=now().date(),  # Filter by today's date
-            SentVia=''  # SentVia is NULL or blank
+            # SentVia=''  # SentVia is NULL or blank
         ).order_by('-CreateDate').values('CreateDate','CreatePerson', 'Msg', 'id').first()
 
         print()
@@ -91,7 +91,7 @@ class Command(BaseCommand):
                 # Prepare the email details
                 subject = f"VERIFICATION EMAIL - This is what the GAS Weekly for {saturday.strftime('%B %d, %Y')} will look like"
                 from_email = os.environ.get('EMAIL_HOST_USER', 'gasgolf2025@gmail.com')
-                recipient_list = ('cprouty@gmail.com', 'Christopher_Coogan@rush.edu')
+                recipient_list = ('cprouty@gmail.com',)  # 'Christopher_Coogan@rush.edu', 
 
                 # Email body
                 email_body = (
@@ -120,7 +120,7 @@ class Command(BaseCommand):
             print("No message found or 'CreateDate' is missing.")
 
         # Check if today is Tuesday
-        if timezone.now().weekday() != 1:  # 0 = Monday, 1 = Tuesday, ..., 6 = Sunday
+        if timezone.now().weekday() != 0:  # 0 = Monday, 1 = Tuesday, ..., 6 = Sunday
             self.stdout.write(self.style.WARNING('Today is not Tuesday. This job only runs on Tuesdays.'))
             return
         # Get the current date and calculate the upcoming weekend range (Saturday and Sunday)
