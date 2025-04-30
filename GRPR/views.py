@@ -3286,7 +3286,7 @@ def skins_new_game_view(request):
     next_closest_date = TeeTimesInd.objects.filter(gDate__gte=current_datetime).order_by('gDate').values('gDate').first()
     print('next_closest_date', next_closest_date)
     # hard code a date:
-    next_closest_date = {'gDate': date(2025, 4, 19)}
+    next_closest_date = {'gDate': date(2025, 4, 26)}
     print('hard coded next_closest_date', next_closest_date)
     print('')
 
