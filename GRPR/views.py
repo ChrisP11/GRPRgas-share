@@ -271,11 +271,15 @@ def automated_msg_sent_view(request):
     # Ensure the required data is present
     if not logged_in_user_name or not msg:
         return redirect('automated_msg_admin_view')  # Redirect back if data is missing
+    
+    # 'closes' prior messages that have not been sent.
+    AutomatedMessages.objects.filter(SentVia='Ready').update(SentVia='CLXD', AlterDate=now(), AlterPerson='Automated')
 
     # Insert the message into the AutomatedMessages table
     AutomatedMessages.objects.create(
         CreateDate=now(),
         CreatePerson=logged_in_user_name,
+        SentVia='Ready',
         Msg=msg
     )
 
@@ -1736,7 +1740,7 @@ def swaprequestsent_view(request):
             )
 
             # Create and send a text to every Available Player
-            msg = f"{swap_offer} https://www.gasgolf.org/GRPR/store_swapaccept_data/?swap_id={swap_id}"
+            msg = f"{swap_offer} https://www.gasgolf.org/GRPR/store_swapoffer_data/?swapID={swap_id}"
             message = client.messages.create(from_='+18449472599', body=msg, to=to_number)
             mID = message.sid
 
@@ -1862,7 +1866,7 @@ def swapoffer_view(request):
     # Fetch available dates for the user
     available_dates = TeeTimesInd.objects.filter(
         PID=player_id,
-        gDate__gt=gDate
+        gDate__gt=today
     ).exclude(
         gDate__in=TeeTimesInd.objects.filter(PID=offer_player).values_list('gDate', flat=True)
     ).select_related('CourseID').order_by('gDate')
