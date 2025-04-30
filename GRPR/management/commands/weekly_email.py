@@ -113,7 +113,7 @@ class Command(BaseCommand):
 
 
         # Check if today is Tuesday
-        if timezone.now().weekday() != 2:  # 0 = Monday, 1 = Tuesday, ..., 6 = Sunday
+        if timezone.now().weekday() != 1:  # 0 = Monday, 1 = Tuesday, ..., 6 = Sunday
             self.stdout.write(self.style.WARNING('Today is not Tuesday. This job only runs on Tuesdays.'))
             return
         
