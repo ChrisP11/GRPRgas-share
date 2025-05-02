@@ -6,6 +6,7 @@
 <div class="container mt-4">
     <h3>Sub Swap Details - ID: {{ swap_id }}</h3>
     <h4>Acceptance Msg:  {{ acceptance_msg }}</h4>
+    <a href="{% url 'store_subcancel_data_view' %}?swap_id={{ swap_id }}" class="btn btn-danger btn-sm">Cancel Offered Sub / Swap</a>
     <table class="table table-striped">
         <thead>
             <tr>
