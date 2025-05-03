@@ -2892,6 +2892,12 @@ def subswap_dashboard_view(request):
 @login_required
 def subswap_details_view(request):
     swap_id = request.GET.get('swap_id')
+
+    # Get the status and type from the Offer row so we can print out the right buttons on the page.  This is not efficient
+    subswap_specs = SubSwap.objects.filter(SwapID=swap_id, SubType='Offer').values('nStatus', 'nType').first()
+    Status = subswap_specs['nStatus']
+    Type = subswap_specs['nType']
+
     # Query for the specific SwapID
     swap_details = SubSwap.objects.filter(
         SwapID=swap_id
@@ -2946,12 +2952,180 @@ def subswap_details_view(request):
         'log_messages': log_messages,
         'acceptance_msg': acceptance_msg,
         'swap_id': swap_id,
+        'status': Status,
+        'type': Type,
         'first_name': request.user.first_name,
         'last_name': request.user.last_name
     }
 
     # Render the template
     return render(request, 'GRPR/subswap_details.html', context)
+
+
+@login_required
+def subswap_admin_change_view(request):
+    # Query for tee times (future dates)
+    tee_times = (
+        TeeTimesInd.objects
+        .filter(gDate__gt=date.today())
+        .select_related('CourseID', 'PID')
+        .order_by('gDate', 'CourseID__courseTimeSlot', 'PID__LastName')
+        .values(
+            'id',
+            'gDate',
+            'CourseID__courseTimeSlot',
+            'PID__FirstName',
+            'PID__LastName',
+            'PID'
+        )
+    )
+
+    # Query for all players
+    players = (
+        Players.objects
+        .all()
+        .order_by('LastName', 'FirstName')
+        .values('id', 'FirstName', 'LastName')
+    )
+
+    context = {
+        'tee_times': tee_times,
+        'players': players,
+        'first_name': request.user.first_name,  
+        'last_name': request.user.last_name,
+    }
+    return render(request, 'GRPR/subswap_admin_change.html', context)
+
+
+
+from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
+
+
+@login_required
+def subswap_admin_update_view(request):
+    if request.method != "POST":
+        return HttpResponseBadRequest("Invalid request method.")
+
+    tt_id = request.POST.get('tt_id')
+    offer_player_id = request.POST.get('offer_player_id')
+    accept_player_id = request.POST.get('accept_player_id')
+
+    if not tt_id or not offer_player_id or not accept_player_id:
+        return render(request, 'GRPR/subswap_admin_change.html', {
+            'error_message': "Missing required data for sub execution."
+        })
+
+    # Get the tee time and playing date
+    try:
+        teetime = TeeTimesInd.objects.get(id=tt_id)
+        playing_date = teetime.gDate
+    except TeeTimesInd.DoesNotExist:
+        return render(request, 'GRPR/subswap_admin_change.html', {
+            'error_message': "Tee time not found."
+        })
+
+    logged_in_user_id = request.user.id
+    accept_player = Players.objects.get(id=accept_player_id)
+
+    # Check if accept_player is already playing that date
+    already_playing = TeeTimesInd.objects.filter(PID=accept_player_id, gDate=playing_date).exists()
+    if already_playing:
+        return render(request, 'GRPR/subswap_admin_change.html', {
+            'error_message': f"{accept_player.FirstName} {accept_player.LastName} is already playing {playing_date}, Sub NOT executed."
+        })
+
+    # Update the tee time to assign the new player
+    TeeTimesInd.objects.filter(id=tt_id).update(PID=accept_player_id)
+
+    logged_in_user = Players.objects.get(user_id=logged_in_user_id)
+    offer_player = Players.objects.get(id=offer_player_id)
+    exch_msg = f"{accept_player.FirstName} {accept_player.LastName} is now playing {playing_date} for {offer_player.FirstName} {offer_player.LastName}. Sub executed via Admin function"
+
+    # Insert SubSwap Offer row
+    sub_offer = SubSwap.objects.create(
+        RequestDate=timezone.now(),
+        PID_id=offer_player_id,
+        TeeTimeIndID_id=tt_id,
+        nType="Sub",
+        SubType="Offer",
+        nStatus="Closed",
+        Msg=exch_msg,
+    )
+    swap_id = sub_offer.id
+    SubSwap.objects.filter(id=swap_id).update(SwapID=swap_id)
+
+    # Insert SubSwap Received row
+    SubSwap.objects.create(
+        RequestDate=timezone.now(),
+        PID_id=accept_player_id,
+        TeeTimeIndID_id=tt_id,
+        nType="Sub",
+        SubType="Received",
+        nStatus="Closed",
+        SubStatus="Received",
+        SwapID=swap_id,
+        Msg=exch_msg,
+    )
+
+    # Log entries
+    from GRPR.models import Log
+    now_time = timezone.now()
+    Log.objects.create(
+        SentDate=now_time,
+        Type='Sub Given',
+        RequestDate=playing_date,
+        OfferID=offer_player_id,
+        ReceiveID=accept_player_id,
+        RefID=swap_id,
+        Msg=exch_msg,
+    )
+    Log.objects.create(
+        SentDate=now_time,
+        Type='Sub Received',
+        RequestDate=playing_date,
+        OfferID=accept_player_id,
+        ReceiveID=offer_player_id,
+        RefID=swap_id,
+        Msg=exch_msg,
+    )
+
+    # Close any open SubSwaps for this tee time
+    SubSwap.objects.filter(TeeTimeIndID_id=tt_id, nStatus='Open').update(nStatus='Closed')
+    # Close any open SubSwaps for accept_player on this date
+    SubSwap.objects.filter(
+        nStatus='Open',
+        PID=accept_player_id,
+        TeeTimeIndID__gDate=playing_date
+    ).update(nStatus='Closed')
+
+    # Re-render the admin page with a success message
+    # (You may want to re-query tee_times and players here)
+    tee_times = (
+        TeeTimesInd.objects
+        .filter(gDate__gt=date.today())
+        .select_related('CourseID', 'PID')
+        .order_by('gDate', 'CourseID__courseTimeSlot', 'PID__LastName')
+        .values(
+            'id',
+            'gDate',
+            'CourseID__courseTimeSlot',
+            'PID__FirstName',
+            'PID__LastName',
+            'PID'
+        )
+    )
+    players = (
+        Players.objects
+        .all()
+        .order_by('LastName', 'FirstName')
+        .values('id', 'FirstName', 'LastName')
+    )
+    return render(request, 'GRPR/subswap_admin_change.html', {
+        'success_message': exch_msg,
+        'tee_times': tee_times,
+        'players': players,
+    })
 
 
 @login_required

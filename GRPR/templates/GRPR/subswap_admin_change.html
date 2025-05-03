@@ -1,0 +1,107 @@
+{% extends 'base.html' %}
+
+{% block title %}Force Sub / Swap{% endblock %}
+
+{% block content %}
+
+{% if success_message %}
+    <div class="alert alert-success">{{ success_message }}</div>
+{% endif %}
+{% if error_message %}
+    <div class="alert alert-danger">{{ error_message }}</div>
+{% endif %}
+
+<div class="container my-4">
+    <h1 class="mb-4">Force Sub / Swap</h1>
+
+    <!-- Tee Time Dropdown -->
+    <div class="mb-4">
+        <label for="tee-time-select" class="form-label">Select a Tee Time:</label>
+        <div class="input-group">
+            <select id="tee-time-select" class="form-select" required>
+                <option value="" disabled selected>Select a tee time</option>
+                {% for tee_time in tee_times %}
+                <option value="{{ tee_time.id }}" data-pid="{{ tee_time.PID }}">
+                    {{ tee_time.gDate }} - {{ tee_time.CourseID__courseTimeSlot }} - {{ tee_time.PID__LastName }}, {{ tee_time.PID__FirstName }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <!-- Display Selected Tee Time -->
+    <h2 id="selected-tee-time" class="mt-4"></h2>
+
+    <!-- Player Dropdown -->
+    <div class="mb-4">
+        <label for="player-select" class="form-label">Select a Player:</label>
+        <div class="input-group">
+            <select id="player-select" class="form-select" required>
+                <option value="" disabled selected>Select a player</option>
+                {% for player in players %}
+                    <option value="{{ player.id }}">
+                        {{ player.LastName }}, {{ player.FirstName }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <!-- Display Selected Player -->
+    <h2 id="selected-player" class="mt-4"></h2>
+
+    <!-- Execute Sub Form -->
+    <form id="execute-sub-form" method="post" action="{% url 'subswap_admin_update_view' %}">
+        {% csrf_token %}
+        <input type="hidden" name="tt_id" id="tt_id">
+        <input type="hidden" name="offer_player_id" id="offer_player_id">
+        <input type="hidden" name="accept_player_id" id="accept_player_id">
+        <div class="d-grid gap-2 mt-4">
+            <button type="submit" class="btn btn-danger">Execute Sub</button>
+        </div>
+    </form>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const teeTimeSelect = document.getElementById('tee-time-select');
+        const selectedTeeTime = document.getElementById('selected-tee-time');
+        const playerSelect = document.getElementById('player-select');
+        const selectedPlayer = document.getElementById('selected-player');
+
+        // When tee time is selected, update hidden fields and display
+        teeTimeSelect.addEventListener('change', function () {
+            const selectedOption = teeTimeSelect.options[teeTimeSelect.selectedIndex];
+            if (selectedOption && selectedOption.value) {
+                document.getElementById('tt_id').value = selectedOption.value;
+                document.getElementById('offer_player_id').value = selectedOption.getAttribute('data-pid');
+                selectedTeeTime.textContent = `Selected Tee Time: ${selectedOption.text}`;
+            } else {
+                document.getElementById('tt_id').value = '';
+                document.getElementById('offer_player_id').value = '';
+                selectedTeeTime.textContent = '';
+            }
+        });
+
+        // When player is selected, update hidden field and display
+        playerSelect.addEventListener('change', function () {
+            const selectedOption = playerSelect.options[playerSelect.selectedIndex];
+            if (selectedOption && selectedOption.value) {
+                document.getElementById('accept_player_id').value = selectedOption.value;
+                selectedPlayer.textContent = `Selected Player: ${selectedOption.text}`;
+            } else {
+                document.getElementById('accept_player_id').value = '';
+                selectedPlayer.textContent = '';
+            }
+        });
+
+        // Prevent form submission if required fields are missing
+        document.getElementById('execute-sub-form').addEventListener('submit', function(e) {
+            if (!document.getElementById('tt_id').value || !document.getElementById('offer_player_id').value || !document.getElementById('accept_player_id').value) {
+                e.preventDefault();
+                alert("Please select both a tee time and a player before executing the sub.");
+            }
+        });
+    });
+</script>
+{% endblock %}

@@ -51,6 +51,8 @@ urlpatterns = [
     path('swapnoneavail/', views.swapnoneavail_view, name='swapnoneavail_view'),
     path('subswap_dashboard/', views.subswap_dashboard_view, name='subswap_dashboard_view'),
     path('subswap_details/', views.subswap_details_view, name='subswap_details'),
+    path('subswap_admin_change/', views.subswap_admin_change_view, name='subswap_admin_change_view'),
+    path('subswap_admin_update/', views.subswap_admin_update_view, name='subswap_admin_update_view'),
     path('statistics/', views.statistics_view, name='statistics_view'),
     path('players/', views.players_view, name='players_view'),
     path('profile/', views.profile_view, name='profile_view'),
@@ -87,7 +89,6 @@ urlpatterns = [
 
     ### scorecard work
     path('scorecard/', views.scorecard_view, name='scorecard_view'),
-    # path('scorecard_big/', views.scorecard_big_view, name='scorecard_big_view'),
     path('hole_select/', views.hole_select_view, name='hole_select_view'),
     path('hole_score_data/', views.hole_score_data_view, name='hole_score_data_view'),
     path('hole_score/', views.hole_score_view, name='hole_score_view'),
