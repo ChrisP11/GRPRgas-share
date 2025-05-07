@@ -16,9 +16,13 @@
                 <td>Hole</td>
                 {% for hole in course_holes %}
                 <td>
+                    {% if group_id %}
                     <a href="{% url 'hole_score_data_view' %}?hole_id={{ hole.id }}&game_id={{ game_id }}&group_id={{ group_id }}" class="text-decoration-none">
                         {{ hole.HoleNumber }}
                     </a>
+                    {% else %}
+                        {{ hole.HoleNumber }}
+                    {% endif %}
                 </td>
                 {% if hole.HoleNumber == 9 %}
                 <td>Out</td>
@@ -79,7 +83,8 @@
             <!-- Player Scores -->
             {% for player in player_list %}
             <tr>
-                <td>{{ player.last_name }} - {{ player.net_hdcp }}</td>
+                <td>{{ player.last_name }} - {{ player.net_hdcp }}</td> 
+                <!-- <td><a href="{% url 'scorecard_view' %}?game_id={{ game_id }}">{{ player.last_name }}</a>  - {{ player.net_hdcp }} </td> -->
                 {% for hole in course_holes %}
                 <!-- Hole Scores -->
                 <td class="score-cell" 
@@ -143,7 +148,15 @@
         const toggleButton = document.getElementById('toggle-scores');
         const scoreCells = document.querySelectorAll('.score-cell');
         const heading = document.getElementById('scorecard-heading');
-        let showingNet = true;
+        let showingNet = false; // Default to raw scores
+
+        // Set initial cell values to raw
+        scoreCells.forEach(cell => {
+            cell.textContent = cell.getAttribute('data-raw');
+        });
+        heading.textContent = 'Gross';
+
+        toggleButton.textContent = 'Net Scores';
 
         toggleButton.addEventListener('click', function () {
             showingNet = !showingNet;
@@ -157,7 +170,7 @@
             });
 
             // Update heading
-            heading.textContent = (showingNet ? 'Net' : 'Gross');
+            heading.textContent = showingNet ? 'Net' : 'Gross';
         });
     });
 </script>

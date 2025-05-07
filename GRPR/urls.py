@@ -57,6 +57,7 @@ urlpatterns = [
     path('players/', views.players_view, name='players_view'),
     path('profile/', views.profile_view, name='profile_view'),
     path('player_update/', views.player_update_view, name='player_update_view'),
+    path('rounds_leaderboard/', views.rounds_leaderboard_view, name='rounds_leaderboard_view'),
     path('password_change/', CustomPasswordChangeView.as_view(), name='password_change'),  
     path('password_change/done/', auth_views.PasswordChangeDoneView.as_view(template_name='GRPR/password_change_done.html'), name='password_change_done'),
     path('password_reset/', auth_views.PasswordResetView.as_view(template_name='GRPR/password_reset_form.html'), name='password_reset'),

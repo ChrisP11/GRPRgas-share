@@ -10,10 +10,10 @@
             <tr>
                 <th>Player</th>
                 <th>HDP</th>
-                <th>S</th>
-                <th>Tee</th>
+                <th>Strokes</th>
                 <th>Hole</th>
                 <th>Skins</th>
+                <th>Won</th>
             </tr>
         </thead>
         <tbody>
@@ -22,9 +22,9 @@
                 <td>{{ player.last_name }}</td>
                 <td>{{ player.raw_hdcp }}</td>
                 <td>{{ player.net_hdcp }}</td>
-                <td>{{ player.tee_name }}</td>
                 <td>{% if player.current_hole != 0 %}{{ player.current_hole }}{% endif %}</td>
                 <td>{% if player.skins != 0 %}{{ player.skins }}{% endif %}</td>
+                <td>{% if player.won_holes %}{{ player.won_holes|join:", " }}{% endif %}</td>
             </tr>
             {% endfor %}
         </tbody>

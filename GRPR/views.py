@@ -15,7 +15,8 @@ from django.views.decorators.csrf import csrf_exempt # added to allow Twilio to 
 from django.contrib.auth.models import User # for user activity tracking on Admin page
 from django.contrib.auth import login as auth_login # for user activity tracking on Admin page
 from django.template.loader import render_to_string  # used on hole_input_score_view
-from django.db.models import Q, Count, F, Func, Subquery, OuterRef, Max, Min
+from django.db.models import Q, Count, F, Func, Subquery, OuterRef, Max, Min, IntegerField, ExpressionWrapper, Sum
+from django.db.models.functions import Cast
 from django.db import transaction
 from django.urls import reverse_lazy, reverse
 from django.core.mail import send_mail
@@ -273,7 +274,7 @@ def automated_msg_sent_view(request):
         return redirect('automated_msg_admin_view')  # Redirect back if data is missing
     
     # 'closes' prior messages that have not been sent.
-    AutomatedMessages.objects.filter(SentVia='Ready').update(SentVia='CLXD', AlterDate=now(), AlterPerson='Automated')
+    AutomatedMessages.objects.filter(SentVia='Ready').update(SentVia='CXLD', AlterDate=now(), AlterPerson='Automated')
 
     # Insert the message into the AutomatedMessages table
     AutomatedMessages.objects.create(
@@ -3271,6 +3272,12 @@ def players_view(request):
     for player in players:
         rounds_played = TeeTimesInd.objects.filter(PID=player.id, gDate__lt=current_datetime).count()
         rounds_scheduled = TeeTimesInd.objects.filter(PID=player.id, gDate__gte=current_datetime).count()
+        scores = list(
+            ScorecardMeta.objects
+            .filter(PID_id=player.id)
+            .values_list('PlayDate', 'RawTotal')
+            .order_by('-PlayDate')
+        )
         players_data.append({
             'first_name': player.FirstName,
             'last_name': player.LastName,
@@ -3279,6 +3286,7 @@ def players_view(request):
             'index': player.Index,
             'rounds_played': rounds_played,
             'rounds_scheduled': rounds_scheduled,
+            'scores': scores,
         })
 
     # Pass data to the template
@@ -3365,6 +3373,58 @@ def player_update_view(request):
         })
 
     return redirect('profile_view')
+
+
+@login_required
+def rounds_leaderboard_view(request):
+    # Top 10 Rounds - Gross
+    top10_gross = (
+        ScorecardMeta.objects
+        .select_related('PID', 'TeeID')
+        .annotate(
+            LastName=F('PID__LastName'),
+            TeeName=F('TeeID__TeeName'),
+            HDCP=F('RawHDCP'),
+            Net=F('NetTotal'),
+            Gross=F('RawTotal'),
+            AdjNet=Cast(ExpressionWrapper(F('RawTotal') - F('RawHDCP'), output_field=IntegerField()), IntegerField())
+        )
+        .order_by('RawTotal')[:10]
+        .values('LastName', 'PlayDate', 'TeeName', 'Index', 'HDCP', 'Net', 'Gross', 'AdjNet', 'Skins')
+    )
+
+    top10_net = (
+        ScorecardMeta.objects
+        .select_related('PID', 'TeeID')
+        .annotate(
+            LastName=F('PID__LastName'),
+            TeeName=F('TeeID__TeeName'),
+            HDCP=F('RawHDCP'),
+            Net=F('NetTotal'),
+            Gross=F('RawTotal'),
+            AdjNet=Cast(ExpressionWrapper(F('RawTotal') - F('RawHDCP'), output_field=IntegerField()), IntegerField())
+        )
+        .order_by('AdjNet')[:10]
+        .values('LastName', 'PlayDate', 'TeeName', 'Index', 'HDCP', 'Net', 'Gross', 'AdjNet', 'Skins')
+    )
+
+    # Most Skins
+    most_skins = (
+        ScorecardMeta.objects
+        .select_related('PID')
+        .values('PID__LastName')
+        .annotate(total_skins=Sum('Skins'))
+        .order_by('-total_skins')[:10]
+        .values(LastName=F('PID__LastName'), total_skins=F('total_skins'))
+    )
+
+    return render(request, 'GRPR/rounds_leaderboard.html', {
+        'top10_gross': top10_gross,
+        'top10_net': top10_net,
+        'most_skins': most_skins,
+        'first_name': request.user.first_name,
+        'last_name': request.user.last_name,
+    })
 
 
 ##########################
@@ -3932,6 +3992,16 @@ def skins_leaderboard_view(request):
     for entry in scorecard_meta:
         player_id = entry.PID.id
 
+        # Get all holes where this player won a skin in this game
+        won_holes = (
+            Skins.objects
+            .filter(GameID=game_id, PlayerID=player_id)
+            .select_related('HoleNumber')
+            .values_list('HoleNumber__HoleNumber', flat=True)
+            .order_by('HoleNumber__HoleNumber')
+        )
+        won_holes_list = list(won_holes)
+
         # Query the Scorecard table to find the largest HoleNumber for the player
         current_hole = (
             Scorecard.objects.filter(GameID=game_id, smID__PID_id=player_id)
@@ -3949,9 +4019,10 @@ def skins_leaderboard_view(request):
             'tee_name': entry.tee_name,
             'current_hole': current_hole if current_hole else 0,
             'skins': entry.skins if entry.skins else 0, 
+            'won_holes': won_holes_list,
         })
     
-        # Check if all players have completed their rounds
+    # Check if all players have completed their rounds
     scorecard_data = Scorecard.objects.filter(GameID_id=game_id).values(
         'smID__PID_id'
     ).annotate(

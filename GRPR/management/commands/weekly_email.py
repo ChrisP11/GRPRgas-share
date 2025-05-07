@@ -105,6 +105,11 @@ class Command(BaseCommand):
                 )
                 # write success msg
                 self.stdout.write(self.style.SUCCESS(f"VERIFICATION Weekly email sent successfully to {len(recipient_list)} members."))
+
+                # After sending verification, update status to 'Verified'
+                AutomatedMessages.objects.filter(id=message_id).update(SentVia='Verified', AlterDate=now(), AlterPerson='Automated')
+                self.stdout.write(self.style.SUCCESS(f"AutomatedMessages table updated to Verified for message ID {message_id}."))
+
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f"Failed to send VERIFICATION weekly email: {e}"))
 
@@ -119,7 +124,7 @@ class Command(BaseCommand):
         
         # Query for Coogan's Corner to be added to the email
         verif_messages = AutomatedMessages.objects.filter(
-            SentVia='Verified'  
+            SentVia='Verified'
         ).order_by('-CreateDate').values('CreateDate','CreatePerson', 'Msg', 'id').first()
         
         if verif_messages:
@@ -159,7 +164,3 @@ class Command(BaseCommand):
 
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f"Failed to send weekly email: {e}"))
-
-        if messages:
-            # set msg to Verified for the message with the message_id - this is post the weekly + verified check so it only runs when someone enters the Coogan's Corner
-            AutomatedMessages.objects.filter(id=message_id).update(SentVia='Verified', AlterDate=now(), AlterPerson='Automated')

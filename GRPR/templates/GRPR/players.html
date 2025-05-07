@@ -13,20 +13,27 @@
             <th>Mobile</th>
             <th>Email</th>
             <th>Index</th>
-            <th>Played (incl 2024)</th>
-            <th>Scheduled</th>
+            <!-- <th>Played (incl 2024)</th>
+            <th>Scheduled</th> -->
+            <th>Scores</th>
         </tr>
     </thead>
     <tbody>
         {% for player in players_data %}
             <tr>
-                <!-- <td>{{ player.first_name }} {{ player.last_name }}</td> -->
                 <td><a href="{% url 'profile_view' %}?first_name={{ player.first_name }}&last_name={{ player.last_name }}" role="button">{{ player.first_name }} {{ player.last_name }}</a></td>
                 <td>{{ player.mobile|slice:"1:4" }}-{{ player.mobile|slice:"4:7" }}-{{ player.mobile|slice:"7:11" }}</td>
                 <td>{{ player.email }}</td>
                 <td>{{ player.index|default_if_none:"" }}</td>
-                <td>{{ player.rounds_played }}</td>
-                <td>{{ player.rounds_scheduled }}</td>
+                <!-- <td>{{ player.rounds_played }}</td>
+                <td>{{ player.rounds_scheduled }}</td> -->
+                <td>
+                    {% for score in player.scores %}
+                        {{ score.0|date:"Y-m-d" }}: <strong> {{ score.1 }}</strong>{% if not forloop.last %}, {% endif %}
+                    {% empty %}
+                        -
+                    {% endfor %}
+                </td>
             </tr>
         {% endfor %}
     </tbody>

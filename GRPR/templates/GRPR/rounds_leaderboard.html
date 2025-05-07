@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+
+{% block title %}Rounds Leaderboard{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <h2>Top 10 Rounds - Gross</h2>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Player</th>
+                <th>Date</th>
+                <th>Tee</th>
+                <th>Index</th>
+                <th>HDCP</th>
+                <th>Adj Net</th>
+                <th>Gross</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in top10_gross %}
+            <tr>
+                <td>{{ row.LastName }}</td>
+                <td>{{ row.PlayDate }}</td>
+                <td>{{ row.TeeName }}</td>
+                <td>{{ row.Index }}</td>
+                <td>{{ row.HDCP }}</td>
+                <td>{{ row.AdjNet }}</td>
+                <td>{{ row.Gross }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <br>
+
+    <h2>Top 10 Rounds - Net</h2>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Player</th>
+                <th>Date</th>
+                <th>Tee</th>
+                <th>Index</th>
+                <th>HDCP</th>
+                <th>Gross</th>
+                <th>Adj Net</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in top10_net %}
+            <tr>
+                <td>{{ row.LastName }}</td>
+                <td>{{ row.PlayDate }}</td>
+                <td>{{ row.TeeName }}</td>
+                <td>{{ row.Index }}</td>
+                <td>{{ row.HDCP }}</td>
+                <td>{{ row.Gross }}</td>
+                <td>{{ row.AdjNet }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <br>
+
+    <h2 class="mt-5">Skins Leaderboard</h2>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Player</th>
+                <th>Total Skins</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in most_skins %}
+            <tr>
+                <td>{{ row.LastName }}</td>
+                <td>{{ row.total_skins }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
