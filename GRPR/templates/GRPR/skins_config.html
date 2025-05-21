@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% load custom_filters %}
+
+{% block title %}Configure Skins Game{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <h2>Configure Skins Game</h2>
+    <form method="post" action="{% url 'skins_config_confirm_view' %}">
+        {% csrf_token %}
+        <input type="hidden" name="game_id" value="{{ game_id }}">
+        <input type="hidden" name="playing_date" value="{{ playing_date }}">
+        <input type="hidden" name="tee_times_json" value="{{ tee_times|to_json|escape }}">
+        <input type="hidden" name="number_of_players" value="{{ number_of_players }}">
+        <div class="mb-3">
+            <label for="tee_option" class="form-label">Choose Tees</label>
+            <select class="form-select" id="tee_option" name="tee_id">
+                {% for tee_option in tee_options %}
+                    <option value="{{ tee_option.id }}" {% if tee_option.id == 4 %}selected{% endif %}>
+                        {{ tee_option.TeeName }} - {{ tee_option.CourseRating }} - {{ tee_option.SlopeRating }} - {{ tee_option.Yards }} yds
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="mb-3">
+            <label for="format_option" class="form-label">Choose Format</label>
+            <select class="form-select" id="format_option" name="format_option" disabled>
+                <option value="">Coming Soon</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary rounded-pill w-100 mb-2">Next</button>
+    </form>
+    <form method="post" action="{% url 'skins_undo_game_creation' %}">
+        {% csrf_token %}
+        <input type="hidden" name="game_id" value="{{ game_id }}">
+        <input type="hidden" name="playing_date" value="{{ playing_date }}">
+        <input type="hidden" name="tee_times_json" value="{{ tee_times|to_json|escape }}">
+        <input type="hidden" name="number_of_players" value="{{ number_of_players }}">
+        <button type="submit" class="btn btn-secondary-custom rounded-pill w-100">Back</button>
+    </form>
+</div>
+{% endblock %}

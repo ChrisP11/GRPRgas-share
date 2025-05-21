@@ -18,7 +18,7 @@
     {% elif game_status == 'Invite' %}
     <a href="{% url 'skins_invite_status_view' %}?game_id={{ game_id }}" class="btn btn-primary" role="button">Check Invite Status</a>
     {% else %}
-    <a href="{% url 'skins_new_game_view' %}" class="btn btn-primary" role="button">Start a New Game</a>
+    <a href="{% url 'skins_choose_players_view' %}" class="btn btn-primary" role="button">Start a New Game</a>
     {% endif %}
     <a href="{% url 'skins_closed_games_view' %}" class="btn btn-secondary-custom" role="button">Previous Games</a>
   </div>

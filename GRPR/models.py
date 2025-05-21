@@ -231,6 +231,7 @@ class Skins(models.Model):
     PlayerID = models.ForeignKey('Players', on_delete=models.CASCADE)  # Links to the Players table
     HoleNumber = models.ForeignKey('CourseHoles', on_delete=models.CASCADE)  # The hole number where the skin was won
     SkinDate = models.DateField(auto_now_add=True)  # Date when the skin was recorded
+    Payout = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)  # New field
 
     class Meta:
         db_table = "Skins"

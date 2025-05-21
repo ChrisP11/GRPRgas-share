@@ -4,14 +4,14 @@
 
 {% block content %}
 <div class="container my-4">
-    <h2>Leaderboard - {{ play_date }}</h2>
+    <h2>Leaderboard - {{ play_date }} {% if payout %} - ${{ payout }}/skin {% endif %}</h2>
     <table class="table table-striped">
         <thead>
             <tr>
                 <th>Player</th>
                 <th>HDP</th>
                 <th>Strokes</th>
-                <th>Hole</th>
+                <th>Loc</th>
                 <th>Skins</th>
                 <th>Won</th>
             </tr>

@@ -6,14 +6,15 @@ from django.utils import timezone
 from GRPR.models import Crews, Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity, SMSResponse, Xdates, Games, GameInvites, CourseTees, ScorecardMeta, Scorecard, CourseHoles, Skins, AutomatedMessages
 from datetime import datetime, date
 from django.conf import settings  # Import settings
+from django.contrib import messages
+from django.contrib.auth import login as auth_login # for user activity tracking on Admin page
+from django.contrib.auth.decorators import login_required # added to require certified login to view any page
+from django.contrib.auth.forms import UserCreationForm, AuthenticationForm # added for secure login page creation
+from django.contrib.auth.models import User # for user activity tracking on Admin page
 from django.contrib.auth.views import LoginView # added for secure login page creation
 from django.contrib.auth.views import PasswordChangeView
-from django.contrib.auth.forms import UserCreationForm, AuthenticationForm # added for secure login page creation
 from .forms import CustomPasswordChangeForm
-from django.contrib.auth.decorators import login_required # added to require certified login to view any page
 from django.views.decorators.csrf import csrf_exempt # added to allow Twilio to send messages
-from django.contrib.auth.models import User # for user activity tracking on Admin page
-from django.contrib.auth import login as auth_login # for user activity tracking on Admin page
 from django.template.loader import render_to_string  # used on hole_input_score_view
 from django.db.models import Q, Count, F, Func, Subquery, OuterRef, Max, Min, IntegerField, ExpressionWrapper, Sum
 from django.db.models.functions import Cast
@@ -3483,6 +3484,69 @@ def skins_game_close_view(request):
 
 
 @login_required
+def skins_delete_game_menu_view(request):
+    # Only allow user 'cprouty'
+    if request.user.username != 'cprouty':
+        return redirect('skins_admin_view')
+
+    # If you want to use subqueries for more accurate counts (especially if there are NULLs):
+    games = Games.objects.all().order_by('id').annotate(
+        invites_count=Subquery(
+            GameInvites.objects.filter(GameID_id=OuterRef('id')).values('GameID_id').annotate(c=Count('id')).values('c')[:1]
+        ),
+        players_count=Subquery(
+            ScorecardMeta.objects.filter(GameID_id=OuterRef('id')).values('GameID_id').annotate(c=Count('id')).values('c')[:1]
+        ),
+        holes_count=Subquery(
+            Scorecard.objects.filter(GameID_id=OuterRef('id')).values('GameID_id').annotate(c=Count('id')).values('c')[:1]
+        ),
+        skins_count=Subquery(
+            Skins.objects.filter(GameID_id=OuterRef('id')).values('GameID_id').annotate(c=Count('id')).values('c')[:1]
+        ),
+    )
+
+    context = {
+        'games': games,
+    }
+    return render(request, 'GRPR/skins_delete_game_menu.html', context)
+
+
+@login_required
+def skins_delete_game_view(request):
+    if request.method == "POST" and request.user.username == "cprouty":
+        game_id = request.POST.get("game_id")
+        from .models import Scorecard, ScorecardMeta, GameInvites, Skins, Games
+
+        with transaction.atomic():
+            scorecard_count = Scorecard.objects.filter(GameID_id=game_id).count()
+            Scorecard.objects.filter(GameID_id=game_id).delete()
+
+            scorecardMeta_count = ScorecardMeta.objects.filter(GameID=game_id).count()
+            ScorecardMeta.objects.filter(GameID=game_id).delete()
+
+            invites_count = GameInvites.objects.filter(GameID_id=game_id).count()
+            GameInvites.objects.filter(GameID_id=game_id).delete()
+
+            skins_count = Skins.objects.filter(GameID_id=game_id).count()
+            Skins.objects.filter(GameID_id=game_id).delete()
+
+            Games.objects.filter(id=game_id).delete()
+
+        msg = (
+            f"Game id {game_id} deleted. "
+            f"Scorecard rows deleted: {scorecard_count}, "
+            f"ScM rows deleted: {scorecardMeta_count}, "
+            f"Invites deleted: {invites_count}, "
+            f"Skins deleted: {skins_count}."
+        )
+        messages.success(request, msg)
+        return redirect('skins_admin_view')
+    else:
+        return redirect('skins_admin_view')
+    
+
+
+@login_required
 def skins_view(request):
     user = request.user
     # Discover if there is a current game in process
@@ -3510,7 +3574,392 @@ def skins_view(request):
     return render(request, 'GRPR/skins.html', context)
 
 
+@login_required
+def skins_choose_players_view(request):
+    # Get today's date
+    current_datetime = datetime.now()
 
+    # Query the next closest future date in the TeeTimesInd table
+    next_closest_date = TeeTimesInd.objects.filter(gDate__gte=current_datetime).order_by('gDate').values('gDate').first()
+    print('next_closest_date', next_closest_date)
+    # hard code a date:
+    # next_closest_date = {'gDate': date(2025, 4, 26)}
+    print('')
+
+    # If no future date is found, return an empty context
+    if not next_closest_date:
+        context = {
+            'tee_times': [],
+            'first_name': request.user.first_name,
+            'last_name': request.user.last_name,
+        }
+        return render(request, 'GRPR/new_skins_game.html', context)
+
+    # Get the next closest date
+    next_closest_date = next_closest_date['gDate']
+
+    # Query the database for tee times on the next closest date
+    tee_times_queryset = TeeTimesInd.objects.filter(gDate=next_closest_date).select_related('PID', 'CourseID').order_by('CourseID__courseTimeSlot')
+    print()
+    print('tee_times_queryset"', tee_times_queryset)
+    print()
+
+    # Group players by tee time
+    tee_times = []
+    current_group = None
+    for teetime in tee_times_queryset:
+        if not current_group or current_group['time'] != teetime.CourseID.courseTimeSlot:
+            current_group = {
+                'date': teetime.gDate.strftime('%Y-%m-%d'),
+                'time': teetime.CourseID.courseTimeSlot,
+                'course': teetime.CourseID.courseName,
+                'players': []
+            }
+            tee_times.append(current_group)
+        current_group['players'].append({
+            'name': f"{teetime.PID.FirstName} {teetime.PID.LastName}",
+            'player_id': teetime.PID.id,
+            'tt_id': teetime.id,
+            'index': teetime.PID.Index,
+        })
+    
+    # Count the number of players in all tee_times groups
+    number_of_players = sum(len(group['players']) for group in tee_times)
+    
+    print('new_skins_game_view')
+    print('tee_times', tee_times)
+    print()
+
+    context = {
+        'playing_date': next_closest_date,
+        'tee_times': tee_times,
+        'number_of_players': number_of_players,
+        'first_name': request.user.first_name,
+        'last_name': request.user.last_name,
+    }
+    return render(request, 'GRPR/skins_choose_players.html', context)
+
+
+@login_required
+def skins_remove_player_view(request):
+    if request.method == 'POST':
+        player_id = int(request.POST.get('player_id'))
+        tt_id = int(request.POST.get('tt_id'))
+        playing_date = request.POST.get('playing_date')
+        tee_times_json = request.POST.get('tee_times_json')
+        tee_times = json.loads(tee_times_json)
+
+        # Remove the player from the tee_times structure
+        for group in tee_times:
+            group['players'] = [p for p in group['players'] if p['player_id'] != player_id]
+
+        # Remove any groups with no players
+        tee_times = [group for group in tee_times if group['players']]
+
+        number_of_players = sum(len(group['players']) for group in tee_times)
+
+        context = {
+            'playing_date': playing_date,
+            'tee_times': tee_times,
+            'number_of_players': number_of_players,
+            'first_name': request.user.first_name,
+            'last_name': request.user.last_name,
+        }
+        return render(request, 'GRPR/skins_choose_players.html', context)
+    else:
+        return redirect('skins_choose_players_view')
+
+
+@login_required
+def skins_choose_replacement_player_view(request):
+    playing_date = request.POST.get('playing_date')
+    tee_times = json.loads(request.POST.get('tee_times_json'))
+    number_of_players = int(request.POST.get('number_of_players'))
+    first_name = request.POST.get('first_name')
+    last_name = request.POST.get('last_name')
+
+    # Get all player_ids already in tee_times
+    existing_player_ids = [p['player_id'] for group in tee_times for p in group['players']]
+
+    # Query available players
+    available_players = Players.objects.filter(CrewID=1, Member=1).exclude(id__in=existing_player_ids).order_by('LastName', 'FirstName')
+    print('available_players', available_players)
+
+    # Find groups with less than 4 players
+    available_groups = [group for group in tee_times if len(group['players']) < 4]
+
+    context = {
+        'playing_date': playing_date,
+        'tee_times': tee_times,
+        'number_of_players': number_of_players,
+        'first_name': first_name,
+        'last_name': last_name,
+        'available_players': available_players,
+        'available_groups': available_groups,
+    }
+    return render(request, 'GRPR/skins_choose_replacement_player.html', context)
+
+
+@login_required
+def skins_add_player_view(request):
+    if request.method == 'POST':
+        playing_date = request.POST.get('playing_date')
+        # Convert to date object if not already in YYYY-MM-DD
+        try:
+            # Try parsing as YYYY-MM-DD first
+            playing_date_obj = datetime.strptime(playing_date, "%Y-%m-%d").date()
+        except ValueError:
+            # If that fails, try parsing as "Month D, YYYY"
+            playing_date_obj = datetime.strptime(playing_date, "%B %d, %Y").date()
+        tee_times = json.loads(request.POST.get('tee_times_json'))
+        number_of_players = int(request.POST.get('number_of_players'))
+        first_name = request.POST.get('first_name')
+        last_name = request.POST.get('last_name')
+        new_player_id = int(request.POST.get('player_id'))
+        group_time = request.POST.get('group_time')
+
+        # Find the group in tee_times
+        group = next(g for g in tee_times if g['time'] == group_time)
+        course_name = group['course']
+
+        # Find available tt_id for this group
+        course_obj = Courses.objects.get(courseTimeSlot=group_time, courseName=course_name)
+        tts = TeeTimesInd.objects.filter(gDate=playing_date_obj, CourseID=course_obj)
+        used_tt_ids = [p['tt_id'] for g in tee_times for p in g['players']]
+        available_tt = tts.exclude(id__in=used_tt_ids).first()
+        tt_id = available_tt.id
+
+        # Get replaced player
+        replaced_player_id = TeeTimesInd.objects.get(id=tt_id).PID_id
+
+        # Update TeeTimesInd
+        TeeTimesInd.objects.filter(id=tt_id).update(PID_id=new_player_id)
+
+        # Log entry
+        msg = f'Via the Skins process, {first_name} {last_name} has changed ttid: {tt_id} from player: {replaced_player_id} to player: {new_player_id}'
+        Log.objects.create(
+            SentDate=now(),
+            Type='Sub Via Skins',
+            RequestDate=playing_date_obj,
+            OfferID=replaced_player_id,
+            ReceiveID=new_player_id,
+            RefID=tt_id,
+            Msg=msg
+        )
+
+        # SubSwap entries
+        sub1 = SubSwap.objects.create(
+            RequestDate=now(),
+            PID_id=replaced_player_id,
+            TeeTimeIndID_id=tt_id,
+            Msg=msg,
+            SubStatus='Changed Via Skins',
+            nStatus='Closed',
+            nType='Sub'
+        )
+        swap_id = sub1.id
+        sub1.SwapID = swap_id
+        sub1.save()
+        SubSwap.objects.create(
+            RequestDate=now(),
+            PID_id=new_player_id,
+            TeeTimeIndID_id=tt_id,
+            Msg=msg,
+            SubStatus='Changed Via Skins',
+            SwapID=swap_id,
+            nStatus='Closed',
+            nType='Sub'
+        )
+
+        # Add new player to tee_times group
+        from .models import Players
+        player_obj = Players.objects.get(id=new_player_id)
+        group['players'].append({
+            'name': f"{player_obj.FirstName} {player_obj.LastName}",
+            'player_id': new_player_id,
+            'tt_id': tt_id,
+            'index': player_obj.Index,
+        })
+
+        number_of_players += 1
+
+        context = {
+            'playing_date': playing_date,
+            'tee_times': tee_times,
+            'number_of_players': number_of_players,
+            'first_name': first_name,
+            'last_name': last_name,
+        }
+        return render(request, 'GRPR/skins_choose_players.html', context)
+    else:
+        return redirect('skins_choose_players_view')
+    
+
+@login_required
+def skins_config_view(request):
+    if request.method == 'POST':
+        user = request.user
+        playing_date = request.POST.get('playing_date')
+        tee_times = json.loads(request.POST.get('tee_times_json'))
+        number_of_players = int(request.POST.get('number_of_players'))
+
+        # Get logged_in_player_id
+        logged_in_player = Players.objects.get(user_id=user.id)
+        logged_in_player_id = logged_in_player.id
+
+        # Convert playing_date to YYYY-MM-DD
+        try:
+            playing_date_ymd = datetime.strptime(playing_date, "%Y-%m-%d").date()
+        except ValueError:
+            playing_date_ymd = datetime.strptime(playing_date, "%B %d, %Y").date()
+
+        # Hard code ct_id for now
+        ct_id = 1  # TODO: Make dynamic in future
+
+                # --- Prevent duplicate game creation ---
+        existing_game = Games.objects.filter(
+            CrewID=1,
+            PlayDate=playing_date_ymd,
+            Status='Tees'
+        ).first()
+        if existing_game:
+            # Option 1: Redirect to config for existing game
+            tee_options = CourseTees.objects.filter(CourseID=ct_id).order_by('TeeID')
+            context = {
+                'game_id': existing_game.id,
+                'tee_options': tee_options,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+                'tee_times': tee_times,
+                'playing_date': playing_date,
+                'number_of_players': number_of_players,
+                'message': 'A game for this date already exists. You are editing the existing game.',
+            }
+            return render(request, 'GRPR/skins_config.html', context)
+        # --- End duplicate check ---
+
+        # Insert new row into Games
+        game = Games.objects.create(
+            CrewID=1,
+            CreateDate=now(),
+            PlayDate=playing_date_ymd,
+            Status='Tees',
+            CreateID_id=logged_in_player_id
+        )
+        game_id = game.id
+
+        # Bulk insert GameInvites
+        game_invites = []
+        for group in tee_times:
+            for player in group['players']:
+                game_invites.append(GameInvites(
+                    AlterDate=now(),
+                    Status='Accepted',
+                    GameID_id=game_id,
+                    PID_id=player['player_id'],
+                    TTID_id=player['tt_id']
+                ))
+        GameInvites.objects.bulk_create(game_invites)
+
+        # Get tee options
+        tee_options = CourseTees.objects.filter(CourseID=ct_id).order_by('TeeID')
+
+        context = {
+            'game_id': game_id,
+            'tee_options': tee_options,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'tee_times': tee_times,
+            'playing_date': playing_date,
+            'number_of_players': number_of_players,
+        }
+        return render(request, 'GRPR/skins_config.html', context)
+    else:
+        return redirect('skins_choose_players_view')
+    
+
+# maybe an inefficent solution.  This allows the user to 'back button' from the skins config view to the choose players view
+@login_required
+def skins_undo_game_creation(request):
+    if request.method == 'POST':
+        game_id = request.POST.get('game_id')
+        playing_date = request.POST.get('playing_date')
+        tee_times = json.loads(request.POST.get('tee_times_json'))
+        number_of_players = int(request.POST.get('number_of_players'))
+
+        # Delete GameInvites and Games
+        GameInvites.objects.filter(GameID_id=game_id).delete()
+        Games.objects.filter(id=game_id).delete()
+
+        context = {
+            'playing_date': playing_date,
+            'tee_times': tee_times,
+            'number_of_players': number_of_players,
+            'first_name': request.user.first_name,
+            'last_name': request.user.last_name,
+        }
+        return render(request, 'GRPR/skins_choose_players.html', context)
+    else:
+        return redirect('skins_choose_players_view')
+    
+
+@login_required
+def skins_config_confirm_view(request):
+    if request.method == 'POST':
+        game_id = request.POST.get('game_id')
+        tee_id = int(request.POST.get('tee_id'))
+
+        # Get game info
+        game = get_object_or_404(Games, id=game_id)
+        play_date = game.PlayDate
+        ct_id = game.CourseTeesID_id
+
+        # Get all invites for this game
+        invites_qs = GameInvites.objects.filter(GameID=game_id, Status='Accepted').select_related('PID', 'TTID__CourseID')
+
+        # Build player list
+        player_list = []
+        for invite in invites_qs:
+            player = invite.PID
+            tt = invite.TTID
+            course = tt.CourseID
+            player_list.append({
+                'player_id': player.id,
+                'first_name': player.FirstName,
+                'last_name': player.LastName,
+                'index': player.Index,
+                'group_time': course.courseTimeSlot,
+                'course_name': course.courseName,
+            })
+
+        # Tee options
+        tee_options = CourseTees.objects.filter(CourseID=ct_id).order_by('TeeID')
+        tee_options_list = []
+        for tee in tee_options:
+            tee_options_list.append({
+                'tee_id': tee.id,
+                'name': tee.TeeName,
+                'rating': tee.CourseRating,
+                'slope': tee.SlopeRating,
+                'yards': tee.Yards,
+            })
+
+        context = {
+            'game_id': game_id,
+            'ct_id': ct_id,
+            'tee_id': tee_id,
+            'player_list': player_list,
+            'tee_options_list': tee_options_list,
+            'first_name': request.user.first_name,
+            'last_name': request.user.last_name,
+        }
+        return render(request, 'GRPR/skins_config_confirm.html', context)
+    else:
+        return redirect('skins_config_view')
+
+
+
+# deprecated once v2 of New Game process is done
 @login_required
 def skins_new_game_view(request):
     # Get today's date
@@ -3561,12 +4010,17 @@ def skins_new_game_view(request):
             'index': teetime.PID.Index,
         })
     
+    # Count the number of players in all tee_times groups
+    number_of_players = sum(len(group['players']) for group in tee_times)
+    
     print('new_skins_game_view')
     print('tee_times', tee_times)
     print()
 
     context = {
+        'playig_date': next_closest_date,
         'tee_times': tee_times,
+        'number_of_players': number_of_players,
         'first_name': request.user.first_name,
         'last_name': request.user.last_name,
     }
@@ -3867,8 +4321,12 @@ def skins_initiate_scorecard_meta_view(request):
     if request.method == "POST":
         game_id = request.POST.get("game_id")
         player_ids = request.POST.getlist("player_ids")
-        print('skins_initiate_scorecard_meta_view - game_id:', game_id)
-        print(player_ids)
+        
+        # Check if ScorecardMeta already exists for this game
+        if ScorecardMeta.objects.filter(GameID=game_id).exists():
+            # Already created, just redirect
+            request.session['game_id'] = game_id
+            return redirect('skins_leaderboard_view')
 
         # Update the Games table to set the status to 'Live'
         Games.objects.filter(id=game_id).update(Status="Live")
@@ -4031,9 +4489,12 @@ def skins_leaderboard_view(request):
     )
 
     # Determine if all players have completed their rounds
-    scorecard_complete = all(
+    scorecard_complete = (
+        scorecard_data.exists() and
+        all(
         player['hole_count'] == 18 and player['max_hole'] == 18
         for player in scorecard_data
+        )
     )
 
     print()
@@ -4062,6 +4523,9 @@ def skins_leaderboard_view(request):
                 'group_id': group_id,
                 'label': f"{group_id}a Scorecard",
             })
+    
+    #Get payout amount per skin if available
+    payout = Skins.objects.filter(GameID_id=game_id).values('Payout').first()
 
 
     # Pass data to the template
@@ -4072,6 +4536,7 @@ def skins_leaderboard_view(request):
         "scorecard_complete": scorecard_complete,
         "game_status": game_status,
         "play_date": play_date,
+        "payout": payout['Payout'] if payout else None,
         "first_name": request.user.first_name,
         "last_name": request.user.last_name,
     }
@@ -4104,6 +4569,18 @@ def skins_close_view(request):
     # Initialize leaderboard data
     leaderboard = []
 
+    # Calculate payouts and update Skins table if wager is provided
+    if wager is not None:
+        num_players = ScorecardMeta.objects.filter(GameID_id=game_id).count()
+        num_skins = Skins.objects.filter(GameID_id=game_id).count()
+        pot = wager * num_players
+        skin_payout = round(pot / num_skins, 2) if num_skins > 0 else 0
+
+        # Update all Skins records for this game with the payout per skin
+        Skins.objects.filter(GameID_id=game_id).update(Payout=skin_payout)
+    else:
+        skin_payout = None
+
     # Query Skins table for each player
     for player in players:
         player_id = player['PID_id']
@@ -4112,7 +4589,7 @@ def skins_close_view(request):
 
         # Get the number of skins and the list of holes
         skins_data = Skins.objects.filter(GameID_id=game_id, PlayerID_id=player_id).select_related('HoleNumber').values(
-            'HoleNumber__HoleNumber'
+            'HoleNumber__HoleNumber', 'Payout'
         )
         skins_count = skins_data.count()
         holes_list = [entry['HoleNumber__HoleNumber'] for entry in skins_data]
@@ -4122,10 +4599,10 @@ def skins_close_view(request):
 
         # Calculate payout if wager is provided
         if wager is not None:
-            num_players = ScorecardMeta.objects.filter(GameID_id=game_id).count()
-            num_skins = Skins.objects.filter(GameID_id=game_id).count()
-            pot = wager * num_players
-            skin_payout = round(pot / num_skins, 2) if num_skins > 0 else 0
+            # num_players = ScorecardMeta.objects.filter(GameID_id=game_id).count()
+            # num_skins = Skins.objects.filter(GameID_id=game_id).count()
+            # pot = wager * num_players
+            # skin_payout = round(pot / num_skins, 2) if num_skins > 0 else 0
 
             if skins_count > 0:
                 payout_value = round(skin_payout * skins_count - wager, 2)
@@ -4359,7 +4836,7 @@ def hole_input_score_view(request):
         for player in players:
             pid = player['pid']
             score = player['score']
-            putts = player['putts']
+            putts = player.get('putts', 0)  # Default to 0 if not present
             scorecard_id = player.get('scorecard_id')  # Get the Scorecard row ID if it exists
 
             # Fetch the Handicap for the hole

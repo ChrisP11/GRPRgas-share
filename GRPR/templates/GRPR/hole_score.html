@@ -12,7 +12,6 @@
             <tr>
                 <th>Player</th>
                 <th>Score</th>
-                <th>Putts</th>
             </tr>
         </thead>
         <tbody>
@@ -28,15 +27,6 @@
                         {% for score in score_range %}
                         <option value="{{ score }}" {% if score == player.existing_score|default:Par %}selected{% endif %}>
                             {{ score }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </td>
-                <td>
-                    <select class="form-select player-putts">
-                        {% for putt in putt_range %}
-                        <option value="{{ putt }}" {% if putt == player.existing_putts|default_if_none:2 %}selected{% endif %}>
-                            {{ putt }}
                         </option>
                         {% endfor %}
                     </select>
@@ -63,30 +53,24 @@
 
         document.querySelectorAll('tbody tr').forEach(row => {
             const playerId = row.querySelector('.player-id').value;
-            const scorecardId = row.querySelector('.scorecard-id').value; // Get the scorecard ID
+            const scorecardId = row.querySelector('.scorecard-id').value;
             const score = parseInt(row.querySelector('.player-score').value, 10);
-            const putts = parseInt(row.querySelector('.player-putts').value, 10);
 
-            // Validation: Putts must be at least one fewer than the score
-            if (putts >= score) {
-                isValid = false;
-                alert(`Invalid input for player ID ${playerId}: Putts (${putts}) must be fewer than Score (${score}).`);
-            }
+            // No putts input or validation
 
-            players.push({ pid: playerId, scorecard_id: scorecardId, score: score, putts: putts });
+            players.push({ pid: playerId, scorecard_id: scorecardId, score: score });
         });
 
         if (!isValid) {
-            // Prevent form submission if validation fails
             event.preventDefault();
             return;
         }
 
         const data = {
             players: players,
-            hole_id: "{{ hole_obj.id }}", // Rendered as a string
-            game_id: "{{ game_id }}", // Rendered as a string
-            group_id: "{{ group_id }}", // Add group_id
+            hole_id: "{{ hole_obj.id }}",
+            game_id: "{{ game_id }}",
+            group_id: "{{ group_id }}",
             csrfmiddlewaretoken: "{{ csrf_token }}"
         };
 
@@ -94,14 +78,13 @@
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRFToken': data.csrfmiddlewaretoken // Include CSRF token in headers
+                'X-CSRFToken': data.csrfmiddlewaretoken
             },
             body: JSON.stringify(data),
         })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                // Redirect to the URL provided in the JSON response
                 window.location.href = data.redirect_url;
             } else {
                 alert('Error saving scores: ' + (data.error || 'Unknown error.'));

@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% load custom_filters %}
+
+{% block title %}Add Player to Skins Game{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <h2>Add Player to Skins Game</h2>
+    <form method="post" action="{% url 'skins_add_player_view' %}">
+        {% csrf_token %}
+        <input type="hidden" name="playing_date" value="{{ playing_date }}">
+        <input type="hidden" name="tee_times_json" value="{{ tee_times|to_json|escape }}">
+        <input type="hidden" name="number_of_players" value="{{ number_of_players }}">
+        <input type="hidden" name="first_name" value="{{ first_name }}">
+        <input type="hidden" name="last_name" value="{{ last_name }}">
+
+        <div class="mb-3">
+            <label for="player_id" class="form-label">Player</label>
+            <select class="form-select" id="player_id" name="player_id" required>
+                <option value="">Select a player</option>
+                {% for player in available_players %}
+                    <option value="{{ player.id }}">{{ player.LastName }}, {{ player.FirstName }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label for="group_time" class="form-label">Group</label>
+            <select class="form-select" id="group_time" name="group_time" required>
+                <option value="">Select a group</option>
+                {% for group in available_groups %}
+                    <option value="{{ group.time }}">{{ group.time }} ({{ group.course }})</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <button type="submit" class="btn btn-success">Add Player</button>
+        <a href="{% url 'skins_choose_players_view' %}" class="btn btn btn-secondary-custom">Cancel</a>
+    </form>
+</div>
+{% endblock %}

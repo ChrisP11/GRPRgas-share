@@ -4,6 +4,12 @@
 
 {% block content %}
 
+{% if messages %}
+  {% for message in messages %}
+    <div class="alert alert-success">{{ message }}</div>
+  {% endfor %}
+{% endif %}
+
 
 <h3>Admin view - Game ID: current {{ game_id }} </h3>
 
@@ -23,6 +29,7 @@
     {% else %}
     <a href="{% url 'skins_new_game_view' %}" class="btn btn-primary" role="button">Invite Players to a New Game</a>
     {% endif %}
+    <a href="{% url 'skins_delete_game_menu_view' %}" class="btn btn-secondary-custom" role="button">Delete Menu</a>
   </div>
 </div>
 {% endblock %}

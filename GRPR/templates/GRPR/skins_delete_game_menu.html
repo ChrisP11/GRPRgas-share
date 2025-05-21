@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+
+{% block title %}Delete Skins Game{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <h2>Skins Games</h2>
+    <table class="table table-bordered">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Create Date</th>
+                <th>Play Date</th>
+                <th>Status</th>
+                <th>Inv</th>
+                <th>Plrs</th>
+                <th>Holes</th>
+                <th>Skins</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for game in games %}
+            <tr>
+                <td>{{ game.id }}</td>
+                <td>{{ game.CreateDate }}</td>
+                <td>{{ game.PlayDate }}</td>
+                <td>{{ game.Status }}</td>
+                <td>{{ game.invites_count|default:0 }}</td>
+                <td>{{ game.players_count|default:0 }}</td>
+                <td>{{ game.holes_count|default:0 }}</td>
+                <td>{{ game.skins_count|default:0 }}</td>
+                <td>
+                    <form method="post" action="{% url 'skins_delete_game_view' %}" style="display:inline;">
+                        {% csrf_token %}
+                        <input type="hidden" name="game_id" value="{{ game.id }}">
+                        <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <a href="{% url 'skins_admin_view' %}" class="btn btn-secondary rounded-pill w-100">Back to Skins Admin</a>
+</div>
+{% endblock %}

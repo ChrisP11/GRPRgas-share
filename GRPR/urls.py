@@ -75,8 +75,19 @@ urlpatterns = [
 
     ### Skins Game
     path('skins/', views.skins_view, name='skins_view'),
+    path('skins/choose/', views.skins_choose_players_view, name='skins_choose_players_view'),
+    path('skins/remove_player/', views.skins_remove_player_view, name='skins_remove_player_view'),
+    path('skins/choose_replacement_player/', views.skins_choose_replacement_player_view, name='skins_choose_replacement_player_view'),
+    path('skins/add_player/', views.skins_add_player_view, name='skins_add_player_view'),
+    path('skins/config/', views.skins_config_view, name='skins_config_view'),
+    path('skins/undo_game_creation/', views.skins_undo_game_creation, name='skins_undo_game_creation'),
+    path('skins/config/confirm/', views.skins_config_confirm_view, name='skins_config_confirm_view'),
+
     path('skins_admin/', views.skins_admin_view, name='skins_admin_view'),
     path('skins_game_close/', views.skins_game_close_view, name='skins_game_close_view'),
+    path('skins/delete_menu/', views.skins_delete_game_menu_view, name='skins_delete_game_menu_view'),
+    path('skins/delete_game/', views.skins_delete_game_view, name='skins_delete_game_view'),
+
     path('skins/new/', views.skins_new_game_view, name='skins_new_game_view'),
     path('skins_invite_view/', views.skins_invite_view, name='skins_invite_view'),
     path('skins/invite/', views.skins_invite_status_view, name='skins_invite_status_view'),

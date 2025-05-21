@@ -4,9 +4,35 @@
 
 {% block content %}
 <div class="container my-4">
-    <h1>Nearest Future Tee Time</h1>
+    <h1> Confirm Players / Groups</h1>
+    <h3>Playing Date: {{ playig_date }} {{ number_of_players }}</h3>
     <form id="invite-form" method="post" action="{% url 'skins_invite_view' %}">
         {% csrf_token %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Player</th>
+                    <th>Index</th>
+                    <th>Group</th>
+                    <th><input type="checkbox" id="select-all" checked> Select All</th>
+
+                </tr>
+            </thead>
+            <tbody>
+                {% for group in tee_times %}
+                    {% for player in group.players %}
+                <tr>
+                    <td>{{ player.name }}</td>
+                    <td>{{ player.index }}</td>
+                    <td>{{ group.time }} </td>
+                    <td><input type="checkbox" class="player-checkbox" name="selected_players" value="{{ player.player_id }}|{{ player.tt_id }}" checked></td>
+                </tr>
+                    {% endfor %}
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- <br>
         <table class="table">
             <thead>
                 <tr>
@@ -37,10 +63,12 @@
                 </tr>
                 {% endfor %}
             </tbody>
-        </table>
+        </table> -->
         <input type="hidden" name="gDate" value="{{ tee_times.0.date }}">
         <div class="d-grid gap-2">
-            <button type="submit" class="btn btn-primary">Invite Players to Game</button>
+            <button type="submit" class="btn btn-primary">Players / Groups are Correct</button>
+            <!-- {% if number_of_players < 12 %}<a href="" class="btn btn-secondary" role="button">Need to Update Players / Groups</a> {% endif %} -->
+            <a href="" class="btn btn-secondary btn-secondary-custom" role="button">Need to Update Players / Groups</a>
             <a href="{% url 'skins_view' %}" class="btn btn-secondary" role="button">Cancel</a>
         </div>
     </form>

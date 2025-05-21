@@ -13,7 +13,7 @@
                 <th>Player</th>
                 <th>Gross</th>
                 <th>Net</th>
-                <th>Putts</th>
+                <!-- <th>Putts</th> -->
             </tr>
         </thead>
         <tbody>
@@ -22,7 +22,7 @@
                 <td>{{ player.smID__PID__FirstName|slice:":1" }} {{ player.smID__PID__LastName }}</td>
                 <td>{{ player.RawScore }}</td>
                 <td>{{ player.NetScore }}</td>
-                <td>{{ player.Putts }}</td>
+                <!-- <td>{{ player.Putts }}</td> -->
             </tr>
             {% endfor %}
         </tbody>

@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% load custom_filters %}
+
+{% block title %}Choose Players for New Skins Game{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <h1> Confirm Players / Groups</h1>
+    <h3>Playing Date: {{ playing_date }} {{ number_of_players }}</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Player</th>
+                <th>Group</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for group in tee_times %}
+                {% for player in group.players %}
+            <tr>
+                <td>{{ player.name }}</td>
+                <td>{{ group.time }}</td>
+                <td>
+                    <form method="post" action="{% url 'skins_remove_player_view' %}" style="display:inline;">
+                        {% csrf_token %}
+                        <input type="hidden" name="player_id" value="{{ player.player_id }}">
+                        <input type="hidden" name="tt_id" value="{{ player.tt_id }}">
+                        <input type="hidden" name="playing_date" value="{{ playing_date }}">
+                        <input type="hidden" name="tee_times_json" value="{{ tee_times|to_json|escape }}">
+                        <button type="submit" class="btn btn-danger btn-sm">Remove Player</button>
+                    </form>
+                </td>
+            </tr>
+                {% endfor %}
+            {% endfor %}
+        </tbody>
+    </table>
+    <div class="d-grid gap-2">
+        {% if number_of_players < 12 %} 
+            <form method="post" action="{% url 'skins_choose_replacement_player_view' %}" style="display:inline;">
+                {% csrf_token %}
+                <input type="hidden" name="playing_date" value="{{ playing_date }}">
+                <input type="hidden" name="tee_times_json" value="{{ tee_times|to_json|escape }}">
+                <input type="hidden" name="number_of_players" value="{{ number_of_players }}">
+                <input type="hidden" name="first_name" value="{{ first_name }}">
+                <input type="hidden" name="last_name" value="{{ last_name }}">
+                <button type="submit" class="btn btn btn-secondary-custom rounded-pill w-100 mb-2">Add Player</button>
+            </form>
+        {% endif %}
+        <form method="post" action="{% url 'skins_config_view' %}" style="display:inline;">
+            {% csrf_token %}
+            <input type="hidden" name="playing_date" value="{{ playing_date }}">
+            <input type="hidden" name="tee_times_json" value="{{ tee_times|to_json|escape }}">
+            <input type="hidden" name="number_of_players" value="{{ number_of_players }}">
+            <button type="submit" class="btn btn-secondary rounded-pill w-100 mb-2">Players / Groups are Correct</button>
+        </form>
+        <a href="{% url 'skins_view' %}" class="btn btn-secondary rounded-pill w-100" role="button">Cancel</a>
+    </div>
+</div>
+{% endblock %}

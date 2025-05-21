@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+
+{% block title %}Confirm Tees & Handicaps{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <h4>Confirm - Change individual tees?</h4>
+    <form method="post" action="{% url 'skins_initiate_scorecard_meta_view' %}">
+        {% csrf_token %}
+        <input type="hidden" name="game_id" value="{{ game_id }}">
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>Player</th>
+                    <th>Index</th>
+                    <th>Tee</th>
+                    <th>HDCP</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for player in player_list %}
+                <tr>
+                    <td>
+                        {{ player.last_name }}
+                        <input type="hidden" name="player_ids" value="{{ player.player_id }}">
+                    </td>
+                    <td>{{ player.index }}</td>
+                    <td>
+                        <select class="form-select tee-dropdown" name="tee_ids_{{ player.player_id }}" data-player-id="{{ player.player_id }}" data-player-index="{{ player.index }}">
+                            {% for tee in tee_options_list %}
+                                <option value="{{ tee.tee_id }}" data-slope="{{ tee.slope }}" {% if tee.tee_id == tee_id %}selected{% endif %}>
+                                    {{ tee.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </td>
+                    <td>
+                        <span class="adj-index" id="adj-index-{{ player.player_id }}">0.0</span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <button type="submit" class="btn btn-primary rounded-pill w-100 mb-2">Start Game</button>
+        <a href="{% url 'skins_config_view' %}" class="btn btn-secondary rounded-pill w-100">Back</a>
+    </form>
+</div>
+
+<script>
+    // JavaScript to dynamically calculate and update the adjusted index (HDCP)
+    document.addEventListener('DOMContentLoaded', function () {
+        const teeDropdowns = document.querySelectorAll('.tee-dropdown');
+
+        teeDropdowns.forEach(dropdown => {
+            dropdown.addEventListener('change', function () {
+                const playerIndex = parseFloat(this.getAttribute('data-player-index'));
+                const selectedSlope = parseFloat(this.options[this.selectedIndex].getAttribute('data-slope'));
+                const playerId = this.getAttribute('data-player-id');
+                const adjIndexElement = document.getElementById('adj-index-' + playerId);
+
+                if (!isNaN(playerIndex) && !isNaN(selectedSlope)) {
+                    const adjIndex = Math.round((playerIndex * (selectedSlope / 113)) * 10) / 10;
+                    adjIndexElement.textContent = adjIndex.toFixed(1);
+                }
+            });
+
+            // Trigger change event on page load to calculate initial values
+            dropdown.dispatchEvent(new Event('change'));
+        });
+    });
+</script>
+{% endblock %}
