@@ -4865,21 +4865,24 @@ def hole_input_score_view(request):
             if not scm:
                 return JsonResponse({'success': False, 'error': 'ScorecardMeta not found for player.'})
 
-            if scorecard_id:  # If a scorecard ID exists, a score has previously been entered, will update the existing row
-                # Fetch the current scores from the Scorecard table
-                current_scorecard = Scorecard.objects.filter(id=scorecard_id).values('RawScore', 'NetScore', 'Putts').first()
-                current_raw_score = current_scorecard['RawScore']
-                current_net_score = current_scorecard['NetScore']
-                current_putts = current_scorecard['Putts']
+            # --- Prevent duplicate Scorecard rows ---
+            # Always check for an existing Scorecard row for this player/hole/game
+            existing_scorecard = Scorecard.objects.filter(
+                GameID_id=game_id, HoleID_id=hole_id, smID_id=scm.id
+            ).first()
 
-                # Update the Scorecard table
-                Scorecard.objects.filter(id=scorecard_id).update(
-                    AlterDate=timezone.now(),
-                    RawScore=score,
-                    NetScore=net_score,
-                    AlterID_id=logged_in_user_id,
-                    Putts=putts
-                )
+            if existing_scorecard:
+                # Update the existing row
+                current_raw_score = existing_scorecard.RawScore
+                current_net_score = existing_scorecard.NetScore
+                current_putts = existing_scorecard.Putts
+
+                existing_scorecard.AlterDate = timezone.now()
+                existing_scorecard.RawScore = score
+                existing_scorecard.NetScore = net_score
+                existing_scorecard.AlterID_id = logged_in_user_id
+                existing_scorecard.Putts = putts
+                existing_scorecard.save()
 
                 # Update ScorecardMeta based on the hole number
                 if 1 <= hole.HoleNumber <= 9:
@@ -4893,6 +4896,7 @@ def hole_input_score_view(request):
                 scm.NetTotal += net_score - current_net_score
                 scm.Putts += putts - current_putts
                 scm.save()
+            # --- End duplicate prevention ---
 
             else:  # Otherwise, no scores have been previously entered for this hole, insert a new row
                 # Insert a new row into the Scorecard table
