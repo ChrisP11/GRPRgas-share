@@ -3,7 +3,7 @@ import json
 from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpResponse, JsonResponse, HttpResponseBadRequest
 from django.utils import timezone
-from GRPR.models import Crews, Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity, SMSResponse, Xdates, Games, GameInvites, CourseTees, ScorecardMeta, Scorecard, CourseHoles, Skins, AutomatedMessages
+from GRPR.models import Crews, Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity, SMSResponse, Xdates, Games, GameInvites, CourseTees, ScorecardMeta, Scorecard, CourseHoles, Skins, AutomatedMessages, Forty 
 from datetime import datetime, date
 from django.conf import settings  # Import settings
 from django.contrib import messages
@@ -3429,13 +3429,85 @@ def rounds_leaderboard_view(request):
 
 
 ##########################
+####  Games Section   ####
+##########################
+
+@login_required
+def games_view(request):
+    user = request.user
+    # Discover if there is a current game in process
+    game = Games.objects.exclude(Status='Closed').order_by('-CreateDate').first()
+    gDate = game.PlayDate if game else None
+    game_status = game.Status if game else None
+    game_id = game.id if game else None
+    game_type = game.Type if game else None
+    assoc_game_id = game.AssocGame if game else None
+
+    assoc_game = Games.objects.filter(id = assoc_game_id).first() if assoc_game_id else None
+
+    if game_type == 'Skins':
+        skins_game_id = game_id
+        forty_game_id = assoc_game_id
+    elif game_type == 'Forty':
+        skins_game_id = assoc_game_id
+        forty_game_id = game_id
+    else:
+        skins_game_id = None
+        forty_game_id = None
+    
+    if skins_game_id:
+        skins_players_num = ScorecardMeta.objects.filter(GameID=skins_game_id).count()
+    else:
+        skins_players_num = 0
+    
+    if forty_game_id:
+        forty_players_num = ScorecardMeta.objects.filter(GameID=forty_game_id).count()
+    else:
+        forty_players_num = 0
+    
+    context = {
+        'game_status': game_status,
+        'gDate': gDate,
+        'game_type': game_type,
+        'skins_game_id': skins_game_id,
+        'skins_players_num': skins_players_num,
+        'forty_game_id': forty_game_id,
+        'forty_players_num': forty_players_num if assoc_game else None,
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+    }
+
+    return render(request, 'GRPR/games.html', context)
+
+
+@login_required
+def games_choice_view(request):
+    # Get today's date
+    current_datetime = datetime.now()
+
+    # Query the next closest future date in the TeeTimesInd table
+    next_closest_date = TeeTimesInd.objects.filter(gDate__gte=current_datetime).order_by('gDate').values('gDate').first()
+
+    if next_closest_date:
+        play_date = next_closest_date['gDate']
+    else:
+        play_date = None
+
+    context = {
+        'play_date': play_date,
+        'first_name': request.user.first_name,
+        'last_name': request.user.last_name,
+    }
+    return render(request, 'GRPR/games_choice.html', context)
+
+##########################
 #### Skins game views ####
 ##########################
 @login_required
 def skins_admin_view(request):
     user = request.user
     # Discover if there is a current game in process
-    game = Games.objects.exclude(Status='Closed').order_by('-CreateDate').first()
+    game = Games.objects.filter(Type='Skins').exclude(Status='Closed').order_by('-CreateDate').first()
     gDate = game.PlayDate if game else None
     game_creator = game.CreateID if game else None
     game_status = game.Status if game else None
@@ -3490,7 +3562,7 @@ def skins_delete_game_menu_view(request):
         return redirect('skins_admin_view')
 
     # If you want to use subqueries for more accurate counts (especially if there are NULLs):
-    games = Games.objects.all().order_by('id').annotate(
+    games = Games.objects.order_by('id').annotate(
         invites_count=Subquery(
             GameInvites.objects.filter(GameID_id=OuterRef('id')).values('GameID_id').annotate(c=Count('id')).values('c')[:1]
         ),
@@ -3515,30 +3587,46 @@ def skins_delete_game_menu_view(request):
 def skins_delete_game_view(request):
     if request.method == "POST" and request.user.username == "cprouty":
         game_id = request.POST.get("game_id")
-        from .models import Scorecard, ScorecardMeta, GameInvites, Skins, Games
+        game = Games.objects.filter(id=game_id).first()
+        if not game:
+            messages.error(request, f"Game id {game_id} not found.")
+            return redirect('skins_admin_view')
 
-        with transaction.atomic():
-            scorecard_count = Scorecard.objects.filter(GameID_id=game_id).count()
-            Scorecard.objects.filter(GameID_id=game_id).delete()
+        if game.Type == "Skins":
+            with transaction.atomic():
+                scorecard_count = Scorecard.objects.filter(GameID_id=game_id).count()
+                Scorecard.objects.filter(GameID_id=game_id).delete()
 
-            scorecardMeta_count = ScorecardMeta.objects.filter(GameID=game_id).count()
-            ScorecardMeta.objects.filter(GameID=game_id).delete()
+                scorecardMeta_count = ScorecardMeta.objects.filter(GameID=game_id).count()
+                ScorecardMeta.objects.filter(GameID=game_id).delete()
 
-            invites_count = GameInvites.objects.filter(GameID_id=game_id).count()
-            GameInvites.objects.filter(GameID_id=game_id).delete()
+                invites_count = GameInvites.objects.filter(GameID_id=game_id).count()
+                GameInvites.objects.filter(GameID_id=game_id).delete()
 
-            skins_count = Skins.objects.filter(GameID_id=game_id).count()
-            Skins.objects.filter(GameID_id=game_id).delete()
+                skins_count = Skins.objects.filter(GameID_id=game_id).count()
+                Skins.objects.filter(GameID_id=game_id).delete()
 
-            Games.objects.filter(id=game_id).delete()
+                Games.objects.filter(id=game_id).delete()
 
-        msg = (
-            f"Game id {game_id} deleted. "
-            f"Scorecard rows deleted: {scorecard_count}, "
-            f"ScM rows deleted: {scorecardMeta_count}, "
-            f"Invites deleted: {invites_count}, "
-            f"Skins deleted: {skins_count}."
-        )
+            msg = (
+                f"Skins Game id {game_id} deleted. "
+                f"Scorecard rows deleted: {scorecard_count}, "
+                f"ScM rows deleted: {scorecardMeta_count}, "
+                f"Invites deleted: {invites_count}, "
+                f"Skins deleted: {skins_count}."
+            )
+        elif game.Type == "Forty":
+            with transaction.atomic():
+                forty_count = Forty.objects.filter(GameID=game_id).count()
+                Forty.objects.filter(GameID=game_id).delete()
+                Games.objects.filter(id=game_id).delete()
+            msg = (
+                f"Forty Game id {game_id} deleted. "
+                f"Forty rows deleted: {forty_count}."
+            )
+        else:
+            msg = f"Game id {game_id} is not a Skins or Forty game. No action taken."
+
         messages.success(request, msg)
         return redirect('skins_admin_view')
     else:
@@ -3550,16 +3638,11 @@ def skins_delete_game_view(request):
 def skins_view(request):
     user = request.user
     # Discover if there is a current game in process
-    game = Games.objects.exclude(Status='Closed').order_by('-CreateDate').first()
+    game = Games.objects.filter(Type='Skins').exclude(Status='Closed').order_by('-CreateDate').first()
     gDate = game.PlayDate if game else None
     game_creator = game.CreateID if game else None
     game_status = game.Status if game else None
     game_id = game.id if game else None
-
-    print('skins_view - game_id', game_id)
-    print('skins_view - game_status', game_status)
-    print('skins_view - gDate', gDate)
-    print('skins_view - game_creator', game_creator)
 
 
     context = {
@@ -3568,7 +3651,7 @@ def skins_view(request):
         'game_creator': game_creator,
         'gDate': gDate, 
         'game_status': game_status,
-        'game_id': game_id,
+        'game_id': game_id, 
     }
 
     return render(request, 'GRPR/skins.html', context)
@@ -3637,6 +3720,7 @@ def skins_choose_players_view(request):
         'first_name': request.user.first_name,
         'last_name': request.user.last_name,
     }
+
     return render(request, 'GRPR/skins_choose_players.html', context)
 
 
@@ -3665,6 +3749,7 @@ def skins_remove_player_view(request):
             'first_name': request.user.first_name,
             'last_name': request.user.last_name,
         }
+
         return render(request, 'GRPR/skins_choose_players.html', context)
     else:
         return redirect('skins_choose_players_view')
@@ -3697,6 +3782,7 @@ def skins_choose_replacement_player_view(request):
         'available_players': available_players,
         'available_groups': available_groups,
     }
+
     return render(request, 'GRPR/skins_choose_replacement_player.html', context)
 
 
@@ -3820,7 +3906,8 @@ def skins_config_view(request):
         existing_game = Games.objects.filter(
             CrewID=1,
             PlayDate=playing_date_ymd,
-            Status='Tees'
+            Status='Tees',
+            Type='Skins',
         ).first()
         if existing_game:
             # Option 1: Redirect to config for existing game
@@ -3844,7 +3931,8 @@ def skins_config_view(request):
             CreateDate=now(),
             PlayDate=playing_date_ymd,
             Status='Tees',
-            CreateID_id=logged_in_player_id
+            CreateID_id=logged_in_player_id,
+            Type='Skins',
         )
         game_id = game.id
 
@@ -3908,6 +3996,8 @@ def skins_config_confirm_view(request):
     if request.method == 'POST':
         game_id = request.POST.get('game_id')
         tee_id = int(request.POST.get('tee_id'))
+        format_option = request.POST.get('format_option')
+        game_format = request.POST.get('game_format')
 
         # Get game info
         game = get_object_or_404(Games, id=game_id)
@@ -3944,12 +4034,30 @@ def skins_config_confirm_view(request):
                 'yards': tee.Yards,
             })
 
+        
+        # If format_option is not selected, re-render the config page with a message
+        if not format_option:
+            # You may want to also pass tee_times, playing_date, number_of_players if needed
+            context = {
+                'game_id': game_id,
+                'ct_id': ct_id,
+                'tee_id': tee_id,
+                'player_list': player_list,
+                'tee_options_list': tee_options_list,
+                'first_name': request.user.first_name,
+                'last_name': request.user.last_name,
+                'msg': "Please choose Format for Game",
+                # Add any other context variables your template expects
+            }
+            return render(request, 'GRPR/skins_config.html', context)
+
         context = {
             'game_id': game_id,
             'ct_id': ct_id,
             'tee_id': tee_id,
             'player_list': player_list,
             'tee_options_list': tee_options_list,
+            'game_format': game_format,
             'first_name': request.user.first_name,
             'last_name': request.user.last_name,
         }
@@ -4051,6 +4159,7 @@ def skins_invite_view(request):
             CreateDate=timezone.now().date(),
             PlayDate=gDate,
             Status='Invite',
+            Type='Skins',
         )
         game_id = game.id
 
@@ -4320,6 +4429,7 @@ def skins_choose_tees_view(request):
 def skins_initiate_scorecard_meta_view(request):
     if request.method == "POST":
         game_id = request.POST.get("game_id")
+        game_format = request.POST.get("game_format")
         player_ids = request.POST.getlist("player_ids")
         
         # Check if ScorecardMeta already exists for this game
@@ -4329,7 +4439,7 @@ def skins_initiate_scorecard_meta_view(request):
             return redirect('skins_leaderboard_view')
 
         # Update the Games table to set the status to 'Live'
-        Games.objects.filter(id=game_id).update(Status="Live")
+        Games.objects.filter(id=game_id).update(Status="Live", Format = game_format)
 
         # Get logged-in user's player ID
         logged_in_user = get_object_or_404(Players, user_id=request.user.id)
@@ -4391,24 +4501,40 @@ def skins_initiate_scorecard_meta_view(request):
         scm = ScorecardMeta.objects.filter(GameID=game_id)
         print('ScorecardMeta entries:', scm)
 
-        # Find the lowest RawHDCP
-        lowest_raw_hdcp = scm.order_by('RawHDCP').first().RawHDCP
-        print('Lowest RawHDCP:', lowest_raw_hdcp)
+        if game_format == 'Low Man':
+            # Find the lowest RawHDCP
+            lowest_raw_hdcp = scm.order_by('RawHDCP').first().RawHDCP
+            print('Lowest RawHDCP:', lowest_raw_hdcp)
 
-        # Update NetHDCP for each player
-        for hdcp in scm:
-            pid = hdcp.PID
-            raw_hdcp = hdcp.RawHDCP
-            net_hdcp = custom_round(float(raw_hdcp - lowest_raw_hdcp))
-            hdcp.NetHDCP = net_hdcp
-            hdcp.save()  # Save the updated NetHDCP
-            print(f"Updated NetHDCP for PID {pid}: {net_hdcp}")
+            # Update NetHDCP for each player
+            for hdcp in scm:
+                pid = hdcp.PID
+                raw_hdcp = hdcp.RawHDCP
+                net_hdcp = custom_round(float(raw_hdcp - lowest_raw_hdcp))
+                hdcp.NetHDCP = net_hdcp
+                hdcp.save()
+                print(f"Updated NetHDCP for PID {pid}: {net_hdcp}")
+        elif game_format == 'Full Handicap':
+            # Set NetHDCP to the rounded RawHDCP for each player
+            for hdcp in scm:
+                pid = hdcp.PID
+                raw_hdcp = hdcp.RawHDCP
+                net_hdcp = custom_round(float(raw_hdcp))
+                hdcp.NetHDCP = net_hdcp
+                hdcp.save()
+                print(f"Updated NetHDCP for PID {pid}: {net_hdcp}")
 
         request.session['game_id'] = game_id
 
-        return redirect('skins_leaderboard_view')
-    else:
-        return HttpResponseBadRequest("Invalid request.")
+        context = {
+        'game_id': game_id,
+        'play_date': play_date,
+        'game_format': game_format,
+        'first_name': request.user.first_name,
+        'last_name': request.user.last_name,
+    }
+
+    return render(request, 'GRPR/games_choice.html', context)
 
 
 @login_required
@@ -4418,6 +4544,33 @@ def skins_leaderboard_view(request):
     if not game_id:
         return HttpResponseBadRequest("Game ID is missing.")
     print('skins_leaderboard_view game_id', game_id)
+
+    # Get the associated Forty game ID
+    forty_game_id = Games.objects.filter(id=game_id).values_list('AssocGame', flat=True).first()
+
+    # work for forty leaderboard table
+    forty_leaderboard = []
+    if forty_game_id:
+        # Get all groups in the Forty table for this Forty game
+        forty_groups = Forty.objects.filter(GameID_id=forty_game_id).values_list('GroupID', flat=True).distinct()
+        for group_id in forty_groups:
+            scores_used = Forty.objects.filter(GameID_id=forty_game_id, GroupID=group_id).count()
+            scores_played = Scorecard.objects.filter(GameID_id=game_id, smID__GroupID=group_id).count()
+            num_scores = Games.objects.filter(id=forty_game_id).values_list('NumScores', flat=True).first() or 0
+            scores_needed = num_scores - scores_used
+            scores_available = 72 - scores_played
+            par = Forty.objects.filter(GameID_id=forty_game_id, GroupID=group_id).aggregate(total=Sum('Par'))['total'] or 0
+            group_score = Forty.objects.filter(GameID_id=forty_game_id, GroupID=group_id).aggregate(total=Sum('NetScore'))['total'] or 0
+            over_under = group_score - par
+
+            forty_leaderboard.append({
+                'group_id': group_id,
+                'scores_used': scores_used,
+                'scores_needed': scores_needed,
+                'scores_available': scores_available,
+                'over_under': over_under,
+            })
+    # -- end forty leaderboard table
 
     # Get the Status and PlayDate of the game in a single query
     game_data = Games.objects.filter(id=game_id).values('Status', 'PlayDate').first()
@@ -4532,6 +4685,8 @@ def skins_leaderboard_view(request):
     context = {
         "game_id": game_id,
         "leaderboard": leaderboard,
+        "forty_game_id": forty_game_id,
+        "forty_leaderboard": forty_leaderboard,
         "group_buttons": group_buttons,
         "scorecard_complete": scorecard_complete,
         "game_status": game_status,
@@ -4638,7 +4793,7 @@ def skins_close_view(request):
 @login_required
 def skins_closed_games_view(request):
     # Query for completed games
-    completed_games = Games.objects.filter(Status='Closed').select_related('CourseTeesID').values(
+    completed_games = Games.objects.filter(Status='Closed', Type='Skins').select_related('CourseTeesID').values(
         'id',  # GameID
         'PlayDate',
         'CourseTeesID__CourseName'  # Course name
@@ -4714,6 +4869,437 @@ def skins_reopen_game_view(request):
 
 
 ##########################
+####  Forty Section   ####
+##########################
+
+@login_required
+def forty_view(request):
+    user = request.user
+
+
+    context = {
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+    }
+
+    return render(request, 'GRPR/forty.html', context)
+
+
+@login_required
+def forty_config_view(request):
+    game_format = request.GET.get('game_format')
+    # Find a live Skins game with a future PlayDate
+    now = timezone.now().date()
+    live_game = Games.objects.filter(Status='Live', Type='Skins', PlayDate__gte=now).order_by('PlayDate').first()
+
+    live_skins_msg = None
+    group_list = []
+
+    if live_game:
+        live_skins_msg = "There is a live Skins game, using those groups/tees for this game"
+        # Get all ScorecardMeta rows for this game
+        scm_qs = ScorecardMeta.objects.filter(GameID=live_game.id).select_related('PID')
+        # Build a dict: {group_id: [LastName, ...]}
+        groups = {}
+        for scm in scm_qs:
+            group_id = scm.GroupID
+            last_name = scm.PID.LastName
+            if group_id not in groups:
+                groups[group_id] = []
+            groups[group_id].append(last_name)
+        # Prepare for template: list of (group_id, [LastName, ...])
+        group_list = [
+            {'group_id': group_id, 'last_names': sorted(names)}
+            for group_id, names in groups.items()
+        ]
+        group_list.sort(key=lambda g: g['group_id'])
+    else:
+        live_skins_msg = "No live Skins game found. Please create one first."
+
+    context = {
+        'live_skins_msg': live_skins_msg,
+        'group_list': group_list,
+        'game_id': live_game.id if live_game else None,
+        'game_format': game_format,
+        'first_name': request.user.first_name,
+        'last_name': request.user.last_name,
+    }
+    return render(request, 'GRPR/forty_config.html', context)
+
+
+@login_required
+def forty_config_confirm_view(request):
+    if request.method == "POST":
+        game_id = request.POST.get('game_id')
+        num_scores = request.POST.get('num_scores')
+        game_format = request.POST.get('game_format')
+        min_1st = request.POST.get('min_1st')
+        min_18th = request.POST.get('min_18th')
+
+        # Recreate group_list from ScorecardMeta for this game
+        group_list = []
+        if game_id:
+            scm_qs = ScorecardMeta.objects.filter(GameID=game_id).select_related('PID')
+            groups = {}
+            for scm in scm_qs:
+                group_id = scm.GroupID
+                last_name = scm.PID.LastName
+                if group_id not in groups:
+                    groups[group_id] = []
+                groups[group_id].append(last_name)
+            group_list = [
+                {'group_id': group_id, 'last_names': sorted(names)}
+                for group_id, names in groups.items()
+            ]
+            group_list.sort(key=lambda g: g['group_id'])
+
+        context = {
+            'group_list': group_list,
+            'num_scores': num_scores,
+            'game_format': game_format,
+            'min_1st': min_1st,
+            'min_18th': min_18th,
+            'game_id': game_id,
+            'first_name': request.user.first_name,
+            'last_name': request.user.last_name,
+        }
+        return render(request, 'GRPR/forty_config_confirm.html', context)
+    else:
+        return redirect('forty_config_view')
+    
+
+@login_required
+def forty_game_creation_view(request):
+    if request.method == "POST":
+        game_id = request.POST.get('game_id')
+        game_format = request.POST.get('game_format')
+        num_scores = request.POST.get('num_scores')
+        min_1st = request.POST.get('min_1st')
+        min_18th = request.POST.get('min_18th')
+
+        # Get logged-in user's player ID
+        logged_in_user = get_object_or_404(Players, user_id=request.user.id)
+        logged_in_user_player_id = logged_in_user.id
+
+        # Get PlayDate and CourseTeesID_id from the existing Games row
+        game = get_object_or_404(Games, id=game_id)
+        play_date = game.PlayDate
+        ct_id = game.CourseTeesID_id
+
+        # Create new Games row for Forty
+        new_game = Games.objects.create(
+            CreateID_id=logged_in_user_player_id,
+            CrewID=1,
+            CreateDate=now(),
+            PlayDate=play_date,
+            CourseTeesID_id=ct_id,
+            Status='Live',
+            Type='Forty',
+            Format=game_format,
+            NumScores=num_scores,
+            Min1=min_1st,
+            Min18=min_18th,
+            AssocGame = game_id,  # Associate with the Skins game
+        )
+        new_game_id = new_game.id
+
+        #Associated current Skins game with Forty game
+        Games.objects.filter(id=game_id).update(AssocGame=new_game_id)
+
+        # Insert a row into Log
+        Log.objects.create(
+            SentDate=now(),
+            Type='Forty Creation',
+            RequestDate=play_date,
+            OfferID=logged_in_user_player_id,
+            Msg=f'{logged_in_user.LastName} created a new game of Forty, game id is {new_game_id}'
+        )
+
+        # Redirect to skins_leaderboard_view with the game_id
+        return redirect(f"{reverse('skins_leaderboard_view')}?game_id={game_id}")
+
+    return redirect('forty_config_view')
+
+
+@login_required
+def forty_choose_score_view(request):
+    hole_id = request.GET.get('hole_id') or request.POST.get('hole_id')
+    game_id = request.GET.get('game_id') or request.POST.get('game_id')
+    group_id = request.GET.get('group_id') or request.POST.get('group_id')
+
+
+    hole = get_object_or_404(CourseHoles, id=hole_id)
+    hole_number = hole.HoleNumber
+
+    player_scores = Scorecard.objects.filter(
+        GameID_id=game_id,
+        HoleID_id=hole_id,
+        smID__GroupID=group_id
+    ).select_related('smID__PID').values(
+        'smID__PID__id','smID__PID__FirstName', 'smID__PID__LastName', 'NetScore'
+    )
+
+    next_hole = CourseHoles.objects.filter(
+        CourseTeesID=hole.CourseTeesID, HoleNumber__gt=hole.HoleNumber
+    ).order_by('HoleNumber').first()
+    next_hole_id = next_hole.id if next_hole else None
+
+    # Get the AssocGame (Forty game id) for this Skins game
+    forty_game_id = Games.objects.filter(id=game_id).values_list('AssocGame', flat=True).first()
+
+    # Efficiently gather stats
+    scores_used = Forty.objects.filter(GameID_id=forty_game_id, GroupID=group_id).count()
+    scores_played = Scorecard.objects.filter(GameID_id=game_id, smID__GroupID=group_id).count()
+    num_scores = Games.objects.filter(id=forty_game_id).values_list('NumScores', flat=True).first() or 0
+    scores_needed = num_scores - scores_used
+    scores_available = 76 - scores_played #ack.  this is 76 instead of 72 bc when the user sees this, the scores have been entered into scorecard (4 used) but can yet still be chosen for Forty
+    scores_after_this_hole = scores_available - 4
+    scores_min = scores_needed - scores_after_this_hole # minimum scores required to be used for this hole
+
+    par = Forty.objects.filter(GameID_id=forty_game_id, GroupID=group_id).aggregate(total=Sum('Par'))['total'] or 0
+    group_score = Forty.objects.filter(GameID_id=forty_game_id, GroupID=group_id).aggregate(total=Sum('NetScore'))['total'] or 0
+    over_under = group_score - par
+
+    error_msg = None
+    print('hole #', hole_number)
+
+    # Check if the user has already chosen players for this hole, but got sent back to this view bc they did not choose enough based on requirements (3 on 1, 3 on 18, etc)
+    if request.method == "POST":
+        selected_players = request.POST.getlist('selected_players')
+        request.session['chosen_players'] = selected_players
+        return redirect(f"{reverse('forty_confirm_score_view')}?hole_id={hole_id}&game_id={game_id}&group_id={group_id}&next_hole_id={next_hole_id}&forty_game_id={forty_game_id}")
+
+    context = {
+        'hole': hole,
+        'player_scores': player_scores,
+        'game_id': game_id,
+        'group_id': group_id,
+        'next_hole_id': next_hole_id,
+        'forty_game_id': forty_game_id,
+        'scores_used': scores_used,
+        'scores_played': scores_played,
+        'num_scores': num_scores,
+        'scores_needed': scores_needed,
+        'scores_available': scores_available,
+        'scores_min': scores_min,
+        'par': par,
+        'group_score': group_score,
+        'over_under': over_under,
+        'error_msg': error_msg,
+    }
+    return render(request, 'GRPR/forty_choose_score.html', context)
+
+
+@login_required
+def forty_confirm_score_view(request):
+    if request.method == "POST":
+        hole_id = request.POST.get('hole_id')
+        game_id = request.POST.get('game_id')
+        group_id = request.POST.get('group_id')
+        next_hole_id = request.POST.get('next_hole_id')
+        forty_game_id = request.POST.get('forty_game_id')
+        # get all selected player IDs (checkboxes)
+        selected_players = request.POST.getlist('selected_players')
+
+        # get Game info for variables
+        game = get_object_or_404(Games, id=forty_game_id)
+        min1 = game.Min1
+        min18 = game.Min18
+        
+        # Get hole number
+        hole = get_object_or_404(CourseHoles, id=hole_id)
+        hole_number = hole.HoleNumber
+
+        # Gather stats needed for validation
+        scores_used = Forty.objects.filter(GameID_id=forty_game_id, GroupID=group_id).count()
+        scores_played = Scorecard.objects.filter(GameID_id=game_id, smID__GroupID=group_id).count()
+        num_scores = Games.objects.filter(id=forty_game_id).values_list('NumScores', flat=True).first() or 0
+        scores_needed = num_scores - scores_used
+        scores_available = 76 - scores_played
+        scores_after_this_hole = scores_available - 4
+        scores_min = scores_needed - scores_after_this_hole  # minimum scores required to be used for this hole
+
+        # checks for number of scores that can be used prior to 18
+        max_scores_usable_priot_to_18 = num_scores - min18
+
+        error_msg = None
+
+        # --- Begin Validation Logic ---
+        # 1. If hole == 1, must select at least 3 scores
+        if int(hole_number) == 1 and len(selected_players) < min1:
+            error_msg = "On the 1st hole, you must use at least three scores."
+
+        # 2. If scores_min > 0, must select at least scores_min scores
+        elif scores_min > 0 and len(selected_players) < scores_min:
+            error_msg = (
+                f"Must use at least {scores_min} on this hole."
+            )
+
+        # 3. If scores_needed < 7 and not hole 18, limit max scores
+        elif max_scores_usable_priot_to_18 - scores_used < 4 and int(hole_number) != 18:
+            scores_max = max_scores_usable_priot_to_18 - scores_used
+            if len(selected_players) > scores_max:
+                error_msg = (
+                    f"{scores_used} scores have been used, can only use {scores_max} more scores prior to 18 (where you must use at least {min18})."
+                )
+
+        # 4. If hole == 18, must use exactly scores_min scores
+        elif int(hole_number) == 18:
+            if len(selected_players) != scores_min:
+                error_msg = f"Must use exactly {scores_min} scores on 18."
+
+        # --- If any error, re-render choose page with error ---
+        if error_msg:
+            player_scores = Scorecard.objects.filter(
+                GameID_id=game_id,
+                HoleID_id=hole_id,
+                smID__GroupID=group_id
+            ).select_related('smID__PID').values(
+                'smID__PID__id','smID__PID__FirstName', 'smID__PID__LastName', 'NetScore'
+            )
+            next_hole = CourseHoles.objects.filter(
+                CourseTeesID=hole.CourseTeesID, HoleNumber__gt=hole.HoleNumber
+            ).order_by('HoleNumber').first()
+            next_hole_id = next_hole.id if next_hole else None
+            par = Forty.objects.filter(GameID_id=forty_game_id, GroupID=group_id).aggregate(total=Sum('Par'))['total'] or 0
+            group_score = Forty.objects.filter(GameID_id=forty_game_id, GroupID=group_id).aggregate(total=Sum('NetScore'))['total'] or 0
+            over_under = group_score - par
+
+            context = {
+                'hole': hole,
+                'player_scores': player_scores,
+                'game_id': game_id,
+                'group_id': group_id,
+                'next_hole_id': next_hole_id,
+                'forty_game_id': forty_game_id,
+                'scores_used': scores_used,
+                'scores_played': scores_played,
+                'num_scores': num_scores,
+                'scores_needed': scores_needed,
+                'scores_available': scores_available,
+                'scores_min': scores_min,
+                'par': par,
+                'group_score': group_score,
+                'over_under': over_under,
+                'error_msg': error_msg,
+            }
+            return render(request, 'GRPR/forty_choose_score.html', context)
+
+        # --- If all checks pass, proceed as normal ---
+        player_scores = Scorecard.objects.filter(
+            GameID_id=game_id,
+            HoleID_id=hole_id,
+            smID__GroupID=group_id
+        ).select_related('smID__PID', 'HoleID')
+
+        chosen_scores = []
+        for score in player_scores:
+            pid = str(score.smID.PID.id)
+            if pid in selected_players:
+                chosen_scores.append({
+                    'PlayerID': score.smID.PID.id,
+                    'LastName': score.smID.PID.LastName,
+                    'RawScore': score.RawScore,
+                    'NetScore': score.NetScore,
+                    'Par': score.HoleID.Par,
+                })
+
+        context = {
+            'hole_id': hole_id,
+            'game_id': game_id,
+            'group_id': group_id,
+            'next_hole_id': next_hole_id,
+            'forty_game_id': forty_game_id,
+            'chosen_scores': chosen_scores,
+            'scores_used': scores_used,
+            'scores_played': scores_played,
+            'num_scores': num_scores,
+            'scores_needed': scores_needed,
+            'scores_available': scores_available,
+            'scores_min': scores_min,
+        }
+        return render(request, 'GRPR/forty_confirm_score.html', context)
+    else:
+        return redirect('forty_choose_score_view')
+    
+
+@login_required
+def forty_input_scores_view(request):
+    if request.method == "POST":
+        hole_id = request.POST.get('hole_id')
+        game_id = request.POST.get('game_id')
+        group_id = request.POST.get('group_id')
+        next_hole_id = request.POST.get('next_hole_id')
+        forty_game_id = request.POST.get('forty_game_id')
+
+        # Check if Forty scores already exist for this hole/group/game
+        forty_scores_already_entered = False
+        if forty_game_id:
+            if Forty.objects.filter(
+                GameID_id=forty_game_id,
+                GroupID=group_id,
+                HoleNumber_id=hole_id
+            ).exists():
+                forty_scores_already_entered = True
+
+        if forty_scores_already_entered:
+            # Prepare the message
+            msg = "Forty scores have already been entered for this hole and group. No changes were made."
+            # Redirect with message to the appropriate page
+            if next_hole_id and str(next_hole_id).lower() != "none":
+                return redirect(f"{reverse('hole_score_data_view')}?hole_id={next_hole_id}&game_id={game_id}&group_id={group_id}&msg={msg}")
+            else:
+                return redirect(f"{reverse('scorecard_view')}?game_id={game_id}&group_id={group_id}&msg={msg}")
+        # If no scores exist, proceed to input scores
+
+        # Get logged-in user's player ID
+        logged_in_user = get_object_or_404(Players, user_id=request.user.id)
+        logged_in_user_player_id = logged_in_user.id
+
+        # Get all chosen player data (multiple values per field)
+        player_ids = request.POST.getlist('player_id')
+        raw_scores = request.POST.getlist('raw_score')
+        net_scores = request.POST.getlist('net_score')
+        par = request.POST.getlist('par')
+
+        for pid, raw, net, pr in zip(player_ids, raw_scores, net_scores, par):
+            # Insert into Forty
+            Forty.objects.create(
+                CreateDate=now(),
+                AlterDate=now(),
+                CreateID=logged_in_user,
+                AlterID=logged_in_user,
+                CrewID=1,
+                GameID_id=forty_game_id,
+                HoleNumber_id=hole_id,
+                PID_id=pid,
+                GroupID=group_id,
+                RawScore=raw,
+                NetScore=net,
+                Par=pr,
+            )
+            # Insert into Log
+            Log.objects.create(
+                SentDate=now(),
+                Type='Forty Score',
+                MessageID='None',
+                OfferID=logged_in_user_player_id,
+                ReceiveID=pid,
+                Msg=f'Forty score inputted by {logged_in_user_player_id} for player {pid} on hole {hole_id}, raw {raw}, net {net}'
+            )
+
+        # Redirect based on next_hole_id
+        if next_hole_id and str(next_hole_id).lower() != "none":
+            print("Redirecting to hole_score_data_view with next_hole_id:", next_hole_id)
+            return redirect(f"{reverse('hole_score_data_view')}?hole_id={next_hole_id}&game_id={game_id}&group_id={group_id}")
+        else:
+            print("Redirecting to scorecard_view (end of round)")
+            return redirect(f"{reverse('scorecard_view')}?game_id={game_id}&group_id={group_id}")
+    else:
+        return redirect('home')
+
+
+##########################
 #### Scorecard views ####
 ##########################
 
@@ -4759,6 +5345,7 @@ def hole_score_view(request):
     hole_id = request.session.pop('hole_id', None)
     game_id = request.session.pop('game_id', None)
     group_id = request.session.pop('group_id', None)
+    msg = request.GET.get('msg', None)
 
     # Validate that all required parameters are present
     if not hole_id or not game_id or not group_id:
@@ -4813,6 +5400,7 @@ def hole_score_view(request):
         'group_id': group_id,
         'score_range': range(1, 10),  # Add a range of scores (1 through 9)
         'putt_range': range(0, 10),  # Add a range of putts (0 through 9)
+        'msg': msg,
         'first_name': request.user.first_name,
         'last_name': request.user.last_name,
         'has_existing_scores': has_existing_scores,  # Add the flag to the context
@@ -5011,6 +5599,19 @@ def hole_display_view(request):
     # Fetch the hole details
     hole = get_object_or_404(CourseHoles, id=hole_id)
 
+    #Fetch the Forty GameID if it exists
+    forty_game_id = Games.objects.filter(AssocGame=game_id, Type='Forty').first()
+
+    # Check if Forty scores already entered for this hole/group/game
+    forty_scores_already_entered = None
+    if forty_game_id:
+        if Forty.objects.filter(
+            GameID_id=forty_game_id.id,
+            GroupID=group_id,
+            HoleNumber_id=hole_id
+        ).exists():
+            forty_scores_already_entered = 1
+
     # Fetch player scores for the hole
     player_scores = Scorecard.objects.filter(
         GameID_id=game_id,
@@ -5032,9 +5633,12 @@ def hole_display_view(request):
         'hole': hole,
         'player_scores': player_scores,
         'game_id': game_id,
+        'forty_game_id': forty_game_id.id if forty_game_id else None,  # Pass the Forty GameID if it exists
         'group_id': group_id, 
         'next_hole_id': next_hole_id,  # Pass the next hole ID to the template
     }
+    if forty_scores_already_entered:
+        context['forty_scores_already_entered'] = forty_scores_already_entered
 
     return render(request, 'GRPR/hole_display.html', context)
 
@@ -5044,9 +5648,20 @@ def scorecard_view(request):
     # Fetch game_id from GET parameters
     game_id = request.GET.get('game_id', None)
     group_id = request.GET.get('group_id', None)
+    msg = request.GET.get('msg', None)
     print()
     print('scorecard_view - game_id', game_id)
     print('scorecard_view - group_id', group_id)
+
+    # Get the associated Forty game ID
+    forty_game_id = Games.objects.filter(id=game_id).values_list('AssocGame', flat=True).first()
+
+    # Build a set of (pid, hole_id) for scores used in Forty
+    forty_used_scores = set()
+    if forty_game_id:
+        for forty in Forty.objects.filter(GameID_id=forty_game_id):
+            forty_used_scores.add(f"{forty.PID_id}:{forty.HoleNumber_id}")
+
 
     # Fetch players where GameID = game_id and GroupID = group_id
     ### GroupID=group_id
@@ -5089,7 +5704,7 @@ def scorecard_view(request):
         course_name = CourseTees.objects.filter(id=most_common_tee_id['TeeID_id']).values_list('CourseName', flat=True).first()
 
     print()
-    print('course_holes', course_holes)
+    print('course_holes', list(course_holes))
 
     # Fetch the PlayDate from Games
     play_date = Games.objects.filter(id=game_id).values_list('PlayDate', flat=True).first()
@@ -5109,13 +5724,13 @@ def scorecard_view(request):
     if group_id:
         scores = scores.filter(smID__GroupID=group_id)
 
-    print()
-    print('scores', scores)
+    # print()
+    # print('scores', scores)
 
     # Initialize player_scores with empty dictionaries for all players
     player_scores = {player['pid']: {} for player in player_list}
-    print()
-    print('player_scores pre meta', player_scores)
+    # print()
+    # print('player_scores pre meta', player_scores)
     
     # Populate player_scores with actual scores if they exist
     for score in scores:
@@ -5124,16 +5739,16 @@ def scorecard_view(request):
         net_score = score['NetScore']
         raw_score = score['RawScore']
 
-        print()
-        print('score in scores', player_id, hole_number, net_score, raw_score)
+        # print()
+        # print('score in scores', player_id, hole_number, net_score, raw_score)
 
         player_scores[player_id][hole_number] = {
             'net': net_score if net_score is not None else '',
             'raw': raw_score if raw_score is not None else '',
             'skin': False  # Initialize skin flag as False
         }
-    print()    
-    print('player_scores', player_scores)
+    # print()    
+    # print('player_scores', player_scores)
 
     # Ensure all holes, "Out," "In," and "Total" columns are initialized
     for player_id in player_scores:
@@ -5147,8 +5762,8 @@ def scorecard_view(request):
         player_scores[player_id]['In'] = {'net': '', 'raw': '', 'skin': False}
         player_scores[player_id]['Total'] = {'net': '', 'raw': '', 'skin': False}
     
-    print()
-    print('player_scores post init', player_scores)
+    # print()
+    # print('player_scores post init', player_scores)
 
     # Fetch additional fields from ScorecardMeta and add them to player_scores
     scorecard_meta_data = ScorecardMeta.objects.filter(GameID=game_id).values(
@@ -5178,8 +5793,8 @@ def scorecard_view(request):
                 'skin': False
             }
     print()
-    print()
-    print('player_scores post meta', player_scores)
+    # print()
+    # print('player_scores post meta', player_scores)
 
         # Fetch skins data
     skins = Skins.objects.filter(GameID=game_id).select_related('HoleNumber').values(
@@ -5193,14 +5808,14 @@ def scorecard_view(request):
         if player_id in player_scores and hole_number in player_scores[player_id]:
             player_scores[player_id][hole_number]['skin'] = True
 
-    print()
-    print('player_scores post skins', player_scores)
+    # print()
+    # print('player_scores post skins', player_scores)
 
     # Initialize player_scores as an empty dictionary if no scores exist
     if not player_scores:
         player_scores = {}
-    print()
-    print('player_scores post check for p_s existience', player_scores)
+    # print()
+    # print('player_scores post check for p_s existience', player_scores)
     
     # Calculate strokes for each player
     player_strokes = {}
@@ -5234,6 +5849,8 @@ def scorecard_view(request):
     # Initialize player_strokes as an empty dictionary if no strokes exist
     if not player_strokes:
         player_strokes = {}
+    print("")
+    print("forty_used_scores:", forty_used_scores)
     
     context = {
         'game_id': game_id,
@@ -5244,142 +5861,11 @@ def scorecard_view(request):
         'play_date': play_date,
         'player_scores': player_scores,  # Pass player scores to the template
         'player_strokes': player_strokes,  # Pass player strokes to the template
+        'msg': msg,  # Pass the message
         'first_name': request.user.first_name,
         'last_name': request.user.last_name,
     }
+    context['forty_used_scores'] = list(forty_used_scores)
+    
 
     return render(request, 'GRPR/scorecard.html', context)
-
-
-## big version of the scorecard
-# @login_required
-# def scorecard_big_view(request):
-#     # Fetch game_id from GET parameters
-#     game_id = request.GET.get('game_id', None)
-
-#     # Fetch all players where GameID = game_id (no filtering by group_id)
-#     players = ScorecardMeta.objects.filter(GameID=game_id).select_related('PID').values(
-#         first_name=F('PID__FirstName'),
-#         last_name=F('PID__LastName'),
-#         pid=F('PID__id'),
-#         net_hdcp=F('NetHDCP'), 
-#         raw_out=F('RawOUT'),
-#         net_out=F('NetOUT'),
-#         raw_in=F('RawIN'),
-#         net_in=F('NetIN'),
-#         raw_total=F('RawTotal'),
-#         net_total=F('NetTotal'),
-#     )
-
-#     # Convert players queryset to a list of dictionaries
-#     player_list = list(players)
-#     print('player_list', player_list)
-
-#     # Fetch the most common TeeID_id for the specified GameID
-#     most_common_tee_id = (
-#         ScorecardMeta.objects.filter(GameID=game_id)
-#         .values('TeeID_id')
-#         .annotate(count=Count('TeeID_id'))
-#         .order_by('-count')
-#         .first()
-#     )
-
-#     # Fetch CourseHoles data for the most common TeeID_id
-#     course_holes = []
-#     course_name = None
-#     if most_common_tee_id:
-#         course_holes = CourseHoles.objects.filter(CourseTeesID_id=most_common_tee_id['TeeID_id']).order_by('HoleNumber').values(
-#             'id', 'HoleNumber', 'Par', 'Yardage', 'Handicap'
-#         )
-#         # Fetch the CourseName from CourseTees
-#         course_name = CourseTees.objects.filter(id=most_common_tee_id['TeeID_id']).values_list('CourseName', flat=True).first()
-
-#     # Fetch the PlayDate from Games
-#     play_date = Games.objects.filter(id=game_id).values_list('PlayDate', flat=True).first()
-
-#     # Fetch scores for each player and hole
-#     scores = Scorecard.objects.filter(GameID_id=game_id).select_related('HoleID', 'smID').values(
-#         'HoleID__HoleNumber', 'NetScore', 'smID__PID_id'
-#     )
-
-#     # Initialize player_scores with empty dictionaries for all players
-#     player_scores = {player['pid']: {} for player in player_list}
-#     print('player_scores', player_scores)
-#     print('scores', scores)
-    
-#     # Populate player_scores with actual scores if they exist
-#     for score in scores:
-#         player_id = score['smID__PID_id']
-#         hole_number = score['HoleID__HoleNumber']
-#         net_score = score['NetScore']
-
-#         player_scores[player_id][hole_number] = net_score
-    
-#     # Fetch additional fields from ScorecardMeta and add them to player_scores
-#     scorecard_meta_data = ScorecardMeta.objects.filter(GameID=game_id).values(
-#         'PID_id', 'RawOUT', 'NetOUT', 'RawIN', 'NetIN', 'RawTotal', 'NetTotal'
-#     )
-#     for meta in scorecard_meta_data:
-#         pid = meta['PID_id']
-#         if pid in player_scores:
-#             player_scores[pid]['RawOUT'] = meta['RawOUT']
-#             player_scores[pid]['NetOUT'] = meta['NetOUT']
-#             player_scores[pid]['RawIN'] = meta['RawIN']
-#             player_scores[pid]['NetIN'] = meta['NetIN']
-#             player_scores[pid][50505050] = meta['RawTotal']
-#             player_scores[pid]['NetTotal'] = meta['NetTotal']
-#     print()
-#     print()
-#     print('player_scores post meta', player_scores)
-#     print()
-
-#     # Initialize player_scores as an empty dictionary if no scores exist
-#     if not player_scores:
-#         player_scores = {}
-    
-#     # Calculate strokes for each player
-#     player_strokes = {}
-#     for player in player_list:
-#         player_id = player['pid']
-
-#         # Get NetHDCP for the player
-#         net_hdcp = ScorecardMeta.objects.filter(GameID=game_id, PID_id=player_id).values_list('NetHDCP', flat=True).first()
-
-#         if net_hdcp is not None:
-#             # Calculate base_strokes and addl_strokes
-#             base_strokes, addl_strokes = divmod(net_hdcp, 18)
-
-#             # Get holes where the player gets an additional stroke
-#             stroke_holes = CourseHoles.objects.filter(
-#                 CourseTeesID_id=most_common_tee_id['TeeID_id'],
-#                 Handicap__lte=addl_strokes
-#             ).values_list('HoleNumber', flat=True)
-
-#             # Assign strokes for each hole
-#             strokes = {}
-#             for hole in course_holes:
-#                 hole_number = hole['HoleNumber']
-#                 if hole_number in stroke_holes:
-#                     strokes[hole_number] = base_strokes + 1
-#                 else:
-#                     strokes[hole_number] = base_strokes
-
-#             player_strokes[player_id] = strokes
-
-#     # Initialize player_strokes as an empty dictionary if no strokes exist
-#     if not player_strokes:
-#         player_strokes = {}
-    
-#     context = {
-#         'game_id': game_id,
-#         'player_list': player_list,
-#         'course_holes': list(course_holes),
-#         'course_name': course_name,
-#         'play_date': play_date,
-#         'player_scores': player_scores,  # Pass player scores (NetScore) to the template
-#         'player_strokes': player_strokes,  # Pass player strokes to the template
-#         'first_name': request.user.first_name,
-#         'last_name': request.user.last_name,
-#     }
-
-#     return render(request, 'GRPR/scorecard_big.html', context)

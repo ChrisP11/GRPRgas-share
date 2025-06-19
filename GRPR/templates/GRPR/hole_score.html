@@ -3,6 +3,12 @@
 {% block title %}Hole Score{% endblock %}
 
 {% block content %}
+{% if msg %}
+    <div class="alert alert-warning" role="alert">
+        {{ msg }}
+    </div>
+{% endif %}
+
 <div class="container my-4">
     <h1>Hole {{ HoleNumber }}</h1>
     <h3>Par {{ Par }} - {{ Yardage }} yds - HDCP {{ Handicap }}</h3>

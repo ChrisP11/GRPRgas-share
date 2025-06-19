@@ -11,6 +11,7 @@
                 <th>ID</th>
                 <th>Create Date</th>
                 <th>Play Date</th>
+                <th>Type</th>
                 <th>Status</th>
                 <th>Inv</th>
                 <th>Plrs</th>
@@ -25,6 +26,7 @@
                 <td>{{ game.id }}</td>
                 <td>{{ game.CreateDate }}</td>
                 <td>{{ game.PlayDate }}</td>
+                <td>{{ game.Type }}</td>
                 <td>{{ game.Status }}</td>
                 <td>{{ game.invites_count|default:0 }}</td>
                 <td>{{ game.players_count|default:0 }}</td>
@@ -40,6 +42,7 @@
             </tr>
             {% endfor %}
         </tbody>
+        
     </table>
     <a href="{% url 'skins_admin_view' %}" class="btn btn-secondary rounded-pill w-100">Back to Skins Admin</a>
 </div>

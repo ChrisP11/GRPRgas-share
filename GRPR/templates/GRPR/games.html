@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+
+{% block title %}Games Home Page{% endblock %}
+
+{% block content %}
+
+{% if game_status != None %}
+<div class="text-center">
+  {% if skins_game_id != None and forty_game_id != None %}
+    <h3>Games currently in process: </h3>
+    <h3>Skins - {{ gDate }} - {{ skins_players_num }} Players</h3>
+    <h3>Forty - {{ gDate }} - {{ skins_players_num }} Players</h3>
+  {% elif skins_game_id != None %}
+    <h3>Game currently in process: </h3>
+    <h3>Skins - {{ gDate }} - {{ skins_players_num }} Players</h3>
+  {% elif forty_game_id != None %}
+    <h3>Game currently in process: </h3>
+    <h3>Forty - {{ gDate }} - {{ forty_players_num }} Players</h3>
+  {% endif %}
+</div>
+{% endif %}
+
+
+<div class="col-lg-6 col-xxl-4 my-5 mx-auto">
+  <div class="d-grid gap-2">
+    {% if game_status != None %}
+    <a href="{% url 'skins_leaderboard_view' %}?game_id={{ skins_game_id }}" class="btn btn-primary" role="button">Leaderboard</a>
+    {% else %}
+    <a href="{% url 'skins_choose_players_view' %}" class="btn btn-primary" role="button">Start New Game</a>
+    {% endif %}
+    <a href="{% url 'skins_closed_games_view' %}" class="btn btn-secondary-custom" role="button">Previous Games</a>
+    <!-- <a href="{% url 'forty_view' %}" class="btn btn-primary" role="button">Forty</a>
+    <a href="{% url 'skins_view' %}" class="btn btn-primary" role="button">Skins</a> -->
+  </div>
+</div>
+{% endblock %}

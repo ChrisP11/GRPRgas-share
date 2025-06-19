@@ -185,6 +185,12 @@ class Games(models.Model):
     PlayDate = models.DateField()
     CourseTeesID = models.ForeignKey('CourseTees', on_delete=models.CASCADE, default=1)  # Links to CourseTees table
     Status = models.CharField(max_length=32, default='Pending')
+    Type = models.CharField(max_length=32)  # Type of game, e.g., Skins, Forty
+    Format = models.CharField(max_length=32, null=True, blank=True) # Full Handicap or Low Man
+    NumScores = models.IntegerField(null=True, blank=True)
+    Min1 = models.IntegerField(null=True, blank=True)
+    Min18 = models.IntegerField(null=True, blank=True)
+    AssocGame = models.IntegerField(null=True, blank=True) # id for associated game, if any
 
     class Meta:
         db_table = "Games"
@@ -236,3 +242,21 @@ class Skins(models.Model):
     class Meta:
         db_table = "Skins"
         unique_together = ('GameID', 'PlayerID', 'HoleNumber')  # Prevent duplicate entries
+
+
+class Forty(models.Model):
+    CreateDate = models.DateTimeField(auto_now_add=True)
+    AlterDate = models.DateTimeField(auto_now_add=True)
+    CreateID = models.ForeignKey('Players', on_delete=models.CASCADE, related_name='created_records')
+    AlterID = models.ForeignKey('Players', on_delete=models.CASCADE, related_name='altered_records', null=True, blank=True)
+    CrewID = models.IntegerField()
+    GameID = models.ForeignKey('Games', on_delete=models.CASCADE)  # Links to the Games table
+    HoleNumber = models.ForeignKey('CourseHoles', on_delete=models.CASCADE)
+    PID  = models.ForeignKey('Players', on_delete=models.CASCADE, related_name='player_scoring')
+    GroupID = models.CharField(max_length=16, null=True, blank=True)
+    RawScore = models.IntegerField()
+    NetScore = models.IntegerField()
+    Par = models.IntegerField()
+
+    class Meta:
+        db_table = "Forty"

@@ -4,7 +4,38 @@
 
 {% block content %}
 <div class="container my-4">
-    <h2>Leaderboard - {{ play_date }} {% if payout %} - ${{ payout }}/skin {% endif %}</h2>
+    {% if forty_game_id is not None %}
+    <h2>Forty Leaderboard - {{ play_date }} </h2>
+    <table class="table table-bordered mb-4">
+        <thead>
+            <tr>
+                <th>Group</th>
+                <th>+/- Par</th>
+                <th>Used</th>
+                <th>Req</th>
+                <th>Avail</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in forty_leaderboard %}
+            <tr>
+                <td>{{ row.group_id }}</td>
+                <td>
+                    {% if row.over_under > 0 %}+{% endif %}{{ row.over_under }}
+                </td>
+                <td>{{ row.scores_used }}</td>
+                <td>{{ row.scores_needed }}</td>
+                <td>{{ row.scores_available }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+</div>
+<br>
+
+<div class="container my-4">
+    <h2>Skins Leaderboard - {{ play_date }} {% if payout %} - ${{ payout }}/skin {% endif %}</h2>
     <table class="table table-striped">
         <thead>
             <tr>

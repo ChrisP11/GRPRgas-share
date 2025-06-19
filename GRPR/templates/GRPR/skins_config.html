@@ -1,17 +1,21 @@
 {% extends 'base.html' %}
 {% load custom_filters %}
 
-{% block title %}Configure Skins Game{% endblock %}
+{% block title %}Configure Game{% endblock %}
 
 {% block content %}
 <div class="container my-4">
-    <h2>Configure Skins Game</h2>
-    <form method="post" action="{% url 'skins_config_confirm_view' %}">
+    <h2>Configure Game</h2>
+    {% if msg %}
+        <div class="alert alert-warning">{{ msg }}</div>
+    {% endif %}
+    <form id="configForm" method="post" action="{% url 'skins_config_confirm_view' %}">
         {% csrf_token %}
         <input type="hidden" name="game_id" value="{{ game_id }}">
         <input type="hidden" name="playing_date" value="{{ playing_date }}">
         <input type="hidden" name="tee_times_json" value="{{ tee_times|to_json|escape }}">
         <input type="hidden" name="number_of_players" value="{{ number_of_players }}">
+        <input type="hidden" name="game_format" id="game_format" value="">
         <div class="mb-3">
             <label for="tee_option" class="form-label">Choose Tees</label>
             <select class="form-select" id="tee_option" name="tee_id">
@@ -24,10 +28,18 @@
         </div>
         <div class="mb-3">
             <label for="format_option" class="form-label">Choose Format</label>
-            <select class="form-select" id="format_option" name="format_option" disabled>
-                <option value="">Coming Soon</option>
+            <select class="form-select" id="format_option" name="format_option" required>
+                <option value="" disabled selected>-- Select Format --</option>
+                <option value="low_man">Low Man</option>
+                <option value="full_handicap">Full Handicap</option>
             </select>
         </div>
+        <p>
+            <strong>Low man</strong> - Lowest handicap gets 0 strokes, everyone else gets strokes = to their hdcp minus low man hdcp. IE, if low man has a 5 HDCP, you have a 15 HDCP, you get a stroke on each of the hardest 10 holes. This format gives high handicappers an advantage on the hardest holes.
+        </p>
+        <p>
+            <strong>Full handicap</strong> - Everyone gets strokes equivalent to their HDCP. A 15 HDCP, means you will get a stroke on the 15 hardest holes. This format gives high handicappers an advantage on the easiest holes.
+        </p>
         <button type="submit" class="btn btn-primary rounded-pill w-100 mb-2">Next</button>
     </form>
     <form method="post" action="{% url 'skins_undo_game_creation' %}">
@@ -39,4 +51,19 @@
         <button type="submit" class="btn btn-secondary-custom rounded-pill w-100">Back</button>
     </form>
 </div>
+<script>
+document.getElementById('configForm').addEventListener('submit', function(e) {
+    var format = document.getElementById('format_option').value;
+    var gameFormatInput = document.getElementById('game_format');
+    if (format === "") {
+        e.preventDefault();
+        return false;
+    }
+    if (format === "low_man") {
+        gameFormatInput.value = "Low Man";
+    } else if (format === "full_handicap") {
+        gameFormatInput.value = "Full Handicap";
+    }
+});
+</script>
 {% endblock %}

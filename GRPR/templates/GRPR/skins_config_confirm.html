@@ -4,10 +4,12 @@
 
 {% block content %}
 <div class="container my-4">
-    <h4>Confirm - Change individual tees?</h4>
+    <h4>Confirm Tees & Handicaps - can change individual tees</h4>
+    <h4>G {{ game_format }}</h4>
     <form method="post" action="{% url 'skins_initiate_scorecard_meta_view' %}">
         {% csrf_token %}
         <input type="hidden" name="game_id" value="{{ game_id }}">
+        <input type="hidden" name="game_format" value="{{ game_format }}">
         <table class="table table-bordered">
             <thead>
                 <tr>
@@ -41,7 +43,7 @@
                 {% endfor %}
             </tbody>
         </table>
-        <button type="submit" class="btn btn-primary rounded-pill w-100 mb-2">Start Game</button>
+        <button type="submit" class="btn btn-primary rounded-pill w-100 mb-2">Confirm</button>
         <a href="{% url 'skins_config_view' %}" class="btn btn-secondary rounded-pill w-100">Back</a>
     </form>
 </div>

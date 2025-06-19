@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+
+{% block title %}Choose Scores for Forty {% endblock %}
+
+{% block content %}
+{% if error_msg %}
+    <div class="alert alert-danger" role="alert">
+        {{ error_msg }}
+    </div>
+{% endif %}
+
+<div class="container my-4">
+    <h1>Choose Scores - Hole {{ hole.HoleNumber }}</h1>
+    <br>
+    
+    <!-- Stats Table -->
+    <!-- <table class="table table-sm table-bordered w-auto mb-4">
+        <thead>
+            <tr>
+                <th></th>
+                <th>Used</th>
+                <th>Needed</th>
+                <th>Remaining</th>
+                <th>+/- Par</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Scores</strong></td>
+                <td>{{ scores_used }}</td>
+                <td>{{ scores_needed }}</td>
+                <td>{{ scores_available }}</td>
+                <td>{% if over_under > 0 %}+{% endif %}{{ over_under }}</td>
+            </tr>
+        </tbody>
+    </table> -->
+    <!-- End Stats Table -->
+     <!-- <p>scores_min {{ scores_min }}</p>
+     <p>scores_needed {{ scores_needed }}</p> -->
+
+     <h3>Forty Score: <strong>{% if over_under > 0 %}+{% endif %}{{ over_under }}</strong></h3>
+    <p>Used <strong>{{ scores_used }}</strong> &nbsp; &nbsp; &nbsp; Needed <strong>{{ scores_needed }}</strong> &nbsp; &nbsp; &nbsp; Remaining <strong>{{ scores_available }}</strong></p>
+
+    <form method="post" action="{% url 'forty_confirm_score_view' %}">
+        {% csrf_token %}
+        <input type="hidden" name="hole_id" value="{{ hole.id }}">
+        <input type="hidden" name="game_id" value="{{ game_id }}">
+        <input type="hidden" name="group_id" value="{{ group_id }}">
+        <input type="hidden" name="next_hole_id" value="{{ next_hole_id }}">
+        <input type="hidden" name="forty_game_id" value="{{ forty_game_id }}">
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>Player</th>
+                    <th>Net</th>
+                    <th>Use Score</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for player in player_scores %}
+                <tr>
+                    <td>{{ player.smID__PID__FirstName|slice:":1" }} {{ player.smID__PID__LastName }}</td>
+                    <td>{{ player.NetScore }}</td>
+                    <td>
+                        <input type="checkbox" name="selected_players" value="{{ player.smID__PID__id }}">
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="d-flex justify-content-between mt-4">
+            <button type="submit" class="btn btn-primary">Confirm</button>
+            <a href="{% url 'hole_score_data_view' %}?hole_id={{ hole.id }}&game_id={{ game_id }}&group_id={{ group_id }}" class="btn btn-secondary-custom">
+                Re-Enter Score
+            </a>
+        </div>
+    </form>
+</div>
+{% endblock %}

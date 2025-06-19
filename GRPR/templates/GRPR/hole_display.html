@@ -29,7 +29,11 @@
     </table>
 
     <div class="d-flex justify-content-between mt-4">
-        {% if next_hole_id %}
+        {% if forty_game_id and not forty_scores_already_entered %}
+            <a href="{% url 'forty_choose_score_view' %}?hole_id={{ hole.id }}&game_id={{ game_id }}&group_id={{ group_id }}&next_hole_id={{ next_hole_id }}" class="btn btn-warning">
+                Choose for Forty
+            </a>
+        {% elif next_hole_id %}
             <a href="{% url 'hole_score_data_view' %}?hole_id={{ next_hole_id }}&game_id={{ game_id }}&group_id={{ group_id }}" class="btn btn-primary">
                 Next Hole
             </a>

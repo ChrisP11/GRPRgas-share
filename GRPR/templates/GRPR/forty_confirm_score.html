@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+
+{% block title %}Confirm Forty Scores{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <h1>Confirm your Forty Scores</h1>
+
+    {% if not chosen_scores %}
+        <p>You have not chosen any scores for this hole. Are you sure?</p>
+    {% else %}
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>Player</th>
+                    <th>Net</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for player in chosen_scores %}
+                <tr>
+                    <td>{{ player.LastName }}</td>
+                    <td>{{ player.NetScore }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+
+    <div class="d-flex justify-content-between mt-4">
+        <form method="post" action="{% url 'forty_input_scores_view' %}">
+            {% csrf_token %}
+            <input type="hidden" name="hole_id" value="{{ hole_id }}">
+            <input type="hidden" name="game_id" value="{{ game_id }}">
+            <input type="hidden" name="group_id" value="{{ group_id }}">
+            <input type="hidden" name="next_hole_id" value="{{ next_hole_id }}">
+            <input type="hidden" name="forty_game_id" value="{{ forty_game_id }}">
+            {% for player in chosen_scores %}
+                <input type="hidden" name="player_id" value="{{ player.PlayerID }}">
+                <input type="hidden" name="raw_score" value="{{ player.RawScore }}">
+                <input type="hidden" name="net_score" value="{{ player.NetScore }}">
+                <input type="hidden" name="par" value="{{ player.Par }}">
+            {% endfor %}
+            <button type="submit" class="btn btn-primary">Final Confirm</button>
+        </form>
+        <a href="{% url 'forty_choose_score_view' %}?hole_id={{ hole_id }}&game_id={{ game_id }}&group_id={{ group_id }}&next_hole_id={{ next_hole_id }}" class="btn btn-secondary-custom">
+            Go Back
+        </a>
+    </div>
+</div>
+{% endblock %}

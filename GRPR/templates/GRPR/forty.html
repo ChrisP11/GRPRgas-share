@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+
+{% block title %}Forty Game{% endblock %}
+
+{% block content %}
+
+
+{% if game_status != None %}
+<h3>There is a game currently in process.</h3>
+<h3>Click the 'Go to Current Game button below to access the game.</h3>
+{% endif %}
+<h1>Forty</h1>
+<div class="col-lg-6 col-xxl-4 my-5 mx-auto">
+  <div class="d-grid gap-2">
+    {% if game_status == 'Live' %}
+    <a href="{% url 'skins_leaderboard_view' %}?game_id={{ game_id }}" class="btn btn-primary" role="button">Current Leaderboard</a>
+    {% elif game_status == 'Tees' %}
+    <a href="{% url 'skins_choose_tees_view' %}?game_id={{ game_id }}" class="btn btn-primary" role="button">Choose Tees for the Game</a>
+    {% elif game_status == 'Invite' %}
+    <a href="{% url 'skins_invite_status_view' %}?game_id={{ game_id }}" class="btn btn-primary" role="button">Check Invite Status</a>
+    {% else %}
+    <a href="{% url 'forty_config_view' %}" class="btn btn-primary" role="button">Start a New Forty Game</a>
+    {% endif %}
+    <a href="#" class="btn btn-secondary-custom" role="button">Previous Games</a>
+  </div>
+</div>
+{% endblock %}

@@ -73,6 +73,11 @@ urlpatterns = [
     path('error_message/<str:error_msg>/', views.error_message_view, name='error_message_view'),
     path('sms/reply/', sms_reply, name='sms_reply'),
 
+
+    ### Games
+    path('games/', views.games_view, name='games_view'),
+    path('games_choice/', views.games_choice_view, name='games_choice_view'),
+
     ### Skins Game
     path('skins/', views.skins_view, name='skins_view'),
     path('skins/choose/', views.skins_choose_players_view, name='skins_choose_players_view'),
@@ -88,16 +93,28 @@ urlpatterns = [
     path('skins/delete_menu/', views.skins_delete_game_menu_view, name='skins_delete_game_menu_view'),
     path('skins/delete_game/', views.skins_delete_game_view, name='skins_delete_game_view'),
 
+    # deprecated section?
     path('skins/new/', views.skins_new_game_view, name='skins_new_game_view'),
     path('skins_invite_view/', views.skins_invite_view, name='skins_invite_view'),
     path('skins/invite/', views.skins_invite_status_view, name='skins_invite_status_view'),
     path('skins/accept_decline/', views.skins_accept_decline_view, name='skins_accept_decline_view'),
     path('skins/tees/', views.skins_choose_tees_view, name='skins_choose_tees_view'),
+    # deprecated section end
+
     path('skins/initiate_scorecard/', views.skins_initiate_scorecard_meta_view, name='skins_initiate_scorecard_meta_view'),
     path('skins/leaderboard/', views.skins_leaderboard_view, name='skins_leaderboard_view'),
     path('skins_close/', views.skins_close_view, name='skins_close_view'),
     path('skins_closed_games/', views.skins_closed_games_view, name='skins_closed_games_view'),
     path('skins_reopen_game/', views.skins_reopen_game_view, name='skins_reopen_game_view'),
+
+    ### Forty Game
+    path('forty/', views.forty_view, name='forty_view'),
+    path('forty_config/', views.forty_config_view, name='forty_config_view'),
+    path('forty_config_confirm/', views.forty_config_confirm_view, name='forty_config_confirm_view'),
+    path('forty_game_creation/', views.forty_game_creation_view, name='forty_game_creation_view'),
+    path('forty_choose_score/', views.forty_choose_score_view, name='forty_choose_score_view'),
+    path('forty_confirm_score/', views.forty_confirm_score_view, name='forty_confirm_score_view'),
+    path('forty_input_scores/', views.forty_input_scores_view, name='forty_input_scores_view'),
 
     ### scorecard work
     path('scorecard/', views.scorecard_view, name='scorecard_view'),

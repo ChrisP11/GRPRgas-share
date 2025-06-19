@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+
+{% block title %}Confirm Forty Config{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <h1>Please confirm the configuration for Forty</h1>
+
+    <h4>Groups Playing</h4>
+    {% for group in group_list %}
+        <p><strong>{{ group.group_id }}am</strong> - {{ group.last_names|join:", " }}</p>
+    {% empty %}
+        <p>No groups found.</p>
+    {% endfor %}
+
+    <p><strong>Number of Scores Required:</strong> {{ num_scores }}</p>
+    <p><strong>Handicap Format:</strong> {{ game_format }}</p>
+    <p><strong>Min Scores on 1st Hole:</strong> {{ min_1st }}</p>
+    <p><strong>Min Scores on 18th Hole:</strong> {{ min_18th }}</p>
+
+    <form method="post" action="{% url 'forty_game_creation_view' %}">
+        {% csrf_token %}
+        <input type="hidden" name="game_id" value="{{ game_id }}">
+        <input type="hidden" name="num_scores" value="{{ num_scores }}">
+        <input type="hidden" name="game_format" value="{{ game_format }}">
+        <input type="hidden" name="min_1st" value="{{ min_1st }}">
+        <input type="hidden" name="min_18th" value="{{ min_18th }}">
+        <div class="d-flex justify-content-between">
+            <button type="submit" class="btn btn-primary">Start Game</button>
+            <a href="{% url 'forty_config_view' %}" class="btn btn-secondary-custom ms-3">Change Config</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
