@@ -4754,11 +4754,6 @@ def skins_close_view(request):
 
         # Calculate payout if wager is provided
         if wager is not None:
-            # num_players = ScorecardMeta.objects.filter(GameID_id=game_id).count()
-            # num_skins = Skins.objects.filter(GameID_id=game_id).count()
-            # pot = wager * num_players
-            # skin_payout = round(pot / num_skins, 2) if num_skins > 0 else 0
-
             if skins_count > 0:
                 payout_value = round(skin_payout * skins_count - wager, 2)
             else:
@@ -4777,7 +4772,10 @@ def skins_close_view(request):
 
     # Update the Games table to set the status to 'Closed' only if wager is provided
     if wager is not None:
+        # Close the Skins game
         Games.objects.filter(id=game_id).update(Status='Closed')
+        # Also close the associated Forty game
+        Games.objects.filter(AssocGame=game_id, Type='Forty').update(Status='Closed')
 
     # Pass data to the template
     context = {
