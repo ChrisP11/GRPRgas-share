@@ -1,6 +1,8 @@
 # This script creates a Demo Environment in Heroku 
 # complete with Players and a schedule.
 
+# GIT REPO DEFINED below:  search '# Deploy code to Heroku'
+
 # filepath: /Users/cprouty/Dropbox/Dev/Python/Apps/GRPR/demo_enviro_build.sh
 #!/bin/bash
 
@@ -20,7 +22,7 @@ fi
 # Set non-sensitive environment variables
 heroku config:set ENVIRO=Demo --app $APP_NAME
 heroku config:set DEBUG=True --app $APP_NAME
-heroku config:set EMAIL_HOST_USER=gasgolf25@gmail.com --app $APP_NAME
+heroku config:set EMAIL_HOST_USER=gasgolf2025@gmail.com --app $APP_NAME
 heroku config:set TWILIO_ENABLED=False --app $APP_NAME
 
 # creates the postgres db
@@ -36,7 +38,7 @@ fi
 git remote add $GIT_REMOTE https://git.heroku.com/$APP_NAME.git
 
 # Deploy code to Heroku
-git push $GIT_REMOTE skins-game-v2:main #main
+git push $GIT_REMOTE coogan-corner:main #main
 
 # Reminder to manually set sensitive environment variables
 echo "Please set the following sensitive environment variables manually:"
