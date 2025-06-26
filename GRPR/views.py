@@ -485,7 +485,7 @@ def schedule_view(request):
         player_id = request.GET.get("player_id", logged_in_player.id if logged_in_player else None)
         if player_id:
             selected_player = Players.objects.filter(id=player_id).exclude(Member=0).first()
-            schedule_query = TeeTimesInd.objects.filter(PID=player_id, gDate__gte=current_datetime).select_related('CourseID').order_by('gDate')
+            schedule_query = TeeTimesInd.objects.filter(PID=player_id, gDate__gte='2025-01-01').select_related('CourseID').order_by('gDate')
             for teetime in schedule_query:
                 # Collect the names of other players in the group
                 group_players = TeeTimesInd.objects.filter(
@@ -3525,114 +3525,107 @@ def skins_admin_view(request):
     return render(request, 'GRPR/skins_admin.html', context)
 
 # just for a game close button for skins
+# ❶  Close button: mark Closed *and* lock so it can’t be deleted later
 @login_required
 def skins_game_close_view(request):
-    game_id = request.GET.get('game_id')
-
+    game_id = request.GET.get("game_id")
     if not game_id:
         return HttpResponseBadRequest("Game ID is missing.")
 
-    # Update the Games table to set the status to 'Complete'
-    Games.objects.filter(id=game_id).update(Status='Closed')
-
-    # Fetch the logged-in user's details for the context
-    user = request.user
-    game = Games.objects.filter(id=game_id).first()
-    gDate = game.PlayDate if game else None
-    game_creator = game.CreateID if game else None
-    game_status = game.Status if game else None
-
-    context = {
-        'first_name': user.first_name,
-        'last_name': user.last_name,
-        'game_creator': game_creator,
-        'gDate': gDate,
-        'game_status': game_status,
-        'game_id': game_id,
-    }
-
-    # Render the skins_admin.html page
-    return render(request, 'GRPR/skins_admin.html', context)
-
-
-@login_required
-def skins_delete_game_menu_view(request):
-    # Only allow user 'cprouty'
-    if request.user.username != 'cprouty':
-        return redirect('skins_admin_view')
-
-    # If you want to use subqueries for more accurate counts (especially if there are NULLs):
-    games = Games.objects.order_by('id').annotate(
-        invites_count=Subquery(
-            GameInvites.objects.filter(GameID_id=OuterRef('id')).values('GameID_id').annotate(c=Count('id')).values('c')[:1]
-        ),
-        players_count=Subquery(
-            ScorecardMeta.objects.filter(GameID_id=OuterRef('id')).values('GameID_id').annotate(c=Count('id')).values('c')[:1]
-        ),
-        holes_count=Subquery(
-            Scorecard.objects.filter(GameID_id=OuterRef('id')).values('GameID_id').annotate(c=Count('id')).values('c')[:1]
-        ),
-        skins_count=Subquery(
-            Skins.objects.filter(GameID_id=OuterRef('id')).values('GameID_id').annotate(c=Count('id')).values('c')[:1]
-        ),
+    Games.objects.filter(id=game_id).update(
+        Status="Closed", IsLocked=True, LockedAt=timezone.now()
     )
 
+    game = Games.objects.filter(id=game_id).first()
     context = {
-        'games': games,
+        "first_name": request.user.first_name,
+        "last_name": request.user.last_name,
+        "game_creator": game.CreateID if game else None,
+        "gDate": game.PlayDate if game else None,
+        "game_status": game.Status if game else None,
+        "game_id": game_id,
     }
-    return render(request, 'GRPR/skins_delete_game_menu.html', context)
+    return render(request, "GRPR/skins_admin.html", context)
 
+# ---------------------------------------------------------------------
+# ❷  Menu view (unchanged except we send IsLocked to template)
+@login_required
+def skins_delete_game_menu_view(request):
+    if request.user.username != "cprouty":
+        return redirect("skins_admin_view")
 
+    games = (
+        Games.objects.order_by("id")
+        .annotate(
+            invites_count=Subquery(
+                GameInvites.objects.filter(GameID_id=OuterRef("id"))
+                .values("GameID_id")
+                .annotate(c=Count("id"))
+                .values("c")[:1]
+            ),
+            players_count=Subquery(
+                ScorecardMeta.objects.filter(GameID_id=OuterRef("id"))
+                .values("GameID_id")
+                .annotate(c=Count("id"))
+                .values("c")[:1]
+            ),
+            holes_count=Subquery(
+                Scorecard.objects.filter(GameID_id=OuterRef("id"))
+                .values("GameID_id")
+                .annotate(c=Count("id"))
+                .values("c")[:1]
+            ),
+            skins_count=Subquery(
+                Skins.objects.filter(GameID_id=OuterRef("id"))
+                .values("GameID_id")
+                .annotate(c=Count("id"))
+                .values("c")[:1]
+            ),
+        )
+    )
+    return render(request, "GRPR/skins_delete_game_menu.html", {"games": games})
+
+# ---------------------------------------------------------------------
+# ❸  Delete view with lock-guard
 @login_required
 def skins_delete_game_view(request):
-    if request.method == "POST" and request.user.username == "cprouty":
-        game_id = request.POST.get("game_id")
-        game = Games.objects.filter(id=game_id).first()
-        if not game:
-            messages.error(request, f"Game id {game_id} not found.")
-            return redirect('skins_admin_view')
+    if request.method != "POST" or request.user.username != "cprouty":
+        return redirect("skins_admin_view")
 
-        if game.Type == "Skins":
-            with transaction.atomic():
-                scorecard_count = Scorecard.objects.filter(GameID_id=game_id).count()
-                Scorecard.objects.filter(GameID_id=game_id).delete()
+    game_id = request.POST.get("game_id")
+    game = get_object_or_404(Games, id=game_id)
 
-                scorecardMeta_count = ScorecardMeta.objects.filter(GameID=game_id).count()
-                ScorecardMeta.objects.filter(GameID=game_id).delete()
+    # ---------- LOCK CHECK ----------
+    if game.IsLocked and not request.user.is_superuser:
+        messages.error(request, "That game is locked and can’t be deleted.")
+        return redirect("skins_delete_game_menu")
+    # --------------------------------
 
-                invites_count = GameInvites.objects.filter(GameID_id=game_id).count()
-                GameInvites.objects.filter(GameID_id=game_id).delete()
-
-                skins_count = Skins.objects.filter(GameID_id=game_id).count()
-                Skins.objects.filter(GameID_id=game_id).delete()
-
-                Games.objects.filter(id=game_id).delete()
-
-            msg = (
-                f"Skins Game id {game_id} deleted. "
-                f"Scorecard rows deleted: {scorecard_count}, "
-                f"ScM rows deleted: {scorecardMeta_count}, "
-                f"Invites deleted: {invites_count}, "
-                f"Skins deleted: {skins_count}."
-            )
-        elif game.Type == "Forty":
-            with transaction.atomic():
-                forty_count = Forty.objects.filter(GameID=game_id).count()
-                Forty.objects.filter(GameID=game_id).delete()
-                Games.objects.filter(id=game_id).delete()
-            msg = (
-                f"Forty Game id {game_id} deleted. "
-                f"Forty rows deleted: {forty_count}."
-            )
-        else:
-            msg = f"Game id {game_id} is not a Skins or Forty game. No action taken."
-
-        messages.success(request, msg)
-        return redirect('skins_admin_view')
+    if game.Type == "Skins":
+        with transaction.atomic():
+            scorecard_count = Scorecard.objects.filter(GameID=game).delete()[0]
+            scoremeta_count = ScorecardMeta.objects.filter(GameID=game).delete()[0]
+            invites_count   = GameInvites.objects.filter(GameID=game).delete()[0]
+            skins_count     = Skins.objects.filter(GameID=game).delete()[0]
+            game.delete()
+        msg = (
+            f"Skins game {game_id} deleted. "
+            f"Scorecard: {scorecard_count}, "
+            f"ScMeta: {scoremeta_count}, "
+            f"Invites: {invites_count}, "
+            f"Skins: {skins_count}."
+        )
+    elif game.Type == "Forty":
+        with transaction.atomic():
+            forty_count = Forty.objects.filter(GameID=game).delete()[0]
+            game.delete()
+        msg = f"Forty game {game_id} deleted. Rows: {forty_count}."
     else:
-        return redirect('skins_admin_view')
-    
+        msg = f"Game {game_id} is not Skins or Forty. No action taken."
 
+    messages.success(request, msg)
+    return redirect("skins_delete_game_menu")
+    
 
 @login_required
 def skins_view(request):

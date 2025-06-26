@@ -185,6 +185,8 @@ class Games(models.Model):
     PlayDate = models.DateField()
     CourseTeesID = models.ForeignKey('CourseTees', on_delete=models.CASCADE, default=1)  # Links to CourseTees table
     Status = models.CharField(max_length=32, default='Pending')
+    IsLocked = models.BooleanField(default=False)        # ← NEW
+    LockedAt = models.DateTimeField(null=True, blank=True)
     Type = models.CharField(max_length=32)  # Type of game, e.g., Skins, Forty
     Format = models.CharField(max_length=32, null=True, blank=True) # Full Handicap or Low Man
     NumScores = models.IntegerField(null=True, blank=True)
@@ -194,6 +196,15 @@ class Games(models.Model):
 
     class Meta:
         db_table = "Games"
+
+    @property
+    def is_skins_complete(self):
+        # scorecardmeta rows per game × holes should exceed threshold
+        return Scorecard.objects.filter(GameID=self).count() >= 100
+
+    @property
+    def is_forty_complete(self):
+        return Forty.objects.filter(GameID=self).count() >= 15
 
 
 class GameInvites(models.Model):
