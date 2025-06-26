@@ -9,11 +9,8 @@ from .models import Scorecard, Forty        # local imports
 @receiver(post_save, sender=Scorecard)
 @receiver(post_save, sender=Forty)
 def maybe_lock_game(sender, instance, **kwargs):
-    """Auto-lock a game when enough scores exist."""
     game = instance.GameID
-    if not game.IsLocked and (
-        game.is_skins_complete or game.is_forty_complete
-    ):
+    if not game.IsLocked and game.is_complete:
         game.IsLocked = True
         game.LockedAt = timezone.now()
         game.save(update_fields=["IsLocked", "LockedAt"])

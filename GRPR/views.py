@@ -3598,7 +3598,7 @@ def skins_delete_game_view(request):
     # ---------- LOCK CHECK ----------
     if game.IsLocked and not request.user.is_superuser:
         messages.error(request, "That game is locked and can’t be deleted.")
-        return redirect("skins_delete_game_menu")
+        return redirect("skins_delete_game_menu_view")
     # --------------------------------
 
     if game.Type == "Skins":
@@ -3624,7 +3624,7 @@ def skins_delete_game_view(request):
         msg = f"Game {game_id} is not Skins or Forty. No action taken."
 
     messages.success(request, msg)
-    return redirect("skins_delete_game_menu")
+    return redirect("skins_delete_game_menu_view")
     
 
 @login_required

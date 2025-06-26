@@ -205,6 +205,15 @@ class Games(models.Model):
     @property
     def is_forty_complete(self):
         return Forty.objects.filter(GameID=self).count() >= 15
+    
+    @property
+    def is_complete(self):
+        """Return True only when the game’s own type meets its threshold."""
+        if self.Type == "Skins":
+            return self.is_skins_complete
+        elif self.Type == "Forty":
+            return self.is_forty_complete
+        return False   # fallback for any future type
 
 
 class GameInvites(models.Model):
