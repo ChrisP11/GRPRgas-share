@@ -27,6 +27,8 @@ from twilio.rest import Client # Import the Twilio client
 from twilio.twiml.messaging_response import MessagingResponse
 from decimal import Decimal
 import math
+from collections import Counter
+from itertools import chain
 
 # Function to round numbers to the nearest integer
 def custom_round(value):
@@ -3376,6 +3378,195 @@ def player_update_view(request):
     return redirect('profile_view')
 
 
+def _get_round_leaders():
+    """
+    Returns
+      {
+        "gross":        {"name": "...", "score": 72},
+        "gross_member": {"name": "...", "score": 74},
+        "net":          {"name": "...", "score": 66},
+        "skins":        {"name": "...", "count": 7},
+        "attendance":   {"name": "...", "count": 18},
+      }
+    """
+    # ---------- best gross (all players) ----------
+    gross_row = (
+        ScorecardMeta.objects
+        .exclude(RawTotal=0)
+        .order_by("RawTotal")
+        .select_related("PID")
+        .values("PID__FirstName", "PID__LastName", "RawTotal")
+        .first()
+    )
+    gross = None
+    if gross_row:
+        gross = {
+            "name":  f"{gross_row['PID__FirstName']} {gross_row['PID__LastName']}",
+            "score": gross_row["RawTotal"],
+        }
+
+    # ---------- best gross (members only) ----------
+    gross_mem_row = (
+        ScorecardMeta.objects
+        .exclude(RawTotal=0)
+        .filter(PID__Member=1)
+        .order_by("RawTotal")
+        .select_related("PID")
+        .values("PID__FirstName", "PID__LastName", "RawTotal")
+        .first()
+    )
+    gross_member = None
+    if gross_mem_row:
+        gross_member = {
+            "name":  f"{gross_mem_row['PID__FirstName']} {gross_mem_row['PID__LastName']}",
+            "score": gross_mem_row["RawTotal"],
+        }
+
+    # ---------- best net ----------
+    net_row = (
+        ScorecardMeta.objects
+        .exclude(NetTotal=0)
+        .order_by("NetTotal")
+        .select_related("PID")
+        .values("PID__FirstName", "PID__LastName", "NetTotal")
+        .first()
+    )
+    net = None
+    if net_row:
+        net = {
+            "name":  f"{net_row['PID__FirstName']} {net_row['PID__LastName']}",
+            "score": net_row["NetTotal"],
+        }
+
+    # ---------- most skins ----------
+    skins_row = (
+        Skins.objects
+        .values("PlayerID__FirstName", "PlayerID__LastName")
+        .annotate(total=Count("id"))
+        .order_by("-total")
+        .first()
+    )
+    skins = None
+    if skins_row:
+        skins = {
+            "name":  f"{skins_row['PlayerID__FirstName']} {skins_row['PlayerID__LastName']}",
+            "count": skins_row["total"],
+        }
+
+    # ---------- attendance (2025 tee-times) ----------
+    year_start = date(2025, 1, 1)
+    year_end   = timezone.now().date()          # ← up-to-today in 2025
+
+    att_row = (
+        TeeTimesInd.objects
+        .filter(gDate__range=(year_start, year_end))
+        .values("PID__FirstName", "PID__LastName")
+        .annotate(total=Count("id"))
+        .order_by("-total")
+        .first()
+    )
+    attendance = None
+    if att_row:
+        attendance = {
+            "name":  f"{att_row['PID__FirstName']} {att_row['PID__LastName']}",
+            "count": att_row["total"],
+        }
+
+    # MOST SKINS IN A SINGLE ROUND
+    skins_one_row = (
+        Skins.objects
+        .values("GameID", "PlayerID__FirstName", "PlayerID__LastName")
+        .annotate(total=Count("id"))
+        .order_by("-total")
+        .first()
+    )
+    skins_one = None
+    if skins_one_row:
+        skins_one = {
+            "name":  f"{skins_one_row['PlayerID__FirstName']} {skins_one_row['PlayerID__LastName']}",
+            "count": skins_one_row["total"],
+        }
+
+    # FORTY - SEASON TOTAL (2025-today)
+    yr_start = date(2025, 1, 1)
+    today    = timezone.now().date()
+
+    forty_season_row = (
+        Forty.objects
+        .filter(GameID__PlayDate__range=(yr_start, today))
+        .values("PID__FirstName", "PID__LastName")
+        .annotate(total=Count("id"))
+        .order_by("-total")
+        .first()
+    )
+    forty_season = None
+    if forty_season_row:
+        forty_season = {
+            "name":  f"{forty_season_row['PID__FirstName']} {forty_season_row['PID__LastName']}",
+            "count": forty_season_row["total"],
+        }
+
+    # FORTY - ONE ROUND BEST
+    forty_one_row = (
+        Forty.objects
+        .filter(GameID__PlayDate__range=(yr_start, today))
+        .values("GameID", "PID__FirstName", "PID__LastName")
+        .annotate(total=Count("id"))
+        .order_by("-total")
+        .first()
+    )
+    forty_one = None
+    if forty_one_row:
+        forty_one = {
+            "name":  f"{forty_one_row['PID__FirstName']} {forty_one_row['PID__LastName']}",
+            "count": forty_one_row["total"],
+        }
+
+    # ====================  BEST TRADER 2025  ============================
+    season_swaps = (
+        SubSwap.objects
+        .filter(nStatus="Closed",
+                SubStatus="Accepted",
+                RequestDate__year=2025)           # ← current season
+        .values_list("SwapID", flat=True)
+    )
+
+    # offer-side PIDs
+    offer_ids = list(
+        SubSwap.objects
+        .filter(SwapID__in=season_swaps, SubType="Offer")
+        .values_list("PID_id", flat=True)
+    )
+    # counter-side PIDs (the accepted rows themselves)
+    counter_ids = list(
+        SubSwap.objects
+        .filter(SwapID__in=season_swaps,
+                nStatus="Closed",
+                SubStatus="Accepted")
+        .values_list("PID_id", flat=True)
+    )
+
+    freq = Counter(chain(offer_ids, counter_ids))
+    trader = None
+    if freq:
+        pid_top, trades = freq.most_common(1)[0]
+        plr = Players.objects.get(pk=pid_top)
+        trader = {"name": f"{plr.FirstName} {plr.LastName}",
+                  "count": trades}
+
+    return {
+        "gross": gross,
+        "gross_member": gross_member,
+        "net": net,
+        "skins": skins,
+        "attendance": attendance,
+        "skins_one"    : skins_one,
+        "forty_season" : forty_season, 
+        "forty_one"    : forty_one,
+        "trader"       : trader,
+    }
+
+
 @login_required
 def rounds_leaderboard_view(request):
     # Top 10 Rounds - Gross
@@ -3419,10 +3610,13 @@ def rounds_leaderboard_view(request):
         .values(LastName=F('PID__LastName'), total_skins=F('total_skins'))
     )
 
+    leaders = _get_round_leaders()
+
     return render(request, 'GRPR/rounds_leaderboard.html', {
         'top10_gross': top10_gross,
         'top10_net': top10_net,
         'most_skins': most_skins,
+        'leaders': leaders,
         'first_name': request.user.first_name,
         'last_name': request.user.last_name,
     })
@@ -3593,12 +3787,19 @@ def skins_delete_game_view(request):
         return redirect("skins_admin_view")
 
     game_id = request.POST.get("game_id")
+    if not game_id:
+        messages.error(request, "No game_id supplied.")
+        return redirect("skins_admin_view") 
+
     game = get_object_or_404(Games, id=game_id)
+    if not game:
+        messages.error(request, f"Game {game_id} not found.")
+        return redirect("skins_admin_view")
 
     # ---------- LOCK CHECK ----------
-    if game.IsLocked and not request.user.is_superuser:
+    if game.IsLocked:
         messages.error(request, "That game is locked and can’t be deleted.")
-        return redirect("skins_delete_game_menu_view")
+        return redirect("skins_admin_view")
     # --------------------------------
 
     if game.Type == "Skins":
@@ -3624,7 +3825,7 @@ def skins_delete_game_view(request):
         msg = f"Game {game_id} is not Skins or Forty. No action taken."
 
     messages.success(request, msg)
-    return redirect("skins_delete_game_menu_view")
+    return redirect("skins_admin_view")
     
 
 @login_required
