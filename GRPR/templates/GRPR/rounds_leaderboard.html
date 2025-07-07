@@ -75,7 +75,7 @@
     <a href="?stat=attendance" class="text-decoration-none">
       <div class="card shadow-sm h-100 bg-secondary text-white {% if chosen == 'attendance' %}border-3 border-light{% endif %}">
         <div class="card-body p-2 text-center">
-          <h6 class="mb-1 small">Best Attendance</h6>
+          <h6 class="mb-1 small">Mr. ROI (Most Rounds)</h6>
           <h4 class="fw-bold mb-1">{{ leaders.attendance.count }}</h4>
           <p class="mb-0">{{ leaders.attendance.name }}</p>
         </div>
@@ -114,7 +114,7 @@
     <a href="?stat=trader" class="text-decoration-none">
       <div class="card shadow-sm h-100 bg-success text-white {% if chosen == 'trader' %}border-3 border-light{% endif %}">
         <div class="card-body p-2 text-center">
-          <h6 class="mb-1 small">Rothschild (Most Swaps)</h6>
+          <h6 class="mb-1 small">Billy Ray (Most Swaps)</h6>
           <h4 class="fw-bold mb-1">{{ leaders.trader.count }}</h4>
           <p class="mb-0">{{ leaders.trader.name }}</p>
         </div>
@@ -153,8 +153,19 @@
 <!-- ======================= Top-10 Table ====================== -->
 <table class="table table-sm table-bordered w-auto mx-auto">
   <thead class="table-light text-center">
-    <tr><th colspan="3">{{ label }} – Top 10&nbsp;(2025)</th></tr>
-    <tr><th></th><th>Golfer</th><th>#</th></tr>
+    <tr>
+      <th colspan="{% if topten and topten.0.date %}4{% else %}3{% endif %}">
+        {{ label }} – Top&nbsp;10&nbsp;(2025)
+      </th>
+    </tr>
+    <tr>
+      <th>#</th>
+      <th>Golfer / Pair</th>
+      <th>Value</th>
+      {% if topten and topten.0.date %}
+        <th>Date</th>
+      {% endif %}
+    </tr>
   </thead>
   <tbody>
     {% for row in topten %}
@@ -162,9 +173,12 @@
         <td>{{ forloop.counter }}</td>
         <td>{{ row.name }}</td>
         <td>{{ row.value }}</td>
+        {% if row.date %}
+          <td>{{ row.date|date:"Y-m-d" }}</td>
+        {% endif %}
       </tr>
     {% empty %}
-      <tr><td colspan="3" class="text-center">No data yet.</td></tr>
+      <tr><td colspan="4" class="text-center">No data yet.</td></tr>
     {% endfor %}
   </tbody>
 </table>

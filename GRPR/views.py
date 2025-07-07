@@ -3417,27 +3417,119 @@ def _top10_gross():
         for r in qs
     ]
 
-
-def _top10_net():
-    qs = (
-        ScorecardMeta.objects
-        .filter(PlayDate__gte=YEAR_START)
-        .values("PID_id", "PID__FirstName", "PID__LastName")
-        .annotate(value=Min("NetTotal"))
-        .order_by("value")[:10]
-    )
-    return [{"name": f"{r['PID__FirstName']} {r['PID__LastName']}", "value": r["value"]} for r in qs]
-
-
+# ----------  gross_member  (best score + date) -----------------
 def _top10_gross_member():
-    qs = (
+    rows = (
         ScorecardMeta.objects
         .filter(PlayDate__gte=YEAR_START, PID__Member=1)
-        .values("PID_id", "PID__FirstName", "PID__LastName")
-        .annotate(value=Min("RawTotal"))
-        .order_by("value")[:10]
+        .values("PID_id", "PID__FirstName", "PID__LastName", "PlayDate", "RawTotal")
+        .order_by("RawTotal")
     )
-    return [{"name": f"{r['PID__FirstName']} {r['PID__LastName']}", "value": r["value"]} for r in qs]
+
+    best = {}
+    for r in rows:
+        pid = r["PID_id"]
+        if pid not in best:                          # first row is the lowest
+            best[pid] = {
+                "name": f"{r['PID__FirstName']} {r['PID__LastName']}",
+                "value": r["RawTotal"],
+                "date":  r["PlayDate"],
+            }
+    return sorted(best.values(), key=lambda x: x["value"])[:10]
+
+
+# ----------  net  (best net score + date) ----------------------
+def _top10_net():
+    rows = (
+        ScorecardMeta.objects
+        .filter(PlayDate__gte=YEAR_START)
+        .values("PID_id", "PID__FirstName", "PID__LastName", "PlayDate", "NetTotal")
+        .order_by("NetTotal")
+    )
+
+    best = {}
+    for r in rows:
+        pid = r["PID_id"]
+        if pid not in best:
+            best[pid] = {
+                "name": f"{r['PID__FirstName']} {r['PID__LastName']}",
+                "value": r["NetTotal"],
+                "date":  r["PlayDate"],
+            }
+    return sorted(best.values(), key=lambda x: x["value"])[:10]
+
+
+# ----------  skins_one  (max skins in one round + date) --------
+def _top10_skins_one():
+    from collections import defaultdict
+
+    per_round = (
+        Skins.objects
+        .filter(SkinDate__gte=YEAR_START)
+        .values("PlayerID_id", "PlayerID__FirstName", "PlayerID__LastName",
+                "GameID__PlayDate")
+        .annotate(cnt=Count("id"))
+    )
+
+    best = defaultdict(lambda: {"value": 0})
+    for r in per_round:
+        pid, c = r["PlayerID_id"], r["cnt"]
+        if c > best[pid]["value"]:
+            best[pid] = {
+                "name": f"{r['PlayerID__FirstName']} {r['PlayerID__LastName']}",
+                "value": c,
+                "date":  r["GameID__PlayDate"],
+            }
+
+    top = sorted(best.values(), key=lambda x: -x["value"])[:10]
+    return top
+
+
+# ----------  forty_one  (max forty rows in one round + date) ---
+def _top10_forty_one():
+    import itertools
+    from collections import defaultdict
+
+    per_round = (
+        Forty.objects
+        .filter(GameID__PlayDate__gte=YEAR_START)
+        .values("PID_id", "PID__FirstName", "PID__LastName", "GameID__PlayDate")
+        .annotate(cnt=Count("id"))
+    )
+
+    best = defaultdict(lambda: {"value": 0})
+    for r in per_round:
+        pid, c = r["PID_id"], r["cnt"]
+        if c > best[pid]["value"]:
+            best[pid] = {
+                "name": f"{r['PID__FirstName']} {r['PID__LastName']}",
+                "value": c,
+                "date":  r["GameID__PlayDate"],
+            }
+
+    return sorted(best.values(), key=lambda x: -x["value"])[:10]
+
+
+# def _top10_net():
+#     qs = (
+#         ScorecardMeta.objects
+#         .filter(PlayDate__gte=YEAR_START)
+#         .values("PID_id", "PID__FirstName", "PID__LastName")
+#         .annotate(value=Min("NetTotal"))
+#         .order_by("value")[:10]
+#     )
+#     return [{"name": f"{r['PID__FirstName']} {r['PID__LastName']}", "value": r["value"]} for r in qs]
+
+
+# def _top10_gross_member():
+#     qs = (
+#         ScorecardMeta.objects
+#         .filter(PlayDate__gte=YEAR_START, PID__Member=1)
+#         .values("PID_id", "PID__FirstName", "PID__LastName")
+#         .annotate(value=Min("RawTotal"))
+#         .order_by("value")[:10]
+#     )
+#     return [{"name": f"{r['PID__FirstName']} {r['PID__LastName']}", "value": r["value"]} for r in qs]
 
 
 def _top10_skins():
@@ -3462,29 +3554,29 @@ def _top10_attendance():
     return [{"name": f"{r['PID__FirstName']} {r['PID__LastName']}", "value": r["value"]} for r in qs]
 
 
-def _top10_skins_one():
-    # subquery: max skins won in ONE round for this player
-    per_round = (
-        Skins.objects
-        .filter(SkinDate__gte=YEAR_START,
-                PlayerID_id=OuterRef("pk"))
-        .values("PlayerID_id", "GameID_id")
-        .annotate(row_cnt=Count("id"))
-        .order_by("-row_cnt")
-        .values("row_cnt")[:1]          # top value
-    )
+# def _top10_skins_one():
+#     # subquery: max skins won in ONE round for this player
+#     per_round = (
+#         Skins.objects
+#         .filter(SkinDate__gte=YEAR_START,
+#                 PlayerID_id=OuterRef("pk"))
+#         .values("PlayerID_id", "GameID_id")
+#         .annotate(row_cnt=Count("id"))
+#         .order_by("-row_cnt")
+#         .values("row_cnt")[:1]          # top value
+#     )
 
-    qs = (
-        Players.objects
-        .filter(id__in=Skins.objects.values("PlayerID_id").distinct())
-        .annotate(value=Subquery(per_round))
-        .order_by("-value")[:10]
-    )
+#     qs = (
+#         Players.objects
+#         .filter(id__in=Skins.objects.values("PlayerID_id").distinct())
+#         .annotate(value=Subquery(per_round))
+#         .order_by("-value")[:10]
+#     )
 
-    return [
-        {"name": f"{p.FirstName} {p.LastName}", "value": p.value}
-        for p in qs
-    ]
+#     return [
+#         {"name": f"{p.FirstName} {p.LastName}", "value": p.value}
+#         for p in qs
+#     ]
 
 def _top10_forty_season():
     """Most Forty rows per player for the whole 2025 season."""
@@ -3502,26 +3594,26 @@ def _top10_forty_season():
     ]
 
 
-def _top10_forty_one():
-    per_round = (
-        Forty.objects
-        .filter(GameID__PlayDate__gte=YEAR_START,
-                PID_id=OuterRef("pk"))
-        .values("PID_id", "GameID_id")
-        .annotate(row_cnt=Count("id"))
-        .order_by("-row_cnt")
-        .values("row_cnt")[:1]          # max rows for that player
-    )
+# def _top10_forty_one():
+#     per_round = (
+#         Forty.objects
+#         .filter(GameID__PlayDate__gte=YEAR_START,
+#                 PID_id=OuterRef("pk"))
+#         .values("PID_id", "GameID_id")
+#         .annotate(row_cnt=Count("id"))
+#         .order_by("-row_cnt")
+#         .values("row_cnt")[:1]          # max rows for that player
+#     )
 
-    qs = (
-        Players.objects
-        .filter(id__in=Forty.objects.values("PID_id").distinct(),
-                Member__isnull=False)   # just to avoid empty queryset
-        .annotate(value=Subquery(per_round))
-        .order_by("-value")[:10]
-    )
+    # qs = (
+    #     Players.objects
+    #     .filter(id__in=Forty.objects.values("PID_id").distinct(),
+    #             Member__isnull=False)   # just to avoid empty queryset
+    #     .annotate(value=Subquery(per_round))
+    #     .order_by("-value")[:10]
+    # )
 
-    return [{"name": f"{p.FirstName} {p.LastName}", "value": p.value} for p in qs]
+    # return [{"name": f"{p.FirstName} {p.LastName}", "value": p.value} for p in qs]
 
 
 def _top10_trader():
@@ -3665,6 +3757,7 @@ def _get_round_leaders():
             "name":  f"{gross_row['PID__FirstName']} {gross_row['PID__LastName']}",
             "score": gross_row["RawTotal"],
         }
+
 
     # ---------- best gross (members only) ----------
     gross_mem_row = (
