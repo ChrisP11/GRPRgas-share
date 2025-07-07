@@ -3954,15 +3954,17 @@ def _get_round_leaders():
 # ------------------------------------------------------------------ #
 @login_required
 def rounds_leaderboard_view(request):
-    chosen = request.GET.get("stat", "gross")
+    chosen = request.GET.get("stat", "gross_member") 
+
+    # if someone manually types ?stat=foo, guard against bad keys
     if chosen not in STAT_LABELS:
-        chosen = "gross"
+        chosen = "gross_member"
 
     # build top-10 dict on-demand to avoid unnecessary queries
     topten = {k: (func() if k == chosen else None) for k, func in TOP10_FUNC.items()}
 
     context = {
-        "leaders" : _get_round_leaders(),       # you already have this helper
+        "leaders" : _get_round_leaders(), 
         "chosen"  : chosen,
         "label"   : STAT_LABELS[chosen],
         "topten"  : topten[chosen] or [],      # list of dicts
