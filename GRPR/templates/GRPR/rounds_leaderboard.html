@@ -1,235 +1,158 @@
-{% extends 'base.html' %}
-
+{% extends "base.html" %}
 {% block title %}Rounds Leaderboard{% endblock %}
 
 {% block content %}
-<!-- Leader cards ---------------------------------------------------->
-{% if leaders %}
-<div class="row g-3
-    row-cols-2
-    row-cols-sm-3 
-    row-cols-lg-5 mb-4">
-    <!-- Best Gross (Member) ----------------------------------------->
-    {% if leaders.gross_member %}
-    <div class="col">
-    <div class="card shadow-sm h-100 bg-success text-white">
+<!-- ======================= Leader Cards ====================== -->
+<div class="row g-3 row-cols-2 row-cols-sm-3 row-cols-lg-5 mb-4">
+
+  <!-- Best Gross -->
+  <div class="col">
+    <a href="?stat=gross" class="text-decoration-none">
+      <div class="card shadow-sm h-100 bg-primary text-white {% if chosen == 'gross' %}border-3 border-light{% endif %}">
         <div class="card-body p-2 text-center">
-            <h6 class="card-title mb-1 small">The Gas Man (Best Gross)</h6>
-            <h4 class="fw-bold mb-1">{{ leaders.gross_member.score }}</h4>
-            <p class="mb-0">{{ leaders.gross_member.name }}</p>
+          <h6 class="mb-1 small">Best Gross</h6>
+          <h4 class="fw-bold mb-1">{{ leaders.gross.score }}</h4>
+          <p class="mb-0">{{ leaders.gross.name }}</p>
         </div>
-    </div>
-    </div>
-    {% endif %}
+      </div>
+    </a>
+  </div>
 
-  <!-- Best Gross --------------------------------------------------->
-  <!-- {% if leaders.gross %}
+  <!-- Best Net -->
   <div class="col">
-    <div class="card shadow-sm h-100 text-white bg-success">
-        <div class="card-body p-2 text-center"> 
-            <h6 class="card-title mb-1 small">Best Gross</h6>
-            <h4 class="fw-bold mb-1">{{ leaders.gross.score }}</h4>
-            <p class="mb-0">{{ leaders.gross.name }}</p>
+    <a href="?stat=net" class="text-decoration-none">
+      <div class="card shadow-sm h-100 bg-success text-white {% if chosen == 'net' %}border-3 border-light{% endif %}">
+        <div class="card-body p-2 text-center">
+          <h6 class="mb-1 small">Best Net</h6>
+          <h4 class="fw-bold mb-1">{{ leaders.net.score }}</h4>
+          <p class="mb-0">{{ leaders.net.name }}</p>
         </div>
-    </div>
-  </div>
-  {% endif %} -->
-
-  <!-- Best Net ------------------------------------------------------>
-  {% if leaders.net %}
-  <div class="col">
-    <div class="card shadow-sm h-100 text-white bg-secondary">
-        <div class="card-body p-2 text-center">
-            <h6 class="card-title mb-1 small">Luckiest Day (Best Net)</h6>
-            <h4 class="fw-bold mb-1">{{ leaders.net.score }}</h4>
-            <p class="mb-0">{{ leaders.net.name }}</p>
       </div>
-    </div>
+    </a>
   </div>
-  {% endif %}
 
-  <!-- Most Skins ---------------------------------------------------->
-  {% if leaders.skins %}
+  <!-- Most Skins -->
   <div class="col">
-    <div class="card shadow-sm h-100 text-white bg-dark">
+    <a href="?stat=skins" class="text-decoration-none">
+      <div class="card shadow-sm h-100 bg-warning text-dark {% if chosen == 'skins' %}border-3 border-light{% endif %}">
         <div class="card-body p-2 text-center">
-            <h6 class="card-title mb-1 small">Sandiest Bagger (Most Skins, Szn)</h6>
-            <h4 class="fw-bold mb-1">{{ leaders.skins.count }}</h4>
-            <p class="mb-0">{{ leaders.skins.name }}</p>
+          <h6 class="mb-1 small">Most Skins</h6>
+          <h4 class="fw-bold mb-1">{{ leaders.skins.count }}</h4>
+          <p class="mb-0">{{ leaders.skins.name }}</p>
+        </div>
       </div>
-    </div>
+    </a>
   </div>
-  {% endif %}
 
-<!-- Most Skins – One Round -------------------------------------->
-{% if leaders.skins_one %}
-<div class="col">
-  <div class="card shadow-sm h-100 text-dark bg-light">
-    <div class="card-body p-2 text-center">
-      <h6 class="card-title mb-1 small">Bagger Vance (Most Skins, Rnd)</h6>
-      <h4 class="fw-bold mb-1">{{ leaders.skins_one.count }}</h4>
-      <p class="mb-0">{{ leaders.skins_one.name }}</p>
-    </div>
+  <!-- Best Gross (Member) -->
+  <div class="col">
+    <a href="?stat=gross_member" class="text-decoration-none">
+      <div class="card shadow-sm h-100 bg-info text-dark {% if chosen == 'gross_member' %}border-3 border-light{% endif %}">
+        <div class="card-body p-2 text-center">
+          <h6 class="mb-1 small">Best Gross&nbsp;(M)</h6>
+          <h4 class="fw-bold mb-1">{{ leaders.gross_member.score }}</h4>
+          <p class="mb-0">{{ leaders.gross_member.name }}</p>
+        </div>
+      </div>
+    </a>
   </div>
-</div>
-{% endif %}
 
-<!-- Forty Holes – Season ---------------------------------------->
-{% if leaders.forty_season %}
-<div class="col">
-  <div class="card shadow-sm h-100 text-white bg-success">
-    <div class="card-body p-2 text-center">
-      <h6 class="card-title mb-1 small">Forty MVP (Most Scores, Szn)</h6>
-      <h4 class="fw-bold mb-1">{{ leaders.forty_season.count }}</h4>
-      <p class="mb-0">{{ leaders.forty_season.name }}</p>
-    </div>
+  <!-- Best Attendance -->
+  <div class="col">
+    <a href="?stat=attendance" class="text-decoration-none">
+      <div class="card shadow-sm h-100 bg-secondary text-white {% if chosen == 'attendance' %}border-3 border-light{% endif %}">
+        <div class="card-body p-2 text-center">
+          <h6 class="mb-1 small">Best Attendance</h6>
+          <h4 class="fw-bold mb-1">{{ leaders.attendance.count }}</h4>
+          <p class="mb-0">{{ leaders.attendance.name }}</p>
+        </div>
+      </div>
+    </a>
   </div>
-</div>
-{% endif %}
 
-<!-- Forty Holes – One Round ------------------------------------->
-{% if leaders.forty_one %}
-<div class="col">
-  <div class="card shadow-sm h-100 text-white bg-secondary">
-    <div class="card-body p-2 text-center">
-      <h6 class="card-title mb-1 small">Forty King (Most Scores, Rnd)</h6>
-      <h4 class="fw-bold mb-1">{{ leaders.forty_one.count }}</h4>
-      <p class="mb-0">{{ leaders.forty_one.name }}</p>
-    </div>
+  <!-- Skins 1 Round -->
+  <div class="col">
+    <a href="?stat=skins_one" class="text-decoration-none">
+      <div class="card shadow-sm h-100 bg-danger text-white {% if chosen == 'skins_one' %}border-3 border-light{% endif %}">
+        <div class="card-body p-2 text-center">
+          <h6 class="mb-1 small">Skins 1 Round</h6>
+          <h4 class="fw-bold mb-1">{{ leaders.skins_one.count }}</h4>
+          <p class="mb-0">{{ leaders.skins_one.name }}</p>
+        </div>
+      </div>
+    </a>
   </div>
-</div>
-{% endif %}
 
-<!-- Best Attendance --------------------------------------------->
-{% if leaders.attendance %}
-<div class="col">
-<div class="card shadow-sm h-100 text-white bg-dark">
-    <div class="card-body p-2 text-center">
-        <h6 class="card-title mb-1 small">Best Attendance</h6>
-        <h4 class="fw-bold mb-1">{{ leaders.attendance.count }}</h4>
-        <p class="mb-0">{{ leaders.attendance.name }}</p>
-    </div>
-</div>
-</div>
-{% endif %}
-
-<!-- Best Friends --------------------------------------------------->
-{% if leaders.best_friends %}
-<div class="col">
-  <div class="card shadow-sm h-100 text-dark bg-light">
-    <div class="card-body p-2 text-center">
-      <h6 class="card-title mb-1 small">Best Friends (Most Freq Partners)</h6>
-      <h4 class="fw-bold mb-1">{{ leaders.best_friends.count }}</h4>
-      <p class="mb-0">{{ leaders.best_friends.names }}</p>
-    </div>
+  <!-- Forty Holes (Season) -->
+  <div class="col">
+    <a href="?stat=forty_season" class="text-decoration-none">
+      <div class="card shadow-sm h-100 bg-dark text-white {% if chosen == 'forty_season' %}border-3 border-light{% endif %}">
+        <div class="card-body p-2 text-center">
+          <h6 class="mb-1 small">Forty Holes</h6>
+          <h4 class="fw-bold mb-1">{{ leaders.forty_season.count }}</h4>
+          <p class="mb-0">{{ leaders.forty_season.name }}</p>
+        </div>
+      </div>
+    </a>
   </div>
-</div>
-{% endif %}
 
-<!-- Best Trader --------------------------------------------------->
-{% if leaders.trader %}
-<div class="col">
-  <div class="card shadow-sm h-100 text-white bg-success">
-    <div class="card-body p-2 text-center">
-      <h6 class="card-title mb-1 small">Best Trader (Most Swaps)</h6>
-      <h4 class="fw-bold mb-1">{{ leaders.trader.count }}</h4> 
-      <p class="mb-0">{{ leaders.trader.name }}</p>
-    </div>
+  <!-- Forty 1 Round -->
+  <div class="col">
+    <a href="?stat=forty_one" class="text-decoration-none">
+      <div class="card shadow-sm h-100 bg-primary text-white {% if chosen == 'forty_one' %}border-3 border-light{% endif %}">
+        <div class="card-body p-2 text-center">
+          <h6 class="mb-1 small">Forty 1 Round</h6>
+          <h4 class="fw-bold mb-1">{{ leaders.forty_one.count }}</h4>
+          <p class="mb-0">{{ leaders.forty_one.name }}</p>
+        </div>
+      </div>
+    </a>
   </div>
-</div>
-{% endif %}
 
-<!-- Quickest Draw ----------------------------------------------->
-{% if leaders.quick_draw %}
-<div class="col">
-  <div class="card shadow-sm h-100 text-white bg-secondary">
-    <div class="card-body p-2 text-center">
-      <h6 class="card-title mb-1 small">Quickest Draw (Most Subs taken)</h6>
-      <h4 class="fw-bold mb-1">{{ leaders.quick_draw.count }}</h4>
-      <p class="mb-0">{{ leaders.quick_draw.name }}</p>
-    </div>
+  <!-- Best Trader -->
+  <div class="col">
+    <a href="?stat=trader" class="text-decoration-none">
+      <div class="card shadow-sm h-100 bg-success text-white {% if chosen == 'trader' %}border-3 border-light{% endif %}">
+        <div class="card-body p-2 text-center">
+          <h6 class="mb-1 small">Best Trader</h6>
+          <h4 class="fw-bold mb-1">{{ leaders.trader.count }}</h4>
+          <p class="mb-0">{{ leaders.trader.name }}</p>
+        </div>
+      </div>
+    </a>
   </div>
-</div>
-{% endif %}
+
+  <!-- Quickest Draw -->
+  <div class="col">
+    <a href="?stat=quick_draw" class="text-decoration-none">
+      <div class="card shadow-sm h-100 bg-info text-dark {% if chosen == 'quick_draw' %}border-3 border-light{% endif %}">
+        <div class="card-body p-2 text-center">
+          <h6 class="mb-1 small">Quickest Draw</h6>
+          <h4 class="fw-bold mb-1">{{ leaders.quick_draw.count }}</h4>
+          <p class="mb-0">{{ leaders.quick_draw.name }}</p>
+        </div>
+      </div>
+    </a>
+  </div>
 
 </div>
-{% endif %}
 
-<div class="container my-4">
-    <h2>Top 10 Rounds - Gross</h2>
-    <table class="table table-striped">
-        <thead>
-            <tr>
-                <th>Player</th>
-                <th>Date</th>
-                <th>Tee</th>
-                <th>Index</th>
-                <th>HDCP</th>
-                <th>Adj Net</th>
-                <th>Gross</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in top10_gross %}
-            <tr>
-                <td>{{ row.LastName }}</td>
-                <td>{{ row.PlayDate }}</td>
-                <td>{{ row.TeeName }}</td>
-                <td>{{ row.Index }}</td>
-                <td>{{ row.HDCP }}</td>
-                <td>{{ row.AdjNet }}</td>
-                <td>{{ row.Gross }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    <br>
-
-    <h2>Top 10 Rounds - Net</h2>
-    <table class="table table-striped">
-        <thead>
-            <tr>
-                <th>Player</th>
-                <th>Date</th>
-                <th>Tee</th>
-                <th>Index</th>
-                <th>HDCP</th>
-                <th>Gross</th>
-                <th>Adj Net</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in top10_net %}
-            <tr>
-                <td>{{ row.LastName }}</td>
-                <td>{{ row.PlayDate }}</td>
-                <td>{{ row.TeeName }}</td>
-                <td>{{ row.Index }}</td>
-                <td>{{ row.HDCP }}</td>
-                <td>{{ row.Gross }}</td>
-                <td>{{ row.AdjNet }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    <br>
-
-    <h2 class="mt-5">Skins Leaderboard</h2>
-    <table class="table table-striped">
-        <thead>
-            <tr>
-                <th>Player</th>
-                <th>Total Skins</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in most_skins %}
-            <tr>
-                <td>{{ row.LastName }}</td>
-                <td>{{ row.total_skins }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+<!-- ======================= Top-10 Table ====================== -->
+<table class="table table-sm table-bordered w-auto mx-auto">
+  <thead class="table-light text-center">
+    <tr><th colspan="3">{{ label }} – Top 10&nbsp;(2025)</th></tr>
+    <tr><th>#</th><th>Golfer / Pair</th><th>Value</th></tr>
+  </thead>
+  <tbody>
+    {% for row in topten %}
+      <tr>
+        <td>{{ forloop.counter }}</td>
+        <td>{{ row.name }}</td>
+        <td>{{ row.value }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="3" class="text-center">No data yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
 {% endblock %}
