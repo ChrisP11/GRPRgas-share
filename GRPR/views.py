@@ -3,6 +3,7 @@ import json
 from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpResponse, JsonResponse, HttpResponseBadRequest
 from django.utils import timezone
+from django.utils.timezone import now
 from GRPR.models import Crews, Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity, SMSResponse, Xdates, Games, GameInvites, CourseTees, ScorecardMeta, Scorecard, CourseHoles, Skins, AutomatedMessages, Forty 
 from datetime import datetime, date
 from django.conf import settings  # Import settings
@@ -391,7 +392,7 @@ def teesheet_view(request):
     current_datetime = datetime.now()
 
     # Query distinct dates from TeeTimesInd that are more recent than today's date
-    distinct_dates = TeeTimesInd.objects.filter(gDate__gt=current_datetime).values('gDate').distinct().order_by('gDate')
+    distinct_dates = TeeTimesInd.objects.filter(gDate__gt='2025-01-01').values('gDate').distinct().order_by('gDate')
 
     # Format the dates to be in YYYY-MM-DD format
     distinct_dates = [{'gDate': date['gDate'].strftime('%Y-%m-%d')} for date in distinct_dates]
@@ -5052,7 +5053,7 @@ def skins_close_view(request):
 @login_required
 def skins_closed_games_view(request):
     # Query for completed games
-    completed_games = Games.objects.filter(Status='Closed', Type='Skins').select_related('CourseTeesID').values(
+    completed_games = Games.objects.filter(Status='Closed', Type='Skins').select_related('CourseTeesID').order_by('-PlayDate').values(
         'id',  # GameID
         'PlayDate',
         'CourseTeesID__CourseName'  # Course name
@@ -5094,8 +5095,6 @@ def skins_closed_games_view(request):
 
     return render(request, 'GRPR/skins_closed_games.html', context)
 
-
-from django.utils.timezone import now
 
 @login_required
 def skins_reopen_game_view(request):
