@@ -3553,17 +3553,43 @@ def _get_round_leaders():
         plr = Players.objects.get(pk=pid_top)
         trader = {"name": f"{plr.FirstName} {plr.LastName}",
                   "count": trades}
+        
+    #  QUICK-DRAW  – most Subs taken
+    qd_row = (
+        SubSwap.objects
+        .filter(
+            nStatus="Closed",
+            SubStatus="Accepted",
+            nType="Sub",                  # only sub-requests
+            RequestDate__year=2025        # YTD
+        )
+        .values("PID_id")                # who accepted
+        .annotate(total=Count("id"))
+        .order_by("-total")
+        .first()
+    )
+
+    quick_draw = None
+    if qd_row:
+        pid = qd_row["PID_id"]
+        plr = Players.objects.get(pk=pid)
+        quick_draw = {
+            "name":  f"{plr.FirstName} {plr.LastName}",
+            "count": qd_row["total"],
+        }
+
 
     return {
-        "gross": gross,
-        "gross_member": gross_member,
-        "net": net,
-        "skins": skins,
-        "attendance": attendance,
+        "gross"        : gross,
+        "gross_member" : gross_member,
+        "net"          : net,
+        "skins"        : skins,
+        "attendance"   : attendance,
         "skins_one"    : skins_one,
         "forty_season" : forty_season, 
         "forty_one"    : forty_one,
         "trader"       : trader,
+        "quick_draw"   : quick_draw,
     }
 
 

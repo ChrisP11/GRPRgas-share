@@ -126,6 +126,19 @@
 </div>
 {% endif %}
 
+<!-- Quickest Draw ----------------------------------------------->
+{% if leaders.quick_draw %}
+<div class="col">
+  <div class="card shadow-sm h-100 text-white bg-dark">
+    <div class="card-body p-2 text-center">
+      <h6 class="card-title mb-1 small">Quickest Draw 2025</h6>
+      <h4 class="fw-bold mb-1">{{ leaders.quick_draw.count }}</h4>
+      <p class="mb-0">{{ leaders.quick_draw.name }}</p>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 </div>
 {% endif %}
 
