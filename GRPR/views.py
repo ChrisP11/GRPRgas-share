@@ -29,7 +29,9 @@ from twilio.twiml.messaging_response import MessagingResponse
 from decimal import Decimal
 import math
 from collections import Counter
+import itertools
 from itertools import chain
+
 
 # Function to round numbers to the nearest integer
 def custom_round(value):
@@ -3385,7 +3387,7 @@ def player_update_view(request):
 # ------------------------------------------------------------------ #
 
 STAT_LABELS = {
-    "gross"        : "Best Gross",
+    # "gross"        : "Best Gross",
     "net"          : "Best Net",
     "skins"        : "Most Skins",
     "gross_member" : "Best Gross (Member)",
@@ -3395,6 +3397,7 @@ STAT_LABELS = {
     "forty_one"    : "Most Forty Holes (1 Round)",
     "trader"       : "Best Trader",
     "quick_draw"   : "Quickest Draw",
+    "friends"      : "Best Friends",
 }
 
 YEAR_START = date(2025, 1, 1)
@@ -3483,7 +3486,6 @@ def _top10_skins_one():
         for p in qs
     ]
 
-
 def _top10_forty_season():
     """Most Forty rows per player for the whole 2025 season."""
     qs = (
@@ -3548,9 +3550,44 @@ def _top10_quick_draw():
     )
     return [{"name": f"{r['PID__FirstName']} {r['PID__LastName']}", "value": r["value"]} for r in qs]
 
+def _top10_friends():
+    """
+    Most-frequent player *pairs* in TeeTimesInd for the 2025 season.
+    """
+    from collections import Counter
+    pairs = Counter()
+
+    qs = (
+        TeeTimesInd.objects
+        .filter(gDate__gte=YEAR_START)
+        .values("gDate", "CourseID_id")
+    )
+
+    # for each tee-time build sorted PID pairs, count them
+    for tt in qs:
+        same_slot = (
+            TeeTimesInd.objects
+            .filter(gDate=tt["gDate"], CourseID_id=tt["CourseID_id"])
+            .values_list("PID_id", flat=True)
+        )
+        ids = sorted(same_slot)
+        pairs.update(tuple(sorted(p)) for p in itertools.combinations(ids, 2))
+
+    top = pairs.most_common(10)
+    result = []
+    for (pid1, pid2), cnt in top:
+        p1 = Players.objects.get(pk=pid1)
+        p2 = Players.objects.get(pk=pid2)
+        result.append({
+            "name": f"{p1.FirstName} {p1.LastName} & {p2.FirstName} {p2.LastName}",
+            "value": cnt,
+        })
+    return result
+
+
 
 TOP10_FUNC = {
-    "gross"        : _top10_gross,
+    # "gross"        : _top10_gross,
     "net"          : _top10_net,
     "gross_member" : _top10_gross_member,
     "skins"        : _top10_skins,
@@ -3560,6 +3597,7 @@ TOP10_FUNC = {
     "forty_one"    : _top10_forty_one,
     "trader"       : _top10_trader,
     "quick_draw"   : _top10_quick_draw,
+    "friends"      : _top10_friends,
 }
 
 # internal query just to get most frequent playing partners, called by the next function
@@ -3802,7 +3840,7 @@ def _get_round_leaders():
         }
 
     # internal function above
-    best_friends = _best_friends_2025()
+    friends = _top10_friends()[0] if _top10_friends() else None
 
     return {
         "gross"        : gross,
@@ -3815,7 +3853,7 @@ def _get_round_leaders():
         "forty_one"    : forty_one,
         "trader"       : trader,
         "quick_draw"   : quick_draw,
-        "best_friends" : best_friends,  
+        "friends"      : friends,  
     }
 
 # ------------------------------------------------------------------ #
