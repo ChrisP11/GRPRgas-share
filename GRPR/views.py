@@ -18,7 +18,7 @@ from django.views.decorators.csrf import csrf_exempt # added to allow Twilio to 
 from django.template.loader import render_to_string  # used on hole_input_score_view
 from django.db.models import Q, Count, F, Func, Subquery, OuterRef, Max, Min, IntegerField, ExpressionWrapper, Sum
 from django.db.models.functions import Cast
-from django.db import transaction
+from django.db import transaction, connection
 from django.urls import reverse_lazy, reverse
 from django.core.mail import send_mail
 from django.core.management import call_command
@@ -3377,6 +3377,44 @@ def player_update_view(request):
 
     return redirect('profile_view')
 
+# internal query just to get most frequent playing partners, called by the next function
+def _best_friends_2025():
+    """
+    Returns  {"names": "Chris Prouty & Mike Ryan", "count": 5}
+    or None if no pair found.
+    """
+    sql = """
+        SELECT
+            LEAST(a."PID_id",b."PID_id") AS p1,
+            GREATEST(a."PID_id",b."PID_id") AS p2,
+            COUNT(*) AS rounds
+        FROM "TeeTimesInd" a
+        JOIN "TeeTimesInd" b
+              ON a."gDate"=b."gDate"
+             AND a."CourseID_id"=b."CourseID_id"
+             AND a."PID_id"<b."PID_id"
+        WHERE a."gDate" BETWEEN %s AND %s
+        GROUP BY p1,p2
+        ORDER BY rounds DESC
+        LIMIT 1;
+    """
+    yr_start = date(2025,1,1)
+    today    = timezone.now().date()
+
+    with connection.cursor() as cur:
+        cur.execute(sql, [yr_start, today])
+        row = cur.fetchone()
+
+    if not row:
+        return None
+
+    p1_id, p2_id, total = row
+    p1 = Players.objects.get(pk=p1_id)
+    p2 = Players.objects.get(pk=p2_id)
+    return {
+        "names": f"{p1.FirstName} {p1.LastName} & {p2.FirstName} {p2.LastName}",
+        "count": total,
+    }
 
 def _get_round_leaders():
     """
@@ -3522,7 +3560,7 @@ def _get_round_leaders():
             "count": forty_one_row["total"],
         }
 
-    # ====================  BEST TRADER 2025  ============================
+    # BEST TRADER 2025  
     season_swaps = (
         SubSwap.objects
         .filter(nStatus="Closed",
@@ -3578,6 +3616,8 @@ def _get_round_leaders():
             "count": qd_row["total"],
         }
 
+    # internal function above
+    best_friends = _best_friends_2025()
 
     return {
         "gross"        : gross,
@@ -3590,6 +3630,7 @@ def _get_round_leaders():
         "forty_one"    : forty_one,
         "trader"       : trader,
         "quick_draw"   : quick_draw,
+        "best_friends" : best_friends,  
     }
 
 
