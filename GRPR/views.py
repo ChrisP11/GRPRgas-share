@@ -3,6 +3,7 @@ import json
 from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpResponse, JsonResponse, HttpResponseBadRequest
 from django.utils import timezone
+from django.utils.timezone import now
 from GRPR.models import Crews, Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity, SMSResponse, Xdates, Games, GameInvites, CourseTees, ScorecardMeta, Scorecard, CourseHoles, Skins, AutomatedMessages, Forty 
 from datetime import datetime, date
 from django.conf import settings  # Import settings
@@ -18,7 +19,7 @@ from django.views.decorators.csrf import csrf_exempt # added to allow Twilio to 
 from django.template.loader import render_to_string  # used on hole_input_score_view
 from django.db.models import Q, Count, F, Func, Subquery, OuterRef, Max, Min, IntegerField, ExpressionWrapper, Sum
 from django.db.models.functions import Cast
-from django.db import transaction
+from django.db import transaction, connection
 from django.urls import reverse_lazy, reverse
 from django.core.mail import send_mail
 from django.core.management import call_command
@@ -27,6 +28,8 @@ from twilio.rest import Client # Import the Twilio client
 from twilio.twiml.messaging_response import MessagingResponse
 from decimal import Decimal
 import math
+from collections import Counter
+from itertools import chain
 
 # Function to round numbers to the nearest integer
 def custom_round(value):
@@ -389,7 +392,7 @@ def teesheet_view(request):
     current_datetime = datetime.now()
 
     # Query distinct dates from TeeTimesInd that are more recent than today's date
-    distinct_dates = TeeTimesInd.objects.filter(gDate__gt=current_datetime).values('gDate').distinct().order_by('gDate')
+    distinct_dates = TeeTimesInd.objects.filter(gDate__gt='2025-01-01').values('gDate').distinct().order_by('gDate')
 
     # Format the dates to be in YYYY-MM-DD format
     distinct_dates = [{'gDate': date['gDate'].strftime('%Y-%m-%d')} for date in distinct_dates]
@@ -485,7 +488,7 @@ def schedule_view(request):
         player_id = request.GET.get("player_id", logged_in_player.id if logged_in_player else None)
         if player_id:
             selected_player = Players.objects.filter(id=player_id).exclude(Member=0).first()
-            schedule_query = TeeTimesInd.objects.filter(PID=player_id, gDate__gte=current_datetime).select_related('CourseID').order_by('gDate')
+            schedule_query = TeeTimesInd.objects.filter(PID=player_id, gDate__gte='2025-01-01').select_related('CourseID').order_by('gDate')
             for teetime in schedule_query:
                 # Collect the names of other players in the group
                 group_players = TeeTimesInd.objects.filter(
@@ -3375,6 +3378,262 @@ def player_update_view(request):
 
     return redirect('profile_view')
 
+# internal query just to get most frequent playing partners, called by the next function
+def _best_friends_2025():
+    """
+    Returns  {"names": "Chris Prouty & Mike Ryan", "count": 5}
+    or None if no pair found.
+    """
+    sql = """
+        SELECT
+            LEAST(a."PID_id",b."PID_id") AS p1,
+            GREATEST(a."PID_id",b."PID_id") AS p2,
+            COUNT(*) AS rounds
+        FROM "TeeTimesInd" a
+        JOIN "TeeTimesInd" b
+              ON a."gDate"=b."gDate"
+             AND a."CourseID_id"=b."CourseID_id"
+             AND a."PID_id"<b."PID_id"
+        WHERE a."gDate" BETWEEN %s AND %s
+        GROUP BY p1,p2
+        ORDER BY rounds DESC
+        LIMIT 1;
+    """
+    yr_start = date(2025,1,1)
+    today    = timezone.now().date()
+
+    with connection.cursor() as cur:
+        cur.execute(sql, [yr_start, today])
+        row = cur.fetchone()
+
+    if not row:
+        return None
+
+    p1_id, p2_id, total = row
+    p1 = Players.objects.get(pk=p1_id)
+    p2 = Players.objects.get(pk=p2_id)
+    return {
+        "names": f"{p1.FirstName} {p1.LastName} & {p2.FirstName} {p2.LastName}",
+        "count": total,
+    }
+
+def _get_round_leaders():
+    """
+    Returns
+      {
+        "gross":        {"name": "...", "score": 72},
+        "gross_member": {"name": "...", "score": 74},
+        "net":          {"name": "...", "score": 66},
+        "skins":        {"name": "...", "count": 7},
+        "attendance":   {"name": "...", "count": 18},
+      }
+    """
+    # ---------- best gross (all players) ----------
+    gross_row = (
+        ScorecardMeta.objects
+        .exclude(RawTotal=0)
+        .order_by("RawTotal")
+        .select_related("PID")
+        .values("PID__FirstName", "PID__LastName", "RawTotal")
+        .first()
+    )
+    gross = None
+    if gross_row:
+        gross = {
+            "name":  f"{gross_row['PID__FirstName']} {gross_row['PID__LastName']}",
+            "score": gross_row["RawTotal"],
+        }
+
+    # ---------- best gross (members only) ----------
+    gross_mem_row = (
+        ScorecardMeta.objects
+        .exclude(RawTotal=0)
+        .filter(PID__Member=1)
+        .order_by("RawTotal")
+        .select_related("PID")
+        .values("PID__FirstName", "PID__LastName", "RawTotal")
+        .first()
+    )
+    gross_member = None
+    if gross_mem_row:
+        gross_member = {
+            "name":  f"{gross_mem_row['PID__FirstName']} {gross_mem_row['PID__LastName']}",
+            "score": gross_mem_row["RawTotal"],
+        }
+
+    # ---------- best net ----------
+    net_row = (
+        ScorecardMeta.objects
+        .exclude(NetTotal=0)
+        .order_by("NetTotal")
+        .select_related("PID")
+        .values("PID__FirstName", "PID__LastName", "NetTotal")
+        .first()
+    )
+    net = None
+    if net_row:
+        net = {
+            "name":  f"{net_row['PID__FirstName']} {net_row['PID__LastName']}",
+            "score": net_row["NetTotal"],
+        }
+
+    # ---------- most skins ----------
+    skins_row = (
+        Skins.objects
+        .values("PlayerID__FirstName", "PlayerID__LastName")
+        .annotate(total=Count("id"))
+        .order_by("-total")
+        .first()
+    )
+    skins = None
+    if skins_row:
+        skins = {
+            "name":  f"{skins_row['PlayerID__FirstName']} {skins_row['PlayerID__LastName']}",
+            "count": skins_row["total"],
+        }
+
+    # ---------- attendance (2025 tee-times) ----------
+    year_start = date(2025, 1, 1)
+    year_end   = timezone.now().date()          # ← up-to-today in 2025
+
+    att_row = (
+        TeeTimesInd.objects
+        .filter(gDate__range=(year_start, year_end))
+        .values("PID__FirstName", "PID__LastName")
+        .annotate(total=Count("id"))
+        .order_by("-total")
+        .first()
+    )
+    attendance = None
+    if att_row:
+        attendance = {
+            "name":  f"{att_row['PID__FirstName']} {att_row['PID__LastName']}",
+            "count": att_row["total"],
+        }
+
+    # MOST SKINS IN A SINGLE ROUND
+    skins_one_row = (
+        Skins.objects
+        .values("GameID", "PlayerID__FirstName", "PlayerID__LastName")
+        .annotate(total=Count("id"))
+        .order_by("-total")
+        .first()
+    )
+    skins_one = None
+    if skins_one_row:
+        skins_one = {
+            "name":  f"{skins_one_row['PlayerID__FirstName']} {skins_one_row['PlayerID__LastName']}",
+            "count": skins_one_row["total"],
+        }
+
+    # FORTY - SEASON TOTAL (2025-today)
+    yr_start = date(2025, 1, 1)
+    today    = timezone.now().date()
+
+    forty_season_row = (
+        Forty.objects
+        .filter(GameID__PlayDate__range=(yr_start, today))
+        .values("PID__FirstName", "PID__LastName")
+        .annotate(total=Count("id"))
+        .order_by("-total")
+        .first()
+    )
+    forty_season = None
+    if forty_season_row:
+        forty_season = {
+            "name":  f"{forty_season_row['PID__FirstName']} {forty_season_row['PID__LastName']}",
+            "count": forty_season_row["total"],
+        }
+
+    # FORTY - ONE ROUND BEST
+    forty_one_row = (
+        Forty.objects
+        .filter(GameID__PlayDate__range=(yr_start, today))
+        .values("GameID", "PID__FirstName", "PID__LastName")
+        .annotate(total=Count("id"))
+        .order_by("-total")
+        .first()
+    )
+    forty_one = None
+    if forty_one_row:
+        forty_one = {
+            "name":  f"{forty_one_row['PID__FirstName']} {forty_one_row['PID__LastName']}",
+            "count": forty_one_row["total"],
+        }
+
+    # BEST TRADER 2025  
+    season_swaps = (
+        SubSwap.objects
+        .filter(nStatus="Closed",
+                SubStatus="Accepted",
+                RequestDate__year=2025)           # ← current season
+        .values_list("SwapID", flat=True)
+    )
+
+    # offer-side PIDs
+    offer_ids = list(
+        SubSwap.objects
+        .filter(SwapID__in=season_swaps, SubType="Offer")
+        .values_list("PID_id", flat=True)
+    )
+    # counter-side PIDs (the accepted rows themselves)
+    counter_ids = list(
+        SubSwap.objects
+        .filter(SwapID__in=season_swaps,
+                nStatus="Closed",
+                SubStatus="Accepted")
+        .values_list("PID_id", flat=True)
+    )
+
+    freq = Counter(chain(offer_ids, counter_ids))
+    trader = None
+    if freq:
+        pid_top, trades = freq.most_common(1)[0]
+        plr = Players.objects.get(pk=pid_top)
+        trader = {"name": f"{plr.FirstName} {plr.LastName}",
+                  "count": trades}
+        
+    #  QUICK-DRAW  – most Subs taken
+    qd_row = (
+        SubSwap.objects
+        .filter(
+            nStatus="Closed",
+            SubStatus="Accepted",
+            nType="Sub",                  # only sub-requests
+            RequestDate__year=2025        # YTD
+        )
+        .values("PID_id")                # who accepted
+        .annotate(total=Count("id"))
+        .order_by("-total")
+        .first()
+    )
+
+    quick_draw = None
+    if qd_row:
+        pid = qd_row["PID_id"]
+        plr = Players.objects.get(pk=pid)
+        quick_draw = {
+            "name":  f"{plr.FirstName} {plr.LastName}",
+            "count": qd_row["total"],
+        }
+
+    # internal function above
+    best_friends = _best_friends_2025()
+
+    return {
+        "gross"        : gross,
+        "gross_member" : gross_member,
+        "net"          : net,
+        "skins"        : skins,
+        "attendance"   : attendance,
+        "skins_one"    : skins_one,
+        "forty_season" : forty_season, 
+        "forty_one"    : forty_one,
+        "trader"       : trader,
+        "quick_draw"   : quick_draw,
+        "best_friends" : best_friends,  
+    }
+
 
 @login_required
 def rounds_leaderboard_view(request):
@@ -3419,10 +3678,13 @@ def rounds_leaderboard_view(request):
         .values(LastName=F('PID__LastName'), total_skins=F('total_skins'))
     )
 
+    leaders = _get_round_leaders()
+
     return render(request, 'GRPR/rounds_leaderboard.html', {
         'top10_gross': top10_gross,
         'top10_net': top10_net,
         'most_skins': most_skins,
+        'leaders': leaders,
         'first_name': request.user.first_name,
         'last_name': request.user.last_name,
     })
@@ -3525,114 +3787,114 @@ def skins_admin_view(request):
     return render(request, 'GRPR/skins_admin.html', context)
 
 # just for a game close button for skins
+# ❶  Close button: mark Closed *and* lock so it can’t be deleted later
 @login_required
 def skins_game_close_view(request):
-    game_id = request.GET.get('game_id')
-
+    game_id = request.GET.get("game_id")
     if not game_id:
         return HttpResponseBadRequest("Game ID is missing.")
 
-    # Update the Games table to set the status to 'Complete'
-    Games.objects.filter(id=game_id).update(Status='Closed')
-
-    # Fetch the logged-in user's details for the context
-    user = request.user
-    game = Games.objects.filter(id=game_id).first()
-    gDate = game.PlayDate if game else None
-    game_creator = game.CreateID if game else None
-    game_status = game.Status if game else None
-
-    context = {
-        'first_name': user.first_name,
-        'last_name': user.last_name,
-        'game_creator': game_creator,
-        'gDate': gDate,
-        'game_status': game_status,
-        'game_id': game_id,
-    }
-
-    # Render the skins_admin.html page
-    return render(request, 'GRPR/skins_admin.html', context)
-
-
-@login_required
-def skins_delete_game_menu_view(request):
-    # Only allow user 'cprouty'
-    if request.user.username != 'cprouty':
-        return redirect('skins_admin_view')
-
-    # If you want to use subqueries for more accurate counts (especially if there are NULLs):
-    games = Games.objects.order_by('id').annotate(
-        invites_count=Subquery(
-            GameInvites.objects.filter(GameID_id=OuterRef('id')).values('GameID_id').annotate(c=Count('id')).values('c')[:1]
-        ),
-        players_count=Subquery(
-            ScorecardMeta.objects.filter(GameID_id=OuterRef('id')).values('GameID_id').annotate(c=Count('id')).values('c')[:1]
-        ),
-        holes_count=Subquery(
-            Scorecard.objects.filter(GameID_id=OuterRef('id')).values('GameID_id').annotate(c=Count('id')).values('c')[:1]
-        ),
-        skins_count=Subquery(
-            Skins.objects.filter(GameID_id=OuterRef('id')).values('GameID_id').annotate(c=Count('id')).values('c')[:1]
-        ),
+    Games.objects.filter(id=game_id).update(
+        Status="Closed", IsLocked=True, LockedAt=timezone.now()
     )
 
+    game = Games.objects.filter(id=game_id).first()
     context = {
-        'games': games,
+        "first_name": request.user.first_name,
+        "last_name": request.user.last_name,
+        "game_creator": game.CreateID if game else None,
+        "gDate": game.PlayDate if game else None,
+        "game_status": game.Status if game else None,
+        "game_id": game_id,
     }
-    return render(request, 'GRPR/skins_delete_game_menu.html', context)
+    return render(request, "GRPR/skins_admin.html", context)
 
+# ---------------------------------------------------------------------
+# ❷  Menu view (unchanged except we send IsLocked to template)
+@login_required
+def skins_delete_game_menu_view(request):
+    if request.user.username != "cprouty":
+        return redirect("skins_admin_view")
 
+    games = (
+        Games.objects.order_by("id")
+        .annotate(
+            invites_count=Subquery(
+                GameInvites.objects.filter(GameID_id=OuterRef("id"))
+                .values("GameID_id")
+                .annotate(c=Count("id"))
+                .values("c")[:1]
+            ),
+            players_count=Subquery(
+                ScorecardMeta.objects.filter(GameID_id=OuterRef("id"))
+                .values("GameID_id")
+                .annotate(c=Count("id"))
+                .values("c")[:1]
+            ),
+            holes_count=Subquery(
+                Scorecard.objects.filter(GameID_id=OuterRef("id"))
+                .values("GameID_id")
+                .annotate(c=Count("id"))
+                .values("c")[:1]
+            ),
+            skins_count=Subquery(
+                Skins.objects.filter(GameID_id=OuterRef("id"))
+                .values("GameID_id")
+                .annotate(c=Count("id"))
+                .values("c")[:1]
+            ),
+        )
+    )
+    return render(request, "GRPR/skins_delete_game_menu.html", {"games": games})
+
+# ---------------------------------------------------------------------
+# ❸  Delete view with lock-guard
 @login_required
 def skins_delete_game_view(request):
-    if request.method == "POST" and request.user.username == "cprouty":
-        game_id = request.POST.get("game_id")
-        game = Games.objects.filter(id=game_id).first()
-        if not game:
-            messages.error(request, f"Game id {game_id} not found.")
-            return redirect('skins_admin_view')
+    if request.method != "POST" or request.user.username != "cprouty":
+        return redirect("skins_admin_view")
 
-        if game.Type == "Skins":
-            with transaction.atomic():
-                scorecard_count = Scorecard.objects.filter(GameID_id=game_id).count()
-                Scorecard.objects.filter(GameID_id=game_id).delete()
+    game_id = request.POST.get("game_id")
+    if not game_id:
+        messages.error(request, "No game_id supplied.")
+        return redirect("skins_admin_view") 
 
-                scorecardMeta_count = ScorecardMeta.objects.filter(GameID=game_id).count()
-                ScorecardMeta.objects.filter(GameID=game_id).delete()
+    game = get_object_or_404(Games, id=game_id)
+    if not game:
+        messages.error(request, f"Game {game_id} not found.")
+        return redirect("skins_admin_view")
 
-                invites_count = GameInvites.objects.filter(GameID_id=game_id).count()
-                GameInvites.objects.filter(GameID_id=game_id).delete()
+    # ---------- LOCK CHECK ----------
+    if game.IsLocked:
+        messages.error(request, "That game is locked and can’t be deleted.")
+        return redirect("skins_admin_view")
+    # --------------------------------
 
-                skins_count = Skins.objects.filter(GameID_id=game_id).count()
-                Skins.objects.filter(GameID_id=game_id).delete()
-
-                Games.objects.filter(id=game_id).delete()
-
-            msg = (
-                f"Skins Game id {game_id} deleted. "
-                f"Scorecard rows deleted: {scorecard_count}, "
-                f"ScM rows deleted: {scorecardMeta_count}, "
-                f"Invites deleted: {invites_count}, "
-                f"Skins deleted: {skins_count}."
-            )
-        elif game.Type == "Forty":
-            with transaction.atomic():
-                forty_count = Forty.objects.filter(GameID=game_id).count()
-                Forty.objects.filter(GameID=game_id).delete()
-                Games.objects.filter(id=game_id).delete()
-            msg = (
-                f"Forty Game id {game_id} deleted. "
-                f"Forty rows deleted: {forty_count}."
-            )
-        else:
-            msg = f"Game id {game_id} is not a Skins or Forty game. No action taken."
-
-        messages.success(request, msg)
-        return redirect('skins_admin_view')
+    if game.Type == "Skins":
+        with transaction.atomic():
+            scorecard_count = Scorecard.objects.filter(GameID=game).delete()[0]
+            scoremeta_count = ScorecardMeta.objects.filter(GameID=game).delete()[0]
+            invites_count   = GameInvites.objects.filter(GameID=game).delete()[0]
+            skins_count     = Skins.objects.filter(GameID=game).delete()[0]
+            game.delete()
+        msg = (
+            f"Skins game {game_id} deleted. "
+            f"Scorecard: {scorecard_count}, "
+            f"ScMeta: {scoremeta_count}, "
+            f"Invites: {invites_count}, "
+            f"Skins: {skins_count}."
+        )
+    elif game.Type == "Forty":
+        with transaction.atomic():
+            forty_count = Forty.objects.filter(GameID=game).delete()[0]
+            game.delete()
+        msg = f"Forty game {game_id} deleted. Rows: {forty_count}."
     else:
-        return redirect('skins_admin_view')
-    
+        msg = f"Game {game_id} is not Skins or Forty. No action taken."
 
+    messages.success(request, msg)
+    return redirect("skins_admin_view")
+    
 
 @login_required
 def skins_view(request):
@@ -4791,7 +5053,7 @@ def skins_close_view(request):
 @login_required
 def skins_closed_games_view(request):
     # Query for completed games
-    completed_games = Games.objects.filter(Status='Closed', Type='Skins').select_related('CourseTeesID').values(
+    completed_games = Games.objects.filter(Status='Closed', Type='Skins').select_related('CourseTeesID').order_by('-PlayDate').values(
         'id',  # GameID
         'PlayDate',
         'CourseTeesID__CourseName'  # Course name
@@ -4833,8 +5095,6 @@ def skins_closed_games_view(request):
 
     return render(request, 'GRPR/skins_closed_games.html', context)
 
-
-from django.utils.timezone import now
 
 @login_required
 def skins_reopen_game_view(request):
