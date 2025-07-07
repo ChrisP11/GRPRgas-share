@@ -3401,21 +3401,22 @@ STAT_LABELS = {
 }
 
 YEAR_START = date(2025, 1, 1)
+TODAY       = timezone.now().date() 
 
 
-def _top10_gross():
-    qs = (
-        ScorecardMeta.objects
-        .filter(PlayDate__gte=YEAR_START)
-        .values("PID_id", "PID__FirstName", "PID__LastName")
-        .annotate(value=Min("RawTotal"))
-        .order_by("value")[:10]
-    )
-    return [
-        {"name": f"{r['PID__FirstName']} {r['PID__LastName']}",
-         "value": r["value"]}
-        for r in qs
-    ]
+# def _top10_gross():
+#     qs = (
+#         ScorecardMeta.objects
+#         .filter(PlayDate__gte=YEAR_START)
+#         .values("PID_id", "PID__FirstName", "PID__LastName")
+#         .annotate(value=Min("RawTotal"))
+#         .order_by("value")[:10]
+#     )
+#     return [
+#         {"name": f"{r['PID__FirstName']} {r['PID__LastName']}",
+#          "value": r["value"]}
+#         for r in qs
+#     ]
 
 # ----------  gross_member  (best score + date) -----------------
 def _top10_gross_member():
@@ -3509,29 +3510,6 @@ def _top10_forty_one():
 
     return sorted(best.values(), key=lambda x: -x["value"])[:10]
 
-
-# def _top10_net():
-#     qs = (
-#         ScorecardMeta.objects
-#         .filter(PlayDate__gte=YEAR_START)
-#         .values("PID_id", "PID__FirstName", "PID__LastName")
-#         .annotate(value=Min("NetTotal"))
-#         .order_by("value")[:10]
-#     )
-#     return [{"name": f"{r['PID__FirstName']} {r['PID__LastName']}", "value": r["value"]} for r in qs]
-
-
-# def _top10_gross_member():
-#     qs = (
-#         ScorecardMeta.objects
-#         .filter(PlayDate__gte=YEAR_START, PID__Member=1)
-#         .values("PID_id", "PID__FirstName", "PID__LastName")
-#         .annotate(value=Min("RawTotal"))
-#         .order_by("value")[:10]
-#     )
-#     return [{"name": f"{r['PID__FirstName']} {r['PID__LastName']}", "value": r["value"]} for r in qs]
-
-
 def _top10_skins():
     qs = (
         Skins.objects
@@ -3553,31 +3531,6 @@ def _top10_attendance():
     )
     return [{"name": f"{r['PID__FirstName']} {r['PID__LastName']}", "value": r["value"]} for r in qs]
 
-
-# def _top10_skins_one():
-#     # subquery: max skins won in ONE round for this player
-#     per_round = (
-#         Skins.objects
-#         .filter(SkinDate__gte=YEAR_START,
-#                 PlayerID_id=OuterRef("pk"))
-#         .values("PlayerID_id", "GameID_id")
-#         .annotate(row_cnt=Count("id"))
-#         .order_by("-row_cnt")
-#         .values("row_cnt")[:1]          # top value
-#     )
-
-#     qs = (
-#         Players.objects
-#         .filter(id__in=Skins.objects.values("PlayerID_id").distinct())
-#         .annotate(value=Subquery(per_round))
-#         .order_by("-value")[:10]
-#     )
-
-#     return [
-#         {"name": f"{p.FirstName} {p.LastName}", "value": p.value}
-#         for p in qs
-#     ]
-
 def _top10_forty_season():
     """Most Forty rows per player for the whole 2025 season."""
     qs = (
@@ -3592,29 +3545,6 @@ def _top10_forty_season():
          "value": r["value"]}
         for r in qs
     ]
-
-
-# def _top10_forty_one():
-#     per_round = (
-#         Forty.objects
-#         .filter(GameID__PlayDate__gte=YEAR_START,
-#                 PID_id=OuterRef("pk"))
-#         .values("PID_id", "GameID_id")
-#         .annotate(row_cnt=Count("id"))
-#         .order_by("-row_cnt")
-#         .values("row_cnt")[:1]          # max rows for that player
-#     )
-
-    # qs = (
-    #     Players.objects
-    #     .filter(id__in=Forty.objects.values("PID_id").distinct(),
-    #             Member__isnull=False)   # just to avoid empty queryset
-    #     .annotate(value=Subquery(per_round))
-    #     .order_by("-value")[:10]
-    # )
-
-    # return [{"name": f"{p.FirstName} {p.LastName}", "value": p.value} for p in qs]
-
 
 def _top10_trader():
     swaps = (
@@ -3655,14 +3585,14 @@ def _top10_friends():
           ON    t1."gDate"       = t2."gDate"
          AND    t1."CourseID_id" = t2."CourseID_id"
          AND    t1."PID_id"      < t2."PID_id"          -- avoid (A,B) / (B,A)
-        WHERE   t1."gDate" >= %s                        -- YEAR_START
+        WHERE   t1."gDate" BETWEEN %s AND %s
         GROUP BY p1, p2
         ORDER BY cnt DESC
         LIMIT 10;
     """
 
     with connection.cursor() as cur:
-        cur.execute(sql, [YEAR_START])
+        cur.execute(sql, [YEAR_START, TODAY])
         rows = cur.fetchall()          # (p1, p2, cnt)
 
     result = []
