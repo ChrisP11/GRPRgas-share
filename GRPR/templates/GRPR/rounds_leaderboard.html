@@ -24,7 +24,7 @@
       <div class="card shadow-sm h-100 bg-success text-light {% if chosen == 'gross_member' %}border-3 border-light{% endif %}">
         <div class="card-body p-2 text-center">
           <h6 class="mb-1 small">The Gas Man (Best Gross)</h6>
-          <h4 class="fw-bold mb-1">{{ leaders.gross_member.score }}</h4>
+          <h4 class="fw-bold mb-1">{{ leaders.gross_member.value }}</h4>
           <p class="mb-0">{{ leaders.gross_member.name }}</p>
         </div>
       </div>
@@ -36,8 +36,8 @@
     <a href="?stat=net" class="text-decoration-none">
       <div class="card shadow-sm h-100 bg-light text-dark {% if chosen == 'net' %}border-3 border-light{% endif %}">
         <div class="card-body p-2 text-center">
-          <h6 class="mb-1 small">Hmmmm (Best Net)</h6>
-          <h4 class="fw-bold mb-1">{{ leaders.net.score }}</h4>
+          <h6 class="mb-1 small">Happy Gilmore (Best Net)</h6>
+          <h4 class="fw-bold mb-1">{{ leaders.net.value }}</h4>
           <p class="mb-0">{{ leaders.net.name }}</p>
         </div>
       </div>
@@ -50,7 +50,7 @@
       <div class="card shadow-sm h-100 bg-warning text-dark {% if chosen == 'skins' %}border-3 border-light{% endif %}">
         <div class="card-body p-2 text-center">
           <h6 class="mb-1 small">Sandiest Bagger (Most Skins, Szn)</h6>
-          <h4 class="fw-bold mb-1">{{ leaders.skins.count }}</h4>
+          <h4 class="fw-bold mb-1">{{ leaders.skins.value }}</h4>
           <p class="mb-0">{{ leaders.skins.name }}</p>
         </div>
       </div>
@@ -63,7 +63,7 @@
       <div class="card shadow-sm h-100 bg-danger text-white {% if chosen == 'skins_one' %}border-3 border-light{% endif %}">
         <div class="card-body p-2 text-center">
           <h6 class="mb-1 small">Baggiest Sander (Most Skins, Rnd)</h6>
-          <h4 class="fw-bold mb-1">{{ leaders.skins_one.count }}</h4>
+          <h4 class="fw-bold mb-1">{{ leaders.skins_one.value }}</h4>
           <p class="mb-0">{{ leaders.skins_one.name }}</p>
         </div>
       </div>
@@ -76,7 +76,7 @@
       <div class="card shadow-sm h-100 bg-secondary text-white {% if chosen == 'attendance' %}border-3 border-light{% endif %}">
         <div class="card-body p-2 text-center">
           <h6 class="mb-1 small">Mr. ROI (Most Rounds)</h6>
-          <h4 class="fw-bold mb-1">{{ leaders.attendance.count }}</h4>
+          <h4 class="fw-bold mb-1">{{ leaders.attendance.value }}</h4>
           <p class="mb-0">{{ leaders.attendance.name }}</p>
         </div>
       </div>
@@ -89,7 +89,7 @@
       <div class="card shadow-sm h-100 bg-dark text-white {% if chosen == 'forty_season' %}border-3 border-light{% endif %}">
         <div class="card-body p-2 text-center">
           <h6 class="mb-1 small">MVP (Most Forty Scores, Szn)</h6>
-          <h4 class="fw-bold mb-1">{{ leaders.forty_season.count }}</h4>
+          <h4 class="fw-bold mb-1">{{ leaders.forty_season.value }}</h4>
           <p class="mb-0">{{ leaders.forty_season.name }}</p>
         </div>
       </div>
@@ -102,7 +102,7 @@
       <div class="card shadow-sm h-100 bg-primary text-white {% if chosen == 'forty_one' %}border-3 border-light{% endif %}">
         <div class="card-body p-2 text-center">
           <h6 class="mb-1 small">Pour One Out! (Best Forty Rnd)</h6>
-          <h4 class="fw-bold mb-1">{{ leaders.forty_one.count }}</h4>
+          <h4 class="fw-bold mb-1">{{ leaders.forty_one.value }}</h4>
           <p class="mb-0">{{ leaders.forty_one.name }}</p>
         </div>
       </div>
@@ -115,7 +115,7 @@
       <div class="card shadow-sm h-100 bg-success text-white {% if chosen == 'trader' %}border-3 border-light{% endif %}">
         <div class="card-body p-2 text-center">
           <h6 class="mb-1 small">Billy Ray (Most Swaps)</h6>
-          <h4 class="fw-bold mb-1">{{ leaders.trader.count }}</h4>
+          <h4 class="fw-bold mb-1">{{ leaders.trader.value }}</h4>
           <p class="mb-0">{{ leaders.trader.name }}</p>
         </div>
       </div>
@@ -128,7 +128,7 @@
       <div class="card shadow-sm h-100 bg-info text-dark {% if chosen == 'quick_draw' %}border-3 border-light{% endif %}">
         <div class="card-body p-2 text-center">
           <h6 class="mb-1 small">Dirty Harry (Most Subs)</h6>
-          <h4 class="fw-bold mb-1">{{ leaders.quick_draw.count }}</h4>
+          <h4 class="fw-bold mb-1">{{ leaders.quick_draw.value }}</h4>
           <p class="mb-0">{{ leaders.quick_draw.name }}</p>
         </div>
       </div>
@@ -140,7 +140,7 @@
   <a href="?stat=friends" class="text-decoration-none">
     <div class="card shadow-sm h-100 bg-warning text-dark {% if chosen == 'friends' %}border-3 border-light{% endif %}">
       <div class="card-body p-2 text-center">
-        <h6 class="mb-1 small">Best Friends</h6>
+        <h6 class="mb-1 small">Bosom Buddies</h6>
         <h4 class="fw-bold mb-1">{{ leaders.friends.value }}</h4>
         <p class="mb-0">{{ leaders.friends.name }}</p>
       </div>
@@ -155,7 +155,7 @@
   <thead class="table-light text-center">
     <tr>
       <th colspan="{% if topten and topten.0.date %}4{% else %}3{% endif %}">
-        {{ label }} – Top&nbsp;10&nbsp;(2025)
+        {{ label }}
       </th>
     </tr>
     <tr>
