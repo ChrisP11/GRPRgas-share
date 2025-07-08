@@ -3524,7 +3524,7 @@ def _top10_skins():
 def _top10_attendance():
     qs = (
         TeeTimesInd.objects
-        .filter(gDate__gte=YEAR_START)
+        .filter(gDate__range=(YEAR_START, TODAY))
         .values("PID_id", "PID__FirstName", "PID__LastName")
         .annotate(value=Count("id"))
         .order_by("-value")[:10]
@@ -3547,17 +3547,36 @@ def _top10_forty_season():
     ]
 
 def _top10_trader():
+    """
+    Counts BOTH players involved in every swap that ended
+    Closed & Accepted between 1 Jan 2025 and today.
+    """
+    # 1) SwapIDs that actually closed/accepted in the window
     swaps = (
         SubSwap.objects
-        .filter(nStatus="Closed", SubStatus="Accepted", RequestDate__gte=YEAR_START)
+        .filter(nStatus="Closed",
+                SubStatus="Accepted",
+                RequestDate__range=(YEAR_START, TODAY))
         .values_list("SwapID", flat=True)
     )
-    offers = SubSwap.objects.filter(SwapID__in=swaps, SubType="Offer").values_list("PID_id", flat=True)
-    counters = SubSwap.objects.filter(SwapID__in=swaps, SubType="Counter", SubStatus="Accepted").values_list("PID_id", flat=True)
-    freq = Counter(chain(offers, counters))
-    ranking = freq.most_common(10)
+
+    # 2) rows that earn credit
+    offers   = SubSwap.objects.filter(SwapID__in=swaps, SubType="Offer")\
+                              .values_list("PID_id", flat=True)
+    counters = SubSwap.objects.filter(SwapID__in=swaps,
+                                      SubType="Counter",
+                                      SubStatus="Accepted")\
+                              .values_list("PID_id", flat=True)
+
+    freq     = Counter(chain(offers, counters))
+    ranking  = freq.most_common(10)
+
     return [
-        {"name": f"{Players.objects.get(pk=pid).FirstName} {Players.objects.get(pk=pid).LastName}", "value": total}
+        {
+            "name":  f"{Players.objects.get(pk=pid).FirstName} "
+                     f"{Players.objects.get(pk=pid).LastName}",
+            "value": total,
+        }
         for pid, total in ranking
     ]
 
