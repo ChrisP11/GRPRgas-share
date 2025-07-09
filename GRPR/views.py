@@ -4,7 +4,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpResponse, JsonResponse, HttpResponseBadRequest
 from django.utils import timezone
 from django.utils.timezone import now
-from GRPR.models import Crews, Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity, SMSResponse, Xdates, Games, GameInvites, CourseTees, ScorecardMeta, Scorecard, CourseHoles, Skins, AutomatedMessages, Forty 
+from GRPR.models import Crews, Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity, SMSResponse, Xdates, Games, GameInvites, CourseTees, ScorecardMeta, Scorecard, CourseHoles, Skins, AutomatedMessages, Forty, GasCupPair
 from datetime import datetime, date
 from django.conf import settings  # Import settings
 from django.contrib import messages
@@ -28,7 +28,7 @@ from twilio.rest import Client # Import the Twilio client
 from twilio.twiml.messaging_response import MessagingResponse
 from decimal import Decimal
 import math
-from collections import Counter
+from collections import Counter, defaultdict
 import itertools
 from itertools import chain
 
@@ -5585,77 +5585,86 @@ def forty_input_scores_view(request):
 #### Gas Cup Section  ####
 ##########################
 
-# ─── helper to pull the next-tee-time golfers (same as skins choose) ──
-def _next_foursomes_players():
-    """
-    Returns a queryset of Players scheduled on the NEXT tee-time date
-    ordered by CourseTimeSlot so we can group them later.
-    """
-    next_tt = (TeeTimesInd.objects
-               .filter(gDate__gte=timezone.localdate())
-               .order_by("gDate")
-               .values_list("gDate", flat=True)
-               .first())
-    return (
-        TeeTimesInd.objects
-        .filter(gDate=next_tt)
-        .select_related("PID", "CourseID")
-        .order_by("CourseID__courseTimeSlot", "PID__LastName")
-    )
-
 # ─── Team-assignment view  ────────────────────────────────────────────
 @login_required
 def gascup_team_assign_view(request):
-    skins_game_id = request.session.get("skins_game_id")
-    if not skins_game_id:
-        return redirect("games_view")        # guard: no Skins first
-    
-    players_qs = _next_foursomes_players()
+    """
+    Show ‘radio table’ version and, on POST, create Gas Cup + GasCupPair rows.
+    """
+    skins_id = request.session.get("skins_game_id")
+    skins_game = get_object_or_404(Games, pk=skins_id, Type="Skins")
 
+    players = (
+        GameInvites.objects
+        .filter(GameID=skins_game)
+        .select_related("PID", "TTID__CourseID")
+        .order_by("TTID__CourseID__courseTimeSlot", "PID__LastName")
+    )
+
+    # ---------- POST: validate radio choices -------------------------
     if request.method == "POST":
-        # -------------------------------- form submit -----------------
-        assignments = {int(pid): team
-                       for pid, team in request.POST.items() if pid.isdigit()}
-        # simple validation: exactly 2×PGA + 2×LIV in every foursome
+        assignments = {            # pid -> "PGA"/"LIV"
+            int(k.split("_", 1)[1]): v
+            for k, v in request.POST.items()
+            if k.startswith("p_")
+        }
+
         errors = []
-        for course_slot, group in itertools.groupby(
-                players_qs, key=lambda x: x.CourseID.courseTimeSlot):
-            pga = sum(1 for t in group if assignments.get(t.PID_id) == "PGA")
-            liv = sum(1 for t in group if assignments.get(t.PID_id) == "LIV")
-            if pga != 2 or liv != 2:
-                errors.append(f"{course_slot} needs 2 PGA / 2 LIV")
+        for pid in [p.PID_id for p in players]:
+            if pid not in assignments:
+                errors.append("Every player must have a team selected.")
+                break
+
+        # 2 vs 2 per foursome
+        for slot, group in itertools.groupby(
+                players, key=lambda x: x.TTID.CourseID.courseTimeSlot):
+            group = list(group)
+            pga = [p.PID_id for p in group if assignments[p.PID_id] == "PGA"]
+            liv = [p.PID_id for p in group if assignments[p.PID_id] == "LIV"]
+            if len(pga) != 2 or len(liv) != 2:
+                errors.append(f"{slot}: need 2 PGA + 2 LIV (now {len(pga)}/{len(liv)})")
+
         if errors:
-            messages.error(request, " · ".join(errors))
-        else:
-            # ----- create Gas-Cup game row ----------------------------
+            messages.error(request, " • ".join(errors))
+            return redirect("gascup_team_assign_view")
+
+        # ---------- create rows in one transaction -------------------
+        with transaction.atomic():
             gas_game = Games.objects.create(
-                Type="GasCup",
-                PlayDate=players_qs.first().gDate,
-                CourseTeesID=players_qs.first().CourseID_id,
-                Status="Pending",
-                AssocGame=skins_game_id,
+                CrewID     = 1,
+                CreateDate = timezone.now().date(),
+                PlayDate   = skins_game.PlayDate,
+                CreateID   = skins_game.CreateID,
+                Status     = "Live",
+                Type       = "GasCup",
+                AssocGame  = skins_game.id,
             )
-            # ----- create pairs ---------------------------------------
-            for course_slot, group in itertools.groupby(
-                    players_qs, key=lambda x: x.CourseID.courseTimeSlot):
+
+            for slot, group in itertools.groupby(
+                    players,
+                    key=lambda x: x.TTID.CourseID.courseTimeSlot):
                 group = list(group)
-                pga_ids = [p.PID_id for p in group
-                           if assignments[p.PID_id] == "PGA"]
-                liv_ids = [p.PID_id for p in group
-                           if assignments[p.PID_id] == "LIV"]
-                # sort for deterministic order
+                pga = [p.PID_id for p in group if assignments[p.PID_id] == "PGA"]
+                liv = [p.PID_id for p in group if assignments[p.PID_id] == "LIV"]
+
                 GasCupPair.objects.create(Game=gas_game,
-                                          PID1_id=pga_ids[0], PID2_id=pga_ids[1],
+                                          PID1_id=pga[0], PID2_id=pga[1],
                                           Team="PGA")
                 GasCupPair.objects.create(Game=gas_game,
-                                          PID1_id=liv_ids[0], PID2_id=liv_ids[1],
+                                          PID1_id=liv[0], PID2_id=liv[1],
                                           Team="LIV")
-            messages.success(request, "Gas Cup created!")
-            return redirect("skins_leaderboard_view")
 
-    # ---------- GET: show assignment form -----------------------------
-    context = {"players": players_qs}
-    return render(request, "GRPR/gascup_team_assign.html", context)
+        messages.success(request, "Gas Cup game created!")
+        return redirect("skins_leaderboard_view")
+
+    # ---------- GET: render radio-table form -------------------------
+    return render(request, "GRPR/gascup_team_assign.html", {
+        "players":    players,
+        "skins_game": skins_game,
+        "first_name": request.user.first_name,
+        "last_name":  request.user.last_name,
+    })
+
 
 
 @login_required
