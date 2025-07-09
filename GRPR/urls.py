@@ -118,6 +118,7 @@ urlpatterns = [
 
     ### Gas Cup
     path("gascup/team_assign/", views.gascup_team_assign_view, name="gascup_team_assign_view"),
+    path("gascup/teams/", views.gascup_team_assign_view, name="gascup_team_assign_view"),
 
     ### scorecard work
     path('scorecard/', views.scorecard_view, name='scorecard_view'),

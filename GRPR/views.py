@@ -42,6 +42,20 @@ def custom_round(value):
 
 today = datetime.now().date()
 
+def game_id_for_today():
+    """
+    Return the Skins game-id for **today** (or None if not found).
+    Adjust the Status filter if your codes differ.
+    """
+    today = timezone.localdate()
+    game = (
+        Games.objects
+        .filter(PlayDate=today, Type="Skins")
+        .exclude(Status="Closed")      # keep only active / pending
+        .first()
+    )
+    return game.id if game else None
+
 # for Twilio.  Creates a response to people who reply to outbound text messages
 @csrf_exempt
 def sms_reply(request):
@@ -3723,6 +3737,22 @@ def games_view(request):
 
 @login_required
 def games_choice_view(request):
+    if request.method == "POST":
+        choices = request.POST.getlist("game")            # ['skins','forty','gascup']
+        request.session["want_gascup"] = ("gascup" in choices)
+    
+        # ───── decide whether to jump straight to Gas-Cup teams ─────
+        want_gascup = ("gascup" in choices)
+        want_forty  = ("forty"  in choices)
+        if want_gascup and not want_forty:
+            # the Skins game id should already be in session;
+            # if not, pull it with a small helper
+            if "skins_game_id" not in request.session:
+                request.session["skins_game_id"] = game_id_for_today()
+            return redirect("gascup_team_assign_view")
+        # ────────────────────────────────────────────────────────────
+        # (otherwise fall through and show the choice page again)
+
     # Get today's date
     current_datetime = datetime.now()
 
@@ -5173,6 +5203,21 @@ def forty_config_confirm_view(request):
         min_1st = request.POST.get('min_1st')
         min_18th = request.POST.get('min_18th')
 
+        # ----------- Gas-Cup hand-off (runs *before* render) --------
+        want_gascup = request.session.get("want_gascup", False)   # <-- keep flag
+        if want_gascup:
+            # make sure we store a skins_game_id for the next view
+            if "skins_game_id" not in request.session:
+                from GRPR.models import Games
+                skins = (
+                    Games.objects
+                    .filter(Type="Skins", Status__in=["Tees", "Open"])
+                    .latest("id")
+                )
+                request.session["skins_game_id"] = skins.id
+            return redirect("gascup_team_assign_view")
+        # (else: fall-through to existing Forty confirmation render)
+
         # Recreate group_list from ScorecardMeta for this game
         group_list = []
         if game_id:
@@ -5534,6 +5579,141 @@ def forty_input_scores_view(request):
             return redirect(f"{reverse('scorecard_view')}?game_id={game_id}&group_id={group_id}")
     else:
         return redirect('home')
+    
+
+##########################
+#### Gas Cup Section  ####
+##########################
+
+# ─── helper to pull the next-tee-time golfers (same as skins choose) ──
+def _next_foursomes_players():
+    """
+    Returns a queryset of Players scheduled on the NEXT tee-time date
+    ordered by CourseTimeSlot so we can group them later.
+    """
+    next_tt = (TeeTimesInd.objects
+               .filter(gDate__gte=timezone.localdate())
+               .order_by("gDate")
+               .values_list("gDate", flat=True)
+               .first())
+    return (
+        TeeTimesInd.objects
+        .filter(gDate=next_tt)
+        .select_related("PID", "CourseID")
+        .order_by("CourseID__courseTimeSlot", "PID__LastName")
+    )
+
+# ─── Team-assignment view  ────────────────────────────────────────────
+@login_required
+def gascup_team_assign_view(request):
+    skins_game_id = request.session.get("skins_game_id")
+    if not skins_game_id:
+        return redirect("games_view")        # guard: no Skins first
+    
+    players_qs = _next_foursomes_players()
+
+    if request.method == "POST":
+        # -------------------------------- form submit -----------------
+        assignments = {int(pid): team
+                       for pid, team in request.POST.items() if pid.isdigit()}
+        # simple validation: exactly 2×PGA + 2×LIV in every foursome
+        errors = []
+        for course_slot, group in itertools.groupby(
+                players_qs, key=lambda x: x.CourseID.courseTimeSlot):
+            pga = sum(1 for t in group if assignments.get(t.PID_id) == "PGA")
+            liv = sum(1 for t in group if assignments.get(t.PID_id) == "LIV")
+            if pga != 2 or liv != 2:
+                errors.append(f"{course_slot} needs 2 PGA / 2 LIV")
+        if errors:
+            messages.error(request, " · ".join(errors))
+        else:
+            # ----- create Gas-Cup game row ----------------------------
+            gas_game = Games.objects.create(
+                Type="GasCup",
+                PlayDate=players_qs.first().gDate,
+                CourseTeesID=players_qs.first().CourseID_id,
+                Status="Pending",
+                AssocGame=skins_game_id,
+            )
+            # ----- create pairs ---------------------------------------
+            for course_slot, group in itertools.groupby(
+                    players_qs, key=lambda x: x.CourseID.courseTimeSlot):
+                group = list(group)
+                pga_ids = [p.PID_id for p in group
+                           if assignments[p.PID_id] == "PGA"]
+                liv_ids = [p.PID_id for p in group
+                           if assignments[p.PID_id] == "LIV"]
+                # sort for deterministic order
+                GasCupPair.objects.create(Game=gas_game,
+                                          PID1_id=pga_ids[0], PID2_id=pga_ids[1],
+                                          Team="PGA")
+                GasCupPair.objects.create(Game=gas_game,
+                                          PID1_id=liv_ids[0], PID2_id=liv_ids[1],
+                                          Team="LIV")
+            messages.success(request, "Gas Cup created!")
+            return redirect("skins_leaderboard_view")
+
+    # ---------- GET: show assignment form -----------------------------
+    context = {"players": players_qs}
+    return render(request, "GRPR/gascup_team_assign.html", context)
+
+
+@login_required
+def gascup_team_assign_view(request):
+    """
+    Display two columns (PGA • LIV) of select boxes for all players in the
+    Skins game we’re linking to.  On POST validate 2-per-foursome rule.
+    """
+    skins_id = request.session.get("skins_game_id")
+    if not skins_id:
+        messages.error(request, "Skins game not found – start over.")
+        return redirect("games_view")
+
+    # pull players ordered by CourseTimeSlot so groups stay intact
+    players = (
+        GameInvites.objects.filter(GameID_id=skins_id)
+        .select_related("PID", "TTID__CourseID")
+        .order_by("TTID__CourseID__courseTimeSlot", "PID__LastName")
+    )
+
+    if request.method == "POST":
+        # dict team → list[pid]
+        teams = {"PGA": [], "LIV": []}
+        for pid, team in request.POST.items():
+            if pid.startswith("p_"):
+                teams[team].append(int(pid[2:]))
+
+        # quick validation: every foursome must have exactly 2+2
+        errors = _validate_gascup_teams(players, teams)
+        if errors:
+            for e in errors:
+                messages.error(request, e)
+        else:
+            request.session["gascup_teams"] = teams
+            return redirect("gascup_confirm_view")   # step 2-E
+
+    return render(request, "GRPR/gascup_team_assign.html",
+                  {"players": players})
+
+
+def _validate_gascup_teams(invites, teams):
+    """Return list of error strings (empty == OK)."""
+    by_group = {}
+    for inv in invites:
+        g = inv.TTID_id
+        by_group.setdefault(g, {"PGA": 0, "LIV": 0})
+        if inv.PID_id in teams["PGA"]:
+            by_group[g]["PGA"] += 1
+        elif inv.PID_id in teams["LIV"]:
+            by_group[g]["LIV"] += 1
+
+    errs = []
+    for g, d in by_group.items():
+        if d["PGA"] != 2 or d["LIV"] != 2:
+            errs.append(f"Group {g}: needs 2 + 2 (has {d['PGA']} / {d['LIV']})")
+    return errs
+
+
 
 
 ##########################
