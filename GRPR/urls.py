@@ -116,6 +116,9 @@ urlpatterns = [
     path('forty_confirm_score/', views.forty_confirm_score_view, name='forty_confirm_score_view'),
     path('forty_input_scores/', views.forty_input_scores_view, name='forty_input_scores_view'),
 
+    ### Gas Cup
+    path("gascup/team_assign/", views.gascup_team_assign_view, name="gascup_team_assign_view"),
+
     ### scorecard work
     path('scorecard/', views.scorecard_view, name='scorecard_view'),
     path('hole_select/', views.hole_select_view, name='hole_select_view'),

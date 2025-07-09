@@ -5,7 +5,7 @@
 {% block content %}
 <h1>Game Setup</h1>
 <h3>Play Date: <strong>{{ play_date }}</strong></h3>
-<h4>{{ game_format }}</h4>
+<h4>Handicap Format: <strong>{{ game_format }}</strong></h4>
 <br>
 <h3>Choose Games To Play:</h3>
 <form id="gameChoiceForm" method="post">
@@ -19,7 +19,13 @@
     <div class="form-check">
         <input class="form-check-input" type="checkbox" id="forty" name="forty">
         <label class="form-check-label" for="forty">
-            <h4>Forty (check if you want to play this game)</h4>
+            <h4>Forty</h4>
+        </label>
+    </div>
+    <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="game" value="gascup" id="chkGasCup">
+        <label class="form-check-label" for="chkGasCup">
+            <h4>Gas Cup</h4>
         </label>
     </div>
     <br>

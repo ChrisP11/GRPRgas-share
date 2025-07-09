@@ -1,6 +1,9 @@
 from django.db import models
 from django.contrib.auth.models import User #Built-in Django User model, called to tie to the User model and the Player table
 
+# ▸▸▸  Gas-Cup data models  ◂◂◂
+from django.db.models import UniqueConstraint, Q
+
 # Create your models here.
 class Courses(models.Model):
     crewID = models.IntegerField()
@@ -176,8 +179,7 @@ class Scorecard(models.Model):
         db_table = "Scorecard"
 
 
-### Skins Game Tables
-
+### Games Tables
 class Games(models.Model):
     CreateID = models.ForeignKey('Players', on_delete=models.CASCADE)  # Links to Players table, creator of the game
     CrewID = models.IntegerField()
@@ -280,3 +282,53 @@ class Forty(models.Model):
 
     class Meta:
         db_table = "Forty"
+
+
+class GasCupPair(models.Model):
+    """
+    Two partners that form ONE side in a Gas-Cup match.
+    Exactly three rows per Gas-Cup Game (one per foursome).
+    """
+    TEAM_CHOICES = [("PGA", "PGA"), ("LIV", "LIV")]
+
+    Game   = models.ForeignKey("Games", on_delete=models.CASCADE)
+    PID1   = models.ForeignKey("Players",
+                               related_name="gascup_partner1",
+                               on_delete=models.CASCADE)
+    PID2   = models.ForeignKey("Players",
+                               related_name="gascup_partner2",
+                               on_delete=models.CASCADE)
+    Team   = models.CharField(max_length=3, choices=TEAM_CHOICES)
+
+    class Meta:
+        db_table = "GasCupPair"
+        # prevent same player appearing twice in one pair
+        constraints = [
+            UniqueConstraint("Game", "PID1", name="gascuppair_unique_pid1"),
+            UniqueConstraint("Game", "PID2", name="gascuppair_unique_pid2"),
+            # ensure PID1 < PID2 to avoid duplicate ordering
+            UniqueConstraint("Game", "PID1", "PID2",
+                             condition=Q(PID1__lt=models.F("PID2")),
+                             name="gascuppair_unique_ordered"),
+        ]
+
+    def __str__(self):
+        return f"{self.Game_id}: {self.PID1_id}&{self.PID2_id} ({self.Team})"
+
+
+class GasCupScore(models.Model):
+    """
+    One row = the BEST-BALL net score of a pair on a single hole.
+    Always overwritten when a Scorecard edit occurs → idempotent.
+    """
+    Game      = models.ForeignKey("Games",      on_delete=models.CASCADE)
+    Pair      = models.ForeignKey("GasCupPair", on_delete=models.CASCADE)
+    Hole      = models.ForeignKey("CourseHoles", on_delete=models.CASCADE)
+    NetScore  = models.PositiveSmallIntegerField()
+
+    class Meta:
+        db_table = "GasCupScore"
+        unique_together = ("Pair", "Hole")   # one result per hole
+
+    def __str__(self):
+        return f"{self.Game_id} {self.Pair_id} H{self.Hole_id}: {self.NetScore}"
