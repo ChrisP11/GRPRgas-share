@@ -5,44 +5,57 @@
 {% block content %}
 <h1>Game Setup</h1>
 <h3>Play Date: <strong>{{ play_date }}</strong></h3>
-<h4>Handicap Format: <strong>{{ game_format }}</strong></h4>
+{% if game_format %}
+  <h4>Handicap Format: <strong>{{ game_format }}</strong></h4>
+{% endif %}
 <br>
 <h3>Choose Games To Play:</h3>
-<form id="gameChoiceForm" method="post">
-    {% csrf_token %}
-    <div class="form-check" style="opacity: 0.5; pointer-events: none;">
-        <input class="form-check-input" type="checkbox" id="skins" name="skins" checked disabled>
-        <label class="form-check-label" for="skins">
-            <h4>Skins (already set up)</h4>
-        </label>
-    </div>
-    <div class="form-check">
-        <input class="form-check-input" type="checkbox" id="forty" name="forty">
-        <label class="form-check-label" for="forty">
-            <h4>Forty</h4>
-        </label>
-    </div>
-    <div class="form-check">
-        <input class="form-check-input" type="checkbox" name="game" value="gascup" id="chkGasCup">
-        <label class="form-check-label" for="chkGasCup">
-            <h4>Gas Cup</h4>
-        </label>
-    </div>
-    <br>
-    <div class="d-flex gap-2">
-        <button type="submit" class="btn btn-primary">Next</button>
-    </div>
+
+<form id="gameChoiceForm"
+      method="post"
+      action="{% url 'games_choice_view' %}">
+  {% csrf_token %}
+
+  {# Skins is always in play (already set up) – informational only #}
+  <div class="form-check" style="opacity: 0.5; pointer-events: none;">
+    <input class="form-check-input" type="checkbox" id="skins" checked disabled>
+    <label class="form-check-label" for="skins">
+      <h4>Skins (already set up)</h4>
+    </label>
+  </div>
+
+  {# Forty selectable #}
+  <div class="form-check">
+    <input class="form-check-input"
+           type="checkbox"
+           id="forty"
+           name="game"
+           value="forty">
+    <label class="form-check-label" for="forty">
+      <h4>Forty</h4>
+    </label>
+  </div>
+
+  {# Gas Cup selectable #}
+  <div class="form-check">
+    <input class="form-check-input"
+           type="checkbox"
+           id="chkGasCup"
+           name="game"
+           value="gascup">
+    <label class="form-check-label" for="chkGasCup">
+      <h4>Gas Cup</h4>
+    </label>
+  </div>
+
+  {# If you still need to pass game_format along to Forty, keep this hidden #}
+  {% if game_format %}
+    <input type="hidden" name="game_format" value="{{ game_format }}">
+  {% endif %}
+
+  <br>
+  <div class="d-flex gap-2">
+    <button type="submit" class="btn btn-primary">Next</button>
+  </div>
 </form>
-<script>
-    const gameFormat = "{{ game_format|urlencode }}";
-    document.getElementById('gameChoiceForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        const fortyChecked = document.getElementById('forty').checked;
-        if (fortyChecked) {
-            window.location.href = "{% url 'forty_config_view' %}?game_format=" + gameFormat;
-        } else {
-            window.location.href = "{% url 'skins_leaderboard_view' %}";
-        }
-    });
-</script>
 {% endblock %}

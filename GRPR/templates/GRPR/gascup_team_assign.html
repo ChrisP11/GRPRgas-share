@@ -15,12 +15,14 @@
           <td>{{ inv.PID.FirstName }} {{ inv.PID.LastName }}
               <small class="text-muted">({{ inv.TTID.CourseID.courseTimeSlot }})</small></td>
 
-          {% for team in "PGA,LIV".split(",") %}
-          <td class="text-center">
-             <input type="radio" name="p_{{ inv.PID_id }}" value="{{ team }}"
-                    {% if forloop.first %} required {% endif %}>
-          </td>
-          {% endfor %}
+          {% for team in teams %}
+            <td class="text-center">
+                <input type="radio"
+                    name="p_{{ inv.PID_id }}"
+                    value="{{ team }}"
+                    required>
+            </td>
+            {% endfor %}
         </tr>
       {% endfor %}
     </tbody>

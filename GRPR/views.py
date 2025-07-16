@@ -3737,35 +3737,49 @@ def games_view(request):
 
 @login_required
 def games_choice_view(request):
-    # Let the admin choose which additional games (Forty, Gas Cup) to run
-    # AFTER a Skins game has been created and scorecard meta initiated.
-
-    # We only *record* the choices here.  The actual branching (whether to
-    # jump into Gas Cup team assignment) happens downstream once the user
-    # completes the Forty config step (or skips Forty entirely).
-
     if request.method == "POST":
-        choices = request.POST.getlist("game")      # ['forty','gascup', ...]
-        request.session["want_gascup"] = ("gascup" in choices)
-        # NOTE: we do NOT redirect here; the existing flow returns this
-        # page so the user can proceed to the Forty config link, etc.
-    
-    current_dt = timezone.now()
+        choices = request.POST.getlist("game")  # ['skins','forty','gascup']
+        want_forty  = ("forty"  in choices)
+        want_gascup = ("gascup" in choices)
 
-    next_play_date = (
+        request.session["want_gascup"] = want_gascup
+        request.session.modified = True
+
+        # Decide where to go next:
+        # Always handle Skins already being the "base" game (created earlier).
+        # If they picked Forty, go to Forty config (normal flow).
+        if want_forty:
+            return redirect("forty_config_view")
+        # Else if Gas Cup only (no Forty), jump straight to Gas Cup assignment.
+        if want_gascup:
+            # We expect skins_game_id to be in session (set in skins_config_confirm_view).
+            # If missing, we’ll try to locate a recent Skins game for today; soft fallback.
+            if "skins_game_id" not in request.session:
+                request.session["skins_game_id"] = game_id_for_today()
+                request.session.modified = True
+            return redirect("gascup_team_assign_view")
+
+        # If neither Forty nor Gas Cup selected, just drop to leaderboard (same as “done”)
+        return redirect("skins_leaderboard_view")
+
+    # ---------- GET: show the game choice form ----------
+    current_datetime = datetime.now()
+    next_closest_date = (
         TeeTimesInd.objects
-        .filter(gDate__gte=current_dt)
-        .order_by("gDate")
-        .values_list("gDate", flat=True)
+        .filter(gDate__gte=current_datetime)
+        .order_by('gDate')
+        .values('gDate')
         .first()
     )
+    play_date = next_closest_date['gDate'] if next_closest_date else None
 
     context = {
-        "play_date":  next_play_date,
-        "first_name": request.user.first_name,
-        "last_name":  request.user.last_name,
+        'play_date'  : play_date,
+        'first_name' : request.user.first_name,
+        'last_name'  : request.user.last_name,
     }
-    return render(request, "GRPR/games_choice.html", context)
+    return render(request, 'GRPR/games_choice.html', context)
+
 
 
 ##########################
@@ -5674,48 +5688,10 @@ def gascup_team_assign_view(request):
     return render(request, "GRPR/gascup_team_assign.html", {
         "players":    players,
         "skins_game": skins_game,
+        "teams":      ("PGA", "LIV"), 
         "first_name": request.user.first_name,
         "last_name":  request.user.last_name,
     })
-
-
-
-@login_required
-def gascup_team_assign_view(request):
-    """
-    Display two columns (PGA • LIV) of select boxes for all players in the
-    Skins game we’re linking to.  On POST validate 2-per-foursome rule.
-    """
-    skins_id = request.session.get("skins_game_id")
-    if not skins_id:
-        messages.error(request, "Skins game not found – start over.")
-        return redirect("games_view")
-
-    # pull players ordered by CourseTimeSlot so groups stay intact
-    players = (
-        GameInvites.objects.filter(GameID_id=skins_id)
-        .select_related("PID", "TTID__CourseID")
-        .order_by("TTID__CourseID__courseTimeSlot", "PID__LastName")
-    )
-
-    if request.method == "POST":
-        # dict team → list[pid]
-        teams = {"PGA": [], "LIV": []}
-        for pid, team in request.POST.items():
-            if pid.startswith("p_"):
-                teams[team].append(int(pid[2:]))
-
-        # quick validation: every foursome must have exactly 2+2
-        errors = _validate_gascup_teams(players, teams)
-        if errors:
-            for e in errors:
-                messages.error(request, e)
-        else:
-            request.session["gascup_teams"] = teams
-            return redirect("gascup_confirm_view")   # step 2-E
-
-    return render(request, "GRPR/gascup_team_assign.html",
-                  {"players": players})
 
 
 def _validate_gascup_teams(invites, teams):
