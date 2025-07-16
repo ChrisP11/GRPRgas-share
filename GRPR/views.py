@@ -3738,38 +3738,48 @@ def games_view(request):
 @login_required
 def games_choice_view(request):
     if request.method == "POST":
-        choices = request.POST.getlist("game")            # ['skins','forty','gascup']
-        request.session["want_gascup"] = ("gascup" in choices)
-    
-        # ───── decide whether to jump straight to Gas-Cup teams ─────
-        want_gascup = ("gascup" in choices)
-        want_forty  = ("forty"  in choices)
-        if want_gascup and not want_forty:
-            # the Skins game id should already be in session;
-            # if not, pull it with a small helper
+        # ----------------------------------------------------------------
+        # 1️⃣  Which boxes did the user tick?
+        #     e.g.  ['skins', 'forty', 'gascup']
+        # ----------------------------------------------------------------
+        choices = request.POST.getlist("game")
+        request.session["want_gascup"] = "gascup" in choices
+
+        # ----------------------------------------------------------------
+        # 2️⃣  If they want Gas-Cup **and** they did NOT tick “Forty”,
+        #     jump straight to the team-assignment screen.
+        # ----------------------------------------------------------------
+        if "gascup" in choices and "forty" not in choices:
+            # Ensure we have the Skins-game id in session → needed to
+            # link the Gas-Cup row we’ll create next.
             if "skins_game_id" not in request.session:
                 request.session["skins_game_id"] = game_id_for_today()
             return redirect("gascup_team_assign_view")
-        # ────────────────────────────────────────────────────────────
-        # (otherwise fall through and show the choice page again)
 
-    # Get today's date
-    current_datetime = datetime.now()
+        # otherwise fall through – either they also chose Forty (so the
+        # normal Forty flow continues) or they only picked Skins.
 
-    # Query the next closest future date in the TeeTimesInd table
-    next_closest_date = TeeTimesInd.objects.filter(gDate__gte=current_datetime).order_by('gDate').values('gDate').first()
+    # --------------------------------------------------------------------
+    # GET (or fall-through after POST): just render the page again so the
+    # user sees the choice form.
+    # --------------------------------------------------------------------
+    current_dt = timezone.now()
 
-    if next_closest_date:
-        play_date = next_closest_date['gDate']
-    else:
-        play_date = None
+    next_play_date = (
+        TeeTimesInd.objects
+        .filter(gDate__gte=current_dt)
+        .order_by("gDate")
+        .values_list("gDate", flat=True)
+        .first()
+    )
 
     context = {
-        'play_date': play_date,
-        'first_name': request.user.first_name,
-        'last_name': request.user.last_name,
+        "play_date":  next_play_date,
+        "first_name": request.user.first_name,
+        "last_name":  request.user.last_name,
     }
-    return render(request, 'GRPR/games_choice.html', context)
+    return render(request, "GRPR/games_choice.html", context)
+
 
 ##########################
 #### Skins game views ####
@@ -4207,6 +4217,10 @@ def skins_config_view(request):
         )
         game_id = game.id
 
+        # Remember the Skins game for downstream (Forty, Gas Cup) flows.
+        request.session['skins_game_id'] = game.id
+        request.session.modified = True   # defensive: ensure session is saved
+
         # Bulk insert GameInvites
         game_invites = []
         for group in tee_times:
@@ -4272,6 +4286,7 @@ def skins_config_confirm_view(request):
 
         # Get game info
         game = get_object_or_404(Games, id=game_id)
+        request.session["skins_game_id"] = game.id
         play_date = game.PlayDate
         ct_id = game.CourseTeesID_id
 
@@ -5194,60 +5209,64 @@ def forty_config_view(request):
     return render(request, 'GRPR/forty_config.html', context)
 
 
+
 @login_required
 def forty_config_confirm_view(request):
-    if request.method == "POST":
-        game_id = request.POST.get('game_id')
-        num_scores = request.POST.get('num_scores')
-        game_format = request.POST.get('game_format')
-        min_1st = request.POST.get('min_1st')
-        min_18th = request.POST.get('min_18th')
+    if request.method != "POST":
+        return redirect("forty_config_view")
 
-        # ----------- Gas-Cup hand-off (runs *before* render) --------
-        want_gascup = request.session.get("want_gascup", False)   # <-- keep flag
-        if want_gascup:
-            # make sure we store a skins_game_id for the next view
-            if "skins_game_id" not in request.session:
-                from GRPR.models import Games
-                skins = (
-                    Games.objects
-                    .filter(Type="Skins", Status__in=["Tees", "Open"])
-                    .latest("id")
-                )
-                request.session["skins_game_id"] = skins.id
-            return redirect("gascup_team_assign_view")
-        # (else: fall-through to existing Forty confirmation render)
+    # ------------------------------------------------------------------
+    # pull the form fields we just POSTed
+    # ------------------------------------------------------------------
+    game_id     = request.POST.get("game_id")
+    num_scores  = request.POST.get("num_scores")
+    game_format = request.POST.get("game_format")
+    min_1st     = request.POST.get("min_1st")
+    min_18th    = request.POST.get("min_18th")
 
-        # Recreate group_list from ScorecardMeta for this game
-        group_list = []
-        if game_id:
-            scm_qs = ScorecardMeta.objects.filter(GameID=game_id).select_related('PID')
-            groups = {}
-            for scm in scm_qs:
-                group_id = scm.GroupID
-                last_name = scm.PID.LastName
-                if group_id not in groups:
-                    groups[group_id] = []
-                groups[group_id].append(last_name)
-            group_list = [
-                {'group_id': group_id, 'last_names': sorted(names)}
-                for group_id, names in groups.items()
-            ]
-            group_list.sort(key=lambda g: g['group_id'])
+    # ------------------------------------------------------------------
+    # 1️⃣  Was “Gas Cup” ticked back on games_choice_view?
+    #     (flag lives in session until one of these two confirm views
+    #      consumes it)
+    # ------------------------------------------------------------------
+    want_gascup = request.session.pop("want_gascup", False)
+    if want_gascup:
+        # → we already stored request.session["skins_game_id"]
+        #   inside skins_config_confirm_view, so we can jump straight
+        #   to the team-assignment screen.
+        return redirect("gascup_team_assign_view")
 
-        context = {
-            'group_list': group_list,
-            'num_scores': num_scores,
-            'game_format': game_format,
-            'min_1st': min_1st,
-            'min_18th': min_18th,
-            'game_id': game_id,
-            'first_name': request.user.first_name,
-            'last_name': request.user.last_name,
-        }
-        return render(request, 'GRPR/forty_config_confirm.html', context)
-    else:
-        return redirect('forty_config_view')
+    # ------------------------------------------------------------------
+    # 2️⃣  No Gas-Cup hand-off – continue with the normal Forty summary
+    # ------------------------------------------------------------------
+    group_list = []
+    if game_id:
+        scm_qs = (
+            ScorecardMeta.objects
+            .filter(GameID=game_id)
+            .select_related("PID")
+        )
+        groups = {}
+        for scm in scm_qs:
+            groups.setdefault(scm.GroupID, []).append(scm.PID.LastName)
+
+        group_list = [
+            {"group_id": gid, "last_names": sorted(names)}
+            for gid, names in groups.items()
+        ]
+        group_list.sort(key=lambda g: g["group_id"])
+
+    context = {
+        "group_list":  group_list,
+        "num_scores":  num_scores,
+        "game_format": game_format,
+        "min_1st":     min_1st,
+        "min_18th":    min_18th,
+        "game_id":     game_id,
+        "first_name":  request.user.first_name,
+        "last_name":   request.user.last_name,
+    }
+    return render(request, "GRPR/forty_config_confirm.html", context)
     
 
 @login_required
