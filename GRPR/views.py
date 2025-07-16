@@ -3737,32 +3737,19 @@ def games_view(request):
 
 @login_required
 def games_choice_view(request):
+    # Let the admin choose which additional games (Forty, Gas Cup) to run
+    # AFTER a Skins game has been created and scorecard meta initiated.
+
+    # We only *record* the choices here.  The actual branching (whether to
+    # jump into Gas Cup team assignment) happens downstream once the user
+    # completes the Forty config step (or skips Forty entirely).
+
     if request.method == "POST":
-        # ----------------------------------------------------------------
-        # 1️⃣  Which boxes did the user tick?
-        #     e.g.  ['skins', 'forty', 'gascup']
-        # ----------------------------------------------------------------
-        choices = request.POST.getlist("game")
-        request.session["want_gascup"] = "gascup" in choices
-
-        # ----------------------------------------------------------------
-        # 2️⃣  If they want Gas-Cup **and** they did NOT tick “Forty”,
-        #     jump straight to the team-assignment screen.
-        # ----------------------------------------------------------------
-        if "gascup" in choices and "forty" not in choices:
-            # Ensure we have the Skins-game id in session → needed to
-            # link the Gas-Cup row we’ll create next.
-            if "skins_game_id" not in request.session:
-                request.session["skins_game_id"] = game_id_for_today()
-            return redirect("gascup_team_assign_view")
-
-        # otherwise fall through – either they also chose Forty (so the
-        # normal Forty flow continues) or they only picked Skins.
-
-    # --------------------------------------------------------------------
-    # GET (or fall-through after POST): just render the page again so the
-    # user sees the choice form.
-    # --------------------------------------------------------------------
+        choices = request.POST.getlist("game")      # ['forty','gascup', ...]
+        request.session["want_gascup"] = ("gascup" in choices)
+        # NOTE: we do NOT redirect here; the existing flow returns this
+        # page so the user can proceed to the Forty config link, etc.
+    
     current_dt = timezone.now()
 
     next_play_date = (
@@ -4286,7 +4273,11 @@ def skins_config_confirm_view(request):
 
         # Get game info
         game = get_object_or_404(Games, id=game_id)
+        
+        # --- Gas-Cup linkage: remember this Skins game for downstream flows ---
         request.session["skins_game_id"] = game.id
+        request.session.modified = True   # (optional; forces session save)
+
         play_date = game.PlayDate
         ct_id = game.CourseTeesID_id
 
@@ -5225,20 +5216,20 @@ def forty_config_confirm_view(request):
     min_18th    = request.POST.get("min_18th")
 
     # ------------------------------------------------------------------
-    # 1️⃣  Was “Gas Cup” ticked back on games_choice_view?
-    #     (flag lives in session until one of these two confirm views
-    #      consumes it)
+    # Gas-Cup hand-off: did the user select Gas Cup back in games_choice?
+    # IMPORTANT: use .get() (do NOT pop) so the flag survives downstream
+    # until Gas Cup actually consumes it.
     # ------------------------------------------------------------------
-    want_gascup = request.session.pop("want_gascup", False)
-    if want_gascup:
-        # → we already stored request.session["skins_game_id"]
-        #   inside skins_config_confirm_view, so we can jump straight
-        #   to the team-assignment screen.
-        return redirect("gascup_team_assign_view")
+    if request.session.get("want_gascup"):
+        # We expect skins_game_id to already be stored in session
+        # (set in skins_config_confirm_view).
+        skins_id = request.session.get("skins_game_id")
+        if skins_id:
+            return redirect("gascup_team_assign_view")
+        # If somehow missing, just fall through to render the normal Forty
+        # confirmation; gascup_team_assign_view will guard and redirect later.
+    # ------------------------------------------------------------------
 
-    # ------------------------------------------------------------------
-    # 2️⃣  No Gas-Cup hand-off – continue with the normal Forty summary
-    # ------------------------------------------------------------------
     group_list = []
     if game_id:
         scm_qs = (
@@ -5255,6 +5246,9 @@ def forty_config_confirm_view(request):
             for gid, names in groups.items()
         ]
         group_list.sort(key=lambda g: g["group_id"])
+    
+    print("DEBUG want_gascup =", request.session.get("want_gascup"))
+    print("DEBUG skins_game_id =", request.session.get("skins_game_id"))
 
     context = {
         "group_list":  group_list,
