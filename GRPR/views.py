@@ -24,6 +24,7 @@ from django.urls import reverse_lazy, reverse
 from django.core.mail import send_mail
 from django.core.management import call_command
 from GRPR.utils import get_open_subswap_or_error, check_player_availability, get_tee_time_details
+from GRPR.services import gascup
 from twilio.rest import Client # Import the Twilio client
 from twilio.twiml.messaging_response import MessagingResponse
 from decimal import Decimal
@@ -5174,10 +5175,10 @@ def forty_view(request):
 
 @login_required
 def forty_config_view(request):
-    game_format = request.GET.get('game_format')
     # Find a live Skins game with a future PlayDate
     now = timezone.now().date()
     live_game = Games.objects.filter(Status='Live', Type='Skins', PlayDate__gte=now).order_by('PlayDate').first()
+    game_format = live_game.Format
 
     live_skins_msg = None
     group_list = []
@@ -5202,6 +5203,8 @@ def forty_config_view(request):
         group_list.sort(key=lambda g: g['group_id'])
     else:
         live_skins_msg = "No live Skins game found. Please create one first."
+    
+    print("DEBUG config game_format = ", game_format)
 
     context = {
         'live_skins_msg': live_skins_msg,
@@ -5229,21 +5232,6 @@ def forty_config_confirm_view(request):
     min_1st     = request.POST.get("min_1st")
     min_18th    = request.POST.get("min_18th")
 
-    # ------------------------------------------------------------------
-    # Gas-Cup hand-off: did the user select Gas Cup back in games_choice?
-    # IMPORTANT: use .get() (do NOT pop) so the flag survives downstream
-    # until Gas Cup actually consumes it.
-    # ------------------------------------------------------------------
-    if request.session.get("want_gascup"):
-        # We expect skins_game_id to already be stored in session
-        # (set in skins_config_confirm_view).
-        skins_id = request.session.get("skins_game_id")
-        if skins_id:
-            return redirect("gascup_team_assign_view")
-        # If somehow missing, just fall through to render the normal Forty
-        # confirmation; gascup_team_assign_view will guard and redirect later.
-    # ------------------------------------------------------------------
-
     group_list = []
     if game_id:
         scm_qs = (
@@ -5263,6 +5251,7 @@ def forty_config_confirm_view(request):
     
     print("DEBUG want_gascup =", request.session.get("want_gascup"))
     print("DEBUG skins_game_id =", request.session.get("skins_game_id"))
+    print("DEBUG config confirm game_format = ", game_format)
 
     context = {
         "group_list":  group_list,
@@ -5279,55 +5268,81 @@ def forty_config_confirm_view(request):
 
 @login_required
 def forty_game_creation_view(request):
-    if request.method == "POST":
-        game_id = request.POST.get('game_id')
-        game_format = request.POST.get('game_format')
-        num_scores = request.POST.get('num_scores')
-        min_1st = request.POST.get('min_1st')
-        min_18th = request.POST.get('min_18th')
+    """
+    Final step in Forty setup: create the Forty Game row and (optionally)
+    hand off to Gas Cup team assignment if the user selected Gas Cup back
+    on games_choice_view.
+    """
+    if request.method != "POST":
+        return redirect("forty_config_view")
 
-        # Get logged-in user's player ID
-        logged_in_user = get_object_or_404(Players, user_id=request.user.id)
-        logged_in_user_player_id = logged_in_user.id
+    # ------------------------------------------------------------------
+    # Pull the posted Skins game id + Forty config fields
+    # NOTE: game_id here is the *Skins* game we are associating to.
+    # ------------------------------------------------------------------
+    game_id     = request.POST.get('game_id')          # Skins id!
+    game_format = request.POST.get('game_format')
+    num_scores  = request.POST.get('num_scores')
+    min_1st     = request.POST.get('min_1st')
+    min_18th    = request.POST.get('min_18th')
 
-        # Get PlayDate and CourseTeesID_id from the existing Games row
-        game = get_object_or_404(Games, id=game_id)
-        play_date = game.PlayDate
-        ct_id = game.CourseTeesID_id
+    # Logged-in player (creator)
+    logged_in_user = get_object_or_404(Players, user_id=request.user.id)
+    logged_in_pid  = logged_in_user.id
 
-        # Create new Games row for Forty
-        new_game = Games.objects.create(
-            CreateID_id=logged_in_user_player_id,
-            CrewID=1,
-            CreateDate=now(),
-            PlayDate=play_date,
-            CourseTeesID_id=ct_id,
-            Status='Live',
-            Type='Forty',
-            Format=game_format,
-            NumScores=num_scores,
-            Min1=min_1st,
-            Min18=min_18th,
-            AssocGame = game_id,  # Associate with the Skins game
-        )
-        new_game_id = new_game.id
+    # Skins game info (PlayDate, tees, etc.)
+    skins_game = get_object_or_404(Games, id=game_id)
+    play_date  = skins_game.PlayDate
+    ct_id      = skins_game.CourseTeesID_id
 
-        #Associated current Skins game with Forty game
-        Games.objects.filter(id=game_id).update(AssocGame=new_game_id)
+    # ------------------------------------------------------------------
+    # Create the Forty game row
+    # ------------------------------------------------------------------
+    new_game = Games.objects.create(
+        CreateID_id   = logged_in_pid,
+        CrewID        = 1,
+        CreateDate    = timezone.now(),
+        PlayDate      = play_date,
+        CourseTeesID_id = ct_id,
+        Status        = 'Live',
+        Type          = 'Forty',
+        Format        = game_format,
+        NumScores     = num_scores,
+        Min1          = min_1st,
+        Min18         = min_18th,
+        AssocGame     = game_id,            # link back to Skins
+    )
+    forty_id = new_game.id
 
-        # Insert a row into Log
-        Log.objects.create(
-            SentDate=now(),
-            Type='Forty Creation',
-            RequestDate=play_date,
-            OfferID=logged_in_user_player_id,
-            Msg=f'{logged_in_user.LastName} created a new game of Forty, game id is {new_game_id}'
-        )
+    # Update Skins row to cross-link back to the Forty row
+    Games.objects.filter(id=game_id).update(AssocGame=forty_id)
 
-        # Redirect to skins_leaderboard_view with the game_id
-        return redirect(f"{reverse('skins_leaderboard_view')}?game_id={game_id}")
+    # Log
+    Log.objects.create(
+        SentDate    = timezone.now(),
+        Type        = 'Forty Creation',
+        RequestDate = play_date,
+        OfferID     = logged_in_pid,
+        Msg         = f'{logged_in_user.LastName} created Forty game {forty_id} from Skins {game_id}',
+    )
 
-    return redirect('forty_config_view')
+    # ------------------------------------------------------------------
+    # Gas Cup hand-off?
+    #   We check/consume the flag *here* (final Forty step).
+    #   Ensure we still have the Skins id in session so the GasCup
+    #   team screen knows what to link to.
+    # ------------------------------------------------------------------
+    if request.session.pop("want_gascup", False):
+        if "skins_game_id" not in request.session:
+            request.session["skins_game_id"] = int(game_id)
+            request.session.modified = True
+        return redirect("gascup_team_assign_view")
+
+    # ------------------------------------------------------------------
+    # No Gas Cup → normal redirect back to Skins leaderboard
+    # ------------------------------------------------------------------
+    return redirect(f"{reverse('skins_leaderboard_view')}?game_id={game_id}")
+
 
 
 @login_required
@@ -5862,11 +5877,11 @@ def hole_input_score_view(request):
             # Calculate the NetScore
             net_score = score - stroke
 
-            # Checks to see if the jhole has already had a score saved
+            # Checks to see if the hole has already had a score saved
             # Fetch the ScorecardMeta object for the player
             scm = ScorecardMeta.objects.filter(GameID=game_id, PID=pid).first()
             if not scm:
-                return JsonResponse({'success': False, 'error': 'ScorecardMeta not found for player.'})
+                return JsonResponse({'success': False, 'error': 'ScorecardMeta not found for player, PID = '})
 
             # --- Prevent duplicate Scorecard rows ---
             # Always check for an existing Scorecard row for this player/hole/game
@@ -5899,11 +5914,14 @@ def hole_input_score_view(request):
                 scm.NetTotal += net_score - current_net_score
                 scm.Putts += putts - current_putts
                 scm.save()
+
+                # Updates GasCup scores if exists
+                gascup.update_for_score(existing_scorecard.id)
             # --- End duplicate prevention ---
 
             else:  # Otherwise, no scores have been previously entered for this hole, insert a new row
                 # Insert a new row into the Scorecard table
-                Scorecard.objects.create(
+                new_score = Scorecard.objects.create(
                     CreateDate=timezone.now(),
                     AlterDate=timezone.now(),
                     RawScore=score,
@@ -5928,11 +5946,15 @@ def hole_input_score_view(request):
                 scm.Putts += putts
                 scm.save()
 
+                # Updates GasCup scores if exists
+                gascup.update_for_score(new_score.id)
+
         print('hole_input_score_view - players', players)
         print('hole_input_score_view - hole_id', hole_id)
         print('hole_input_score_view - game_id', game_id)
         print('hole_input_score_view - group_id', group_id)
 
+        #### Skins Section Starts ####
         # Reset the Skins column for all players in the game since this process checks for all skins everywhere
         ScorecardMeta.objects.filter(GameID=game_id).update(Skins=0)
         Skins.objects.filter(GameID=game_id).delete()
@@ -5993,6 +6015,8 @@ def hole_input_score_view(request):
         # Update the Skins column in the ScorecardMeta table
         for player_id, skins in player_skins.items():
             ScorecardMeta.objects.filter(GameID=game_id, PID_id=player_id).update(Skins=skins)
+        
+        #### Skins Section Done ####
 
 
         return JsonResponse({
