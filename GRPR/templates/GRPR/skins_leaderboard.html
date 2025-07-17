@@ -4,6 +4,42 @@
 
 {% block content %}
 <div class="container my-4">
+    
+    {% if gas_matches %}
+    <h2 class="mt-4">Gas Cup</h2>
+    <table class="table table-sm table-bordered text-center align-middle mb-4">
+        <thead class="table-light">
+        <tr>
+            <th>Match</th>
+            <th>Front</th>
+            <th>Back</th>
+            <th>Overall</th>
+            <th>Thru</th>
+            <th>Total Pts</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for m in gas_matches %}
+        <tr>
+            <td>{{ m.label }}</td>
+            <td>{{ m.front }}</td>
+            <td>{{ m.back }}</td>
+            <td>{{ m.overall }}</td>
+            <td>{{ m.thru }}</td>
+            <td>{{ m.total }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+    {% if gas_totals %}
+        <p class="text-center fw-bold mb-4">
+        Aggregate: PGA {{ gas_totals.pga }} – {{ gas_totals.liv }} LIV
+        </p>
+    {% endif %}
+    {% endif %}
+    <br>
+
     {% if forty_game_id is not None %}
     <h2>Forty Leaderboard - {{ play_date }} </h2>
     <table class="table table-bordered mb-4">

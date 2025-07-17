@@ -4864,6 +4864,15 @@ def skins_leaderboard_view(request):
             })
     # -- end forty leaderboard table
 
+    # =================== Gas Cup table ===========================
+    gas_matches = []
+    gas_totals  = None
+    from GRPR.services import gascup
+    gas_game = gascup._get_gascup_game_for_skins(game_id)
+    if gas_game:
+        gas_matches, gas_totals = gascup.summary_for_game(gas_game.id)
+    # =================== End Gas Cup table ===========================
+
     # Get the Status and PlayDate of the game in a single query
     game_data = Games.objects.filter(id=game_id).values('Status', 'PlayDate').first()
     if not game_data:
@@ -4984,6 +4993,8 @@ def skins_leaderboard_view(request):
         "game_status": game_status,
         "play_date": play_date,
         "payout": payout['Payout'] if payout else None,
+        'gas_matches' : gas_matches,
+        'gas_totals'  : gas_totals,
         "first_name": request.user.first_name,
         "last_name": request.user.last_name,
     }
