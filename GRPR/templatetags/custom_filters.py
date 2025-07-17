@@ -18,3 +18,27 @@ def get_item(dictionary, key):
 @register.filter
 def to_json(value):
     return json.dumps(value, cls=DjangoJSONEncoder)
+
+
+# for Gas Cup
+@register.filter
+def dict_get(d, key):
+    """
+    Safe dictionary lookup for templates.
+    Accepts str/int key. Returns '' if not found.
+    """
+    if d is None:
+        return ""
+    # try raw
+    if key in d:
+        return d[key]
+    # try coercions
+    try:
+        ikey = int(key)
+        if ikey in d:
+            return d[ikey]
+    except Exception:
+        pass
+    # try str key
+    skey = str(key)
+    return d.get(skey, "")

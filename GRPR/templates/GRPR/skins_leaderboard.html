@@ -37,7 +37,30 @@
         Aggregate: PGA {{ gas_totals.pga }} – {{ gas_totals.liv }} LIV
         </p>
     {% endif %}
+
+    {% if gas_rosters %}
+    <h5 class="mt-3">Gas Cup Rosters</h5>
+    <table class="table table-sm table-hover w-auto mx-auto text-center align-middle">
+        <thead class="table-secondary">
+        <tr>
+            <th>Match</th>
+            <th>PGA Team</th>
+            <th>LIV Team</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for r in gas_rosters %}
+        <tr>
+            <td>{{ r.label }}</td>
+            <td>{{ r.pga }}</td>
+            <td>{{ r.liv }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
     {% endif %}
+
+{% endif %}
     <br>
 
     {% if forty_game_id is not None %}

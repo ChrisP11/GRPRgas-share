@@ -1,7 +1,16 @@
 {% extends "base.html" %}
+{% load custom_filters %}
 {% block title %}Gas-Cup Teams{% endblock %}
 {% block content %}
 <h3 class="mb-3">Assign Teams – Gas Cup</h3>
+
+{% if messages %}
+  {% for m in messages %}
+    <div class="alert alert-{{ m.tags|default:'info' }} py-1 small">
+      {{ m }}
+    </div>
+  {% endfor %}
+{% endif %}
 
 <form method="post" class="table-responsive">
   {% csrf_token %}
@@ -20,6 +29,7 @@
                 <input type="radio"
                     name="p_{{ inv.PID_id }}"
                     value="{{ team }}"
+                    {% if assignments and assignments|dict_get:inv.PID_id == team %}checked{% endif %}
                     required>
             </td>
             {% endfor %}

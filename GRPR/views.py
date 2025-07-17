@@ -4871,6 +4871,7 @@ def skins_leaderboard_view(request):
     gas_game = gascup._get_gascup_game_for_skins(game_id)
     if gas_game:
         gas_matches, gas_totals = gascup.summary_for_game(gas_game.id)
+        gas_rosters = gascup.rosters_for_game(gas_game.id)
     # =================== End Gas Cup table ===========================
 
     # Get the Status and PlayDate of the game in a single query
@@ -4993,8 +4994,9 @@ def skins_leaderboard_view(request):
         "game_status": game_status,
         "play_date": play_date,
         "payout": payout['Payout'] if payout else None,
-        'gas_matches' : gas_matches,
-        'gas_totals'  : gas_totals,
+        "gas_matches" : gas_matches,
+        "gas_totals"  : gas_totals,
+        "gas_rosters": gas_rosters,
         "first_name": request.user.first_name,
         "last_name": request.user.last_name,
     }
@@ -5643,6 +5645,10 @@ def forty_input_scores_view(request):
 def gascup_team_assign_view(request):
     """
     Show ‘radio table’ version and, on POST, create Gas Cup + GasCupPair rows.
+
+    Supports 4-ball (2 vs 2) and 3-ball (2 vs 1) group compositions.
+    When a side has only one player, PID2 is stored as NULL in GasCupPair,
+    and downstream best-ball logic will just use that one player's score.
     """
     skins_id = request.session.get("skins_game_id")
     skins_game = get_object_or_404(Games, pk=skins_id, Type="Skins")
@@ -5656,30 +5662,27 @@ def gascup_team_assign_view(request):
 
     # ---------- POST: validate radio choices -------------------------
     if request.method == "POST":
-        assignments = {            # pid -> "PGA"/"LIV"
+        # pid -> "PGA"/"LIV"
+        assignments = {
             int(k.split("_", 1)[1]): v
             for k, v in request.POST.items()
             if k.startswith("p_")
         }
 
-        errors = []
-        for pid in [p.PID_id for p in players]:
-            if pid not in assignments:
-                errors.append("Every player must have a team selected.")
-                break
-
-        # 2 vs 2 per foursome
-        for slot, group in itertools.groupby(
-                players, key=lambda x: x.TTID.CourseID.courseTimeSlot):
-            group = list(group)
-            pga = [p.PID_id for p in group if assignments[p.PID_id] == "PGA"]
-            liv = [p.PID_id for p in group if assignments[p.PID_id] == "LIV"]
-            if len(pga) != 2 or len(liv) != 2:
-                errors.append(f"{slot}: need 2 PGA + 2 LIV (now {len(pga)}/{len(liv)})")
-
+        # ----- VALIDATE (allows 4-ball 2/2 OR 3-ball 2/1) --------------
+        errors = _validate_gascup_teams(players, assignments)
         if errors:
-            messages.error(request, " • ".join(errors))
-            return redirect("gascup_team_assign_view")
+            # Re-render with errors and the user's selections preserved
+            for e in errors:
+                messages.error(request, e)
+            return render(request, "GRPR/gascup_team_assign.html", {
+                "players":    players,
+                "skins_game": skins_game,
+                "teams":      ("PGA", "LIV"),
+                "first_name": request.user.first_name,
+                "last_name":  request.user.last_name,
+                "assignments": assignments,   # pass selections back
+            })
 
         # ---------- create rows in one transaction -------------------
         with transaction.atomic():
@@ -5697,15 +5700,25 @@ def gascup_team_assign_view(request):
                     players,
                     key=lambda x: x.TTID.CourseID.courseTimeSlot):
                 group = list(group)
-                pga = [p.PID_id for p in group if assignments[p.PID_id] == "PGA"]
-                liv = [p.PID_id for p in group if assignments[p.PID_id] == "LIV"]
 
-                GasCupPair.objects.create(Game=gas_game,
-                                          PID1_id=pga[0], PID2_id=pga[1],
-                                          Team="PGA")
-                GasCupPair.objects.create(Game=gas_game,
-                                          PID1_id=liv[0], PID2_id=liv[1],
-                                          Team="LIV")
+                pga_ids = sorted([p.PID_id for p in group if assignments[p.PID_id] == "PGA"])
+                liv_ids = sorted([p.PID_id for p in group if assignments[p.PID_id] == "LIV"])
+
+                def _second(lst):
+                    return lst[1] if len(lst) > 1 else None
+
+                GasCupPair.objects.create(
+                    Game=gas_game,
+                    PID1_id=pga_ids[0],
+                    PID2_id=_second(pga_ids),   # None OK for 2-v-1
+                    Team="PGA",
+                )
+                GasCupPair.objects.create(
+                    Game=gas_game,
+                    PID1_id=liv_ids[0],
+                    PID2_id=_second(liv_ids),
+                    Team="LIV",
+                )
 
         messages.success(request, "Gas Cup game created!")
         return redirect("skins_leaderboard_view")
@@ -5720,24 +5733,43 @@ def gascup_team_assign_view(request):
     })
 
 
-def _validate_gascup_teams(invites, teams):
-    """Return list of error strings (empty == OK)."""
-    by_group = {}
+def _validate_gascup_teams(invites, assignments):
+    """
+    Acceptable per-foursome splits:
+      • 4 players -> exactly 2 PGA / 2 LIV
+      • 3 players -> 2/1 or 1/2
+
+    `invites`     queryset of GameInvites (must be ordered but ordering
+                  not required for correctness here).
+    `assignments` dict {pid: "PGA"/"LIV"} parsed from POST.
+
+    Return list of error strings (empty == OK).
+    """
+    by_slot = {}  # slot string -> counts dict
     for inv in invites:
-        g = inv.TTID_id
-        by_group.setdefault(g, {"PGA": 0, "LIV": 0})
-        if inv.PID_id in teams["PGA"]:
-            by_group[g]["PGA"] += 1
-        elif inv.PID_id in teams["LIV"]:
-            by_group[g]["LIV"] += 1
+        slot = inv.TTID.CourseID.courseTimeSlot  # shared tee time label
+        d = by_slot.setdefault(slot, {"size": 0, "PGA": 0, "LIV": 0})
+        d["size"] += 1
+        team = assignments.get(inv.PID_id)
+        if team in ("PGA", "LIV"):
+            d[team] += 1
 
     errs = []
-    for g, d in by_group.items():
-        if d["PGA"] != 2 or d["LIV"] != 2:
-            errs.append(f"Group {g}: needs 2 + 2 (has {d['PGA']} / {d['LIV']})")
+    for slot, d in by_slot.items():
+        size = d["size"]
+        pga  = d["PGA"]
+        liv  = d["LIV"]
+
+        if size == 4:
+            if pga != 2 or liv != 2:
+                errs.append(f"{slot}: need 2 PGA + 2 LIV (now {pga}/{liv})")
+        elif size == 3:
+            if not ((pga == 2 and liv == 1) or (pga == 1 and liv == 2)):
+                errs.append(f"{slot}: for 3-ball use 2/1 split (now {pga}/{liv})")
+        else:
+            errs.append(f"{slot}: unsupported group size ({size})")
+
     return errs
-
-
 
 
 ##########################
@@ -6090,7 +6122,8 @@ def hole_display_view(request):
         if pids:
             status = gascup.status_for_pids(game_id, pids, hole.HoleNumber)
             if status:
-                gas_status = gascup.format_status_human(status)
+                pga_lbl, liv_lbl = gascup.pair_labels_for_pids(game_id, pids)
+                gas_status = gascup.format_status_human_verbose(status, pga_lbl, liv_lbl)
     except Exception as e:
         print("GAS STATUS ERROR (hole_display_view):", e)
         gas_status = None
@@ -6323,27 +6356,26 @@ def scorecard_view(request):
     # ------------------- Gas Cup status (optional) -------------------
     gas_status = None
     try:
-        pids = list(
-            ScorecardMeta.objects
-            .filter(GameID=game_id, GroupID=group_id)
-            .values_list("PID_id", flat=True)
-        )
-        if pids:
-            thru = (
-                Scorecard.objects
-                .filter(GameID=game_id, smID__PID_id__in=pids)
-                .aggregate(Max("HoleID__HoleNumber"))["HoleID__HoleNumber__max"]
-            ) or 0
-            if thru > 0:
+        if group_id:   # only show for 4-person sub-card; too noisy for big card
+            pids = list(
+                ScorecardMeta.objects
+                .filter(GameID=game_id, GroupID=group_id)
+                .values_list("PID_id", flat=True)
+            )
+            if pids:
+                thru = (
+                    Scorecard.objects
+                    .filter(GameID=game_id, smID__PID_id__in=pids)
+                    .aggregate(Max("HoleID__HoleNumber"))["HoleID__HoleNumber__max"]
+                ) or 0
                 status = gascup.status_for_pids(game_id, pids, thru)
                 if status:
-                    gas_status = gascup.format_status_human(status)
+                    pga_lbl, liv_lbl = gascup.pair_labels_for_pids(game_id, pids)
+                    gas_status = gascup.format_status_human_verbose(status, pga_lbl, liv_lbl)
     except Exception as e:
         print("GAS STATUS ERROR (scorecard_view):", e)
         gas_status = None
-
     # ------------------- End Gas Cup status -------------------
-
     
     context = {
         'game_id': game_id,

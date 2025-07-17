@@ -180,6 +180,7 @@ class Scorecard(models.Model):
 
 
 ### Games Tables
+
 class Games(models.Model):
     CreateID = models.ForeignKey('Players', on_delete=models.CASCADE)  # Links to Players table, creator of the game
     CrewID = models.IntegerField()
@@ -297,19 +298,18 @@ class GasCupPair(models.Model):
                                on_delete=models.CASCADE)
     PID2   = models.ForeignKey("Players",
                                related_name="gascup_partner2",
-                               on_delete=models.CASCADE)
+                               on_delete=models.CASCADE,
+                               null=True, blank=True,)  # <-- allow singleton team
     Team   = models.CharField(max_length=3, choices=TEAM_CHOICES)
 
     class Meta:
         db_table = "GasCupPair"
-        # prevent same player appearing twice in one pair
         constraints = [
-            UniqueConstraint("Game", "PID1", name="gascuppair_unique_pid1"),
-            UniqueConstraint("Game", "PID2", name="gascuppair_unique_pid2"),
-            # ensure PID1 < PID2 to avoid duplicate ordering
-            UniqueConstraint("Game", "PID1", "PID2",
-                             condition=Q(PID1__lt=models.F("PID2")),
-                             name="gascuppair_unique_ordered"),
+            models.UniqueConstraint(
+                fields=["Game", "PID1"],
+                name="gascuppair_unique_pid1",
+            ),
+            # NOTE: PID2 & ordered uniqueness removed to allow singleton teams.
         ]
 
     def __str__(self):
