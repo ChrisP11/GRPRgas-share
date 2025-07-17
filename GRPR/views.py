@@ -6068,6 +6068,23 @@ def hole_display_view(request):
     next_hole_id = next_hole.id if next_hole else None
     print('hole_display_view - next_hole_id', next_hole_id)
 
+    # ------------------- Gas Cup status (optional) -------------------
+    gas_status = None
+    try:
+        pids = list(
+            ScorecardMeta.objects
+            .filter(GameID=game_id, GroupID=group_id)
+            .values_list("PID_id", flat=True)
+        )
+        if pids:
+            status = gascup.status_for_pids(game_id, pids, hole.HoleNumber)
+            if status:
+                gas_status = gascup.format_status_human(status)
+    except Exception as e:
+        print("GAS STATUS ERROR (hole_display_view):", e)
+        gas_status = None
+    # ------------------- End Gas Cup status -------------------
+
     context = {
         'hole': hole,
         'player_scores': player_scores,
@@ -6075,6 +6092,7 @@ def hole_display_view(request):
         'forty_game_id': forty_game_id.id if forty_game_id else None,  # Pass the Forty GameID if it exists
         'group_id': group_id, 
         'next_hole_id': next_hole_id,  # Pass the next hole ID to the template
+        'gas_status': gas_status,
     }
     if forty_scores_already_entered:
         context['forty_scores_already_entered'] = forty_scores_already_entered
@@ -6235,7 +6253,7 @@ def scorecard_view(request):
     # print()
     # print('player_scores post meta', player_scores)
 
-        # Fetch skins data
+    # Fetch skins data
     skins = Skins.objects.filter(GameID=game_id).select_related('HoleNumber').values(
         'HoleNumber__HoleNumber', 'PlayerID_id'
     )
@@ -6290,6 +6308,31 @@ def scorecard_view(request):
         player_strokes = {}
     print("")
     print("forty_used_scores:", forty_used_scores)
+
+    # ------------------- Gas Cup status (optional) -------------------
+    gas_status = None
+    try:
+        pids = list(
+            ScorecardMeta.objects
+            .filter(GameID=game_id, GroupID=group_id)
+            .values_list("PID_id", flat=True)
+        )
+        if pids:
+            thru = (
+                Scorecard.objects
+                .filter(GameID=game_id, smID__PID_id__in=pids)
+                .aggregate(Max("HoleID__HoleNumber"))["HoleID__HoleNumber__max"]
+            ) or 0
+            if thru > 0:
+                status = gascup.status_for_pids(game_id, pids, thru)
+                if status:
+                    gas_status = gascup.format_status_human(status)
+    except Exception as e:
+        print("GAS STATUS ERROR (scorecard_view):", e)
+        gas_status = None
+
+    # ------------------- End Gas Cup status -------------------
+
     
     context = {
         'game_id': game_id,
@@ -6301,6 +6344,7 @@ def scorecard_view(request):
         'player_scores': player_scores,  # Pass player scores to the template
         'player_strokes': player_strokes,  # Pass player strokes to the template
         'msg': msg,  # Pass the message
+        'gas_status': gas_status,
         'first_name': request.user.first_name,
         'last_name': request.user.last_name,
     }

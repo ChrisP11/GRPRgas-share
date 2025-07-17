@@ -3,6 +3,13 @@
 {% block title %}Hole Display{% endblock %}
 
 {% block content %}
+
+{% if gas_status %}
+  <div class="alert alert-info py-1 my-2 text-center small">
+    {{ gas_status }}
+  </div>
+{% endif %}
+
 <div class="container my-4">
     <h1>Hole {{ hole.HoleNumber }} - Scores</h1>
     <p>Par: {{ hole.Par }} | Yards: {{ hole.Yardage }} | HDCP: {{ hole.Handicap }}</p>

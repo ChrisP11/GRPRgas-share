@@ -11,6 +11,12 @@
     </div>
 {% endif %}
 
+{% if gas_status %}
+  <div class="alert alert-info py-1 my-3 text-center small">
+    {{ gas_status }}
+  </div>
+{% endif %}
+
 <div class="container my-4">
     <!-- Dynamic Heading -->
     <h1 id="scorecard-heading"></h1>
