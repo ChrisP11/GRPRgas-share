@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load custom_filters %}
 {% block title %}Gas-Cup Teams{% endblock %}
+
 {% block content %}
 <h3 class="mb-3">Assign Teams – Gas Cup</h3>
 
@@ -14,29 +15,51 @@
 
 <form method="post" class="table-responsive">
   {% csrf_token %}
-  <table class="table table-sm align-middle">
-    <thead class="table-light">
-      <tr><th>Player</th><th class="text-center">PGA</th><th class="text-center">LIV</th></tr>
-    </thead>
-    <tbody>
-      {% for inv in players %}
-        <tr>
-          <td>{{ inv.PID.FirstName }} {{ inv.PID.LastName }}
-              <small class="text-muted">({{ inv.TTID.CourseID.courseTimeSlot }})</small></td>
 
-          {% for team in teams %}
-            <td class="text-center">
-                <input type="radio"
-                    name="p_{{ inv.PID_id }}"
-                    value="{{ team }}"
-                    {% if assignments and assignments|dict_get:inv.PID_id == team %}checked{% endif %}
-                    required>
-            </td>
-            {% endfor %}
+  {# ── regroup players by tee-time slot ─────────────────────────── #}
+  {% regroup players by TTID.CourseID.courseTimeSlot as groups %}
+
+  <table class="table table-sm align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>Player</th>
+          <th class="text-center">PGA</th>
+          <th class="text-center">LIV</th>
         </tr>
+      </thead>
+
+      {% for g in groups %}
+        {# group header ------------------------------------------------ #}
+        <tbody>
+          <tr class="table-secondary fw-bold">
+            <td colspan="3" class="text-center">
+              {{ g.grouper }} tee-time
+            </td>
+          </tr>
+
+          {# player rows ------------------------------------------------ #}
+          {% for inv in g.list %}
+            <tr class="group-row">
+              <td>
+                {{ inv.PID.FirstName }} {{ inv.PID.LastName }}
+                <small class="text-muted">({{ g.grouper }})</small>
+              </td>
+
+              {% for team in teams %}
+                <td class="text-center">
+                  <input type="radio"
+                         name="p_{{ inv.PID_id }}"
+                         value="{{ team }}"
+                         {% if assignments and assignments|dict_get:inv.PID_id == team %}checked{% endif %}
+                         required>
+                </td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
       {% endfor %}
-    </tbody>
   </table>
+
   <button class="btn btn-primary">Continue</button>
   <a href="{% url 'games_view' %}" class="btn btn-secondary">Cancel</a>
 </form>
