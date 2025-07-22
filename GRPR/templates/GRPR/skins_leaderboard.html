@@ -66,7 +66,12 @@
             <td>{{ m.back }}</td>
             <td>{{ m.overall }}</td>
             <td>{{ m.thru }}</td>
-            <td>{{ m.total }}</td>
+            <td>
+            {{ m.total }}
+            {% if m.note %}
+                <br><small class="text-muted">{{ m.note }}</small>
+            {% endif %}
+            </td>
         </tr>
         {% endfor %}
         </tbody>

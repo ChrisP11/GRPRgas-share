@@ -625,7 +625,7 @@ def summary_for_game(gas_game_id: int):
       Back   counts after thru >= 18
       Overall counts after thru >= 18
     """
-    from GRPR.models import GasCupPair, GameInvites
+    from GRPR.models import GasCupPair, GameInvites, GasCupOverride
 
     # Pull all pairs for this Gas Cup game.
     pairs = (
@@ -659,7 +659,11 @@ def summary_for_game(gas_game_id: int):
             continue
         matches.setdefault(slot, {})[p.Team] = p
 
-    # Totals accumulators
+    # -------- load any manual overrides for this Gas‑Cup --------
+    overrides_qs = GasCupOverride.objects.filter(Game_id=gas_game_id)
+    overrides    = {ov.Slot: ov for ov in overrides_qs}
+
+    # running totals
     pga_total_pts = Decimal("0")
     liv_total_pts = Decimal("0")
 
@@ -667,6 +671,23 @@ def summary_for_game(gas_game_id: int):
 
     # stable sort by timeslot string
     for slot in sorted(matches.keys()):
+        # ------------ manual override? ---------------
+        if slot in overrides:
+            ov = overrides[slot]
+            # NB: assume organiser set text exactly as desired
+            rows_out.append({
+                "label":   slot,
+                "front":   ov.Front_txt or "—",
+                "back":    ov.Back_txt  or "—",
+                "overall": ov.Overall_txt or "—",
+                "thru":    18,                    # treat as complete
+                "total":   _format_total_pts(ov.PGA_pts, ov.LIV_pts),
+                "note":    ov.Note,            
+            })
+            pga_total_pts += ov.PGA_pts
+            liv_total_pts += ov.LIV_pts
+            continue      # skip auto‑calc for this foursome
+        # ------------ standard auto scoring -----------
         match_pairs = matches[slot]
         pga_pair = match_pairs.get("PGA")
         liv_pair = match_pairs.get("LIV")

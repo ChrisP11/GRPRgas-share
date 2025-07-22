@@ -3,6 +3,7 @@ from django.contrib.auth.models import User #Built-in Django User model, called 
 
 # ▸▸▸  Gas-Cup data models  ◂◂◂
 from django.db.models import UniqueConstraint, Q
+from decimal import Decimal
 
 # Create your models here.
 class Courses(models.Model):
@@ -332,3 +333,30 @@ class GasCupScore(models.Model):
 
     def __str__(self):
         return f"{self.Game_id} {self.Pair_id} H{self.Hole_id}: {self.NetScore}"
+
+
+class GasCupOverride(models.Model):
+    """
+    Manual override for a single Gas‑Cup match (one tee‑time slot).
+
+    • Front/Back/Overall text fields replace the strings shown in the
+      leaderboard row. (Leave blank to default to “All Square”.)
+    • PGA_pts / LIV_pts are **the exact points to award** once the
+      override is in effect (use Decimal so .5 works cleanly).
+    • Slot must match the courseTimeSlot string in GameInvites.
+    """
+    Game        = models.ForeignKey("Games", on_delete=models.CASCADE)   # the Gas‑Cup game
+    Slot        = models.CharField(max_length=16)                        # e.g. "9:00"
+    PGA_pts     = models.DecimalField(max_digits=3, decimal_places=1, default=Decimal("0"))
+    LIV_pts     = models.DecimalField(max_digits=3, decimal_places=1, default=Decimal("0"))
+    Front_txt   = models.CharField(max_length=32, blank=True, null=True)
+    Back_txt    = models.CharField(max_length=32, blank=True, null=True)
+    Overall_txt = models.CharField(max_length=32, blank=True, null=True)
+    Note        = models.CharField(max_length=128, blank=True, null=True)
+
+    class Meta:
+        db_table = "GasCupOverride"
+        unique_together = ("Game", "Slot")
+
+    def __str__(self):
+        return f"{self.Game_id} • {self.Slot} override"
