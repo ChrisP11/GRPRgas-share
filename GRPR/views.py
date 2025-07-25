@@ -3458,9 +3458,14 @@ TODAY       = timezone.now().date()
 def _top10_gross_member():
     rows = (
         ScorecardMeta.objects
-        .filter(PlayDate__gte=YEAR_START, PID__Member=1)
+        .filter(PlayDate__gte=YEAR_START,
+                PID__Member=1,
+                RawTotal__isnull=False)               # ignore missing totals
+        .annotate(hole_count=Count('scorecard'))       # reverse FK: Scorecard.smID
+        .filter(hole_count__gte=18)                   # only full rounds
         .values("PID_id", "PID__FirstName", "PID__LastName", "PlayDate", "RawTotal")
         .order_by("RawTotal")
+        
     )
 
     best = {}
@@ -3479,7 +3484,10 @@ def _top10_gross_member():
 def _top10_net():
     rows = (
         ScorecardMeta.objects
-        .filter(PlayDate__gte=YEAR_START)
+        .filter(PlayDate__gte=YEAR_START,
+                NetTotal__isnull=False)
+        .annotate(hole_count=Count('scorecard'))
+        .filter(hole_count__gte=18)
         .values("PID_id", "PID__FirstName", "PID__LastName", "PlayDate", "NetTotal")
         .order_by("NetTotal")
     )
