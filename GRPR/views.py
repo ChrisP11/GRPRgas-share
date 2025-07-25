@@ -3458,50 +3458,43 @@ TODAY       = timezone.now().date()
 def _top10_gross_member():
     rows = (
         ScorecardMeta.objects
-        .filter(PlayDate__gte=YEAR_START,
-                PID__Member=1,
-                RawTotal__isnull=False)               # ignore missing totals
-        .annotate(hole_count=Count('scorecard'))       # reverse FK: Scorecard.smID
-        .filter(hole_count__gte=18)                   # only full rounds
-        .values("PID_id", "PID__FirstName", "PID__LastName", "PlayDate", "RawTotal")
-        .order_by("RawTotal")
-        
+        .filter(
+            PlayDate__gte=YEAR_START,
+            PID__Member=1,
+            RawTotal__isnull=False,
+        )
+        .annotate(hole_count=Count("scorecard"))
+        .filter(hole_count__gte=18)
+        .order_by("RawTotal", "-PlayDate")
+        .values("PID__FirstName", "PID__LastName", "PlayDate", "RawTotal")[:10]
     )
-
-    best = {}
-    for r in rows:
-        pid = r["PID_id"]
-        if pid not in best:                          # first row is the lowest
-            best[pid] = {
-                "name": f"{r['PID__FirstName']} {r['PID__LastName']}",
-                "value": r["RawTotal"],
-                "date":  r["PlayDate"],
-            }
-    return sorted(best.values(), key=lambda x: x["value"])[:10]
+    return [
+        {"name": f"{r['PID__FirstName']} {r['PID__LastName']}",
+         "value": r["RawTotal"],
+         "date":  r["PlayDate"]}
+        for r in rows
+    ]
 
 
 # ----------  net  (best net score + date) ----------------------
 def _top10_net():
     rows = (
         ScorecardMeta.objects
-        .filter(PlayDate__gte=YEAR_START,
-                NetTotal__isnull=False)
-        .annotate(hole_count=Count('scorecard'))
+        .filter(
+            PlayDate__gte=YEAR_START,
+            NetTotal__isnull=False,
+        )
+        .annotate(hole_count=Count("scorecard"))
         .filter(hole_count__gte=18)
-        .values("PID_id", "PID__FirstName", "PID__LastName", "PlayDate", "NetTotal")
-        .order_by("NetTotal")
+        .order_by("NetTotal", "-PlayDate")
+        .values("PID__FirstName", "PID__LastName", "PlayDate", "NetTotal")[:10]
     )
-
-    best = {}
-    for r in rows:
-        pid = r["PID_id"]
-        if pid not in best:
-            best[pid] = {
-                "name": f"{r['PID__FirstName']} {r['PID__LastName']}",
-                "value": r["NetTotal"],
-                "date":  r["PlayDate"],
-            }
-    return sorted(best.values(), key=lambda x: x["value"])[:10]
+    return [
+        {"name": f"{r['PID__FirstName']} {r['PID__LastName']}",
+         "value": r["NetTotal"],
+         "date":  r["PlayDate"]}
+        for r in rows
+    ]
 
 
 # ----------  skins_one  (max skins in one round + date) --------
