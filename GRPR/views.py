@@ -16,6 +16,7 @@ from django.contrib.auth.views import LoginView # added for secure login page cr
 from django.contrib.auth.views import PasswordChangeView
 from .forms import CustomPasswordChangeForm
 from django.views.decorators.csrf import csrf_exempt # added to allow Twilio to send messages
+from django.views.decorators.http import require_POST # added for Gas Cup toggling
 from django.template.loader import render_to_string  # used on hole_input_score_view
 from django.db.models import Q, Count, F, Func, Subquery, OuterRef, Max, Min, IntegerField, ExpressionWrapper, Sum
 from django.db.models.functions import Cast
@@ -23,7 +24,7 @@ from django.db import transaction, connection
 from django.urls import reverse_lazy, reverse
 from django.core.mail import send_mail
 from django.core.management import call_command
-from GRPR.utils import get_open_subswap_or_error, check_player_availability, get_tee_time_details
+from GRPR.utils import get_open_subswap_or_error, check_player_availability, get_tee_time_details, parse_date_any, get_toggles
 from GRPR.services import gascup
 from twilio.rest import Client # Import the Twilio client
 from twilio.twiml.messaging_response import MessagingResponse
@@ -216,6 +217,9 @@ def admin_view(request):
     if request.user.username not in ['cprouty', 'Christopher_Coogan@rush.edu']:
         return redirect('home_page')  # Redirect to home if unauthorized
     
+    #checks to see if Gas Cup is enabled for users to pick, possibly other games in the future
+    toggles = get_toggles()
+    
     # Fetch user activity
     users = User.objects.all().values('username', 'date_joined', 'last_login').order_by('-last_login')
     login_activities = LoginActivity.objects.values('user__username').annotate(login_count=Count('id'))
@@ -240,10 +244,23 @@ def admin_view(request):
     
     context = {
         'users': users,
+        "gascup_enabled": toggles.gascup_enabled,
         'login_activities': login_activities,
         'responses': responses,
     }
     return render(request, 'admin_view.html', context)
+
+# added for Gas Cup toggling
+@login_required
+@require_POST
+def toggle_gascup_view(request):
+    toggles = get_toggles()
+    # checkbox posts only when checked; treat absence as False
+    new_value = request.POST.get('gascup_enabled') == 'on'
+    if toggles.gascup_enabled != new_value:
+        toggles.gascup_enabled = new_value
+        toggles.save()
+    return redirect('admin_page')
 
 
 # automated msg admin page - aka Coogan's Corner
@@ -3761,10 +3778,19 @@ def games_view(request):
 @login_required
 def games_choice_view(request):
     if request.method == "POST":
+        # ADDED: read the toggle and enforce on POST
+        toggles = get_toggles()
+
         choices = request.POST.getlist("game")  # ['skins','forty','gascup']
+
+        # ADDED: server-side defense — strip Gas Cup if disabled
+        if not toggles.gascup_enabled and "gascup" in choices:
+            choices = [c for c in choices if c != "gascup"]
+
         want_forty  = ("forty"  in choices)
         want_gascup = ("gascup" in choices)
 
+        # ADDED: ensure session reflects enforced value (no stale True)
         request.session["want_gascup"] = want_gascup
         request.session.modified = True
 
@@ -3773,6 +3799,7 @@ def games_choice_view(request):
         # If they picked Forty, go to Forty config (normal flow).
         if want_forty:
             return redirect("forty_config_view")
+
         # Else if Gas Cup only (no Forty), jump straight to Gas Cup assignment.
         if want_gascup:
             # We expect skins_game_id to be in session (set in skins_config_confirm_view).
@@ -3796,12 +3823,17 @@ def games_choice_view(request):
     )
     play_date = next_closest_date['gDate'] if next_closest_date else None
 
+    # get the flag to determine if Gas Cup is available
+    toggles = get_toggles()
+
     context = {
         'play_date'  : play_date,
+        "gascup_enabled": toggles.gascup_enabled,
         'first_name' : request.user.first_name,
         'last_name'  : request.user.last_name,
     }
     return render(request, 'GRPR/games_choice.html', context)
+
 
 
 
@@ -3959,7 +3991,6 @@ def skins_view(request):
     game_status = game.Status if game else None
     game_id = game.id if game else None
 
-
     context = {
         'first_name': user.first_name,
         'last_name': user.last_name,
@@ -4106,12 +4137,14 @@ def skins_add_player_view(request):
     if request.method == 'POST':
         playing_date = request.POST.get('playing_date')
         # Convert to date object if not already in YYYY-MM-DD
-        try:
-            # Try parsing as YYYY-MM-DD first
-            playing_date_obj = datetime.strptime(playing_date, "%Y-%m-%d").date()
-        except ValueError:
-            # If that fails, try parsing as "Month D, YYYY"
-            playing_date_obj = datetime.strptime(playing_date, "%B %d, %Y").date()
+        # try:
+        #     # Try parsing as YYYY-MM-DD first
+        #     playing_date_obj = datetime.strptime(playing_date, "%Y-%m-%d").date()
+        # except ValueError:
+        #     # If that fails, try parsing as "Month D, YYYY"
+        #     playing_date_obj = datetime.strptime(playing_date, "%B %d, %Y").date()
+        playing_date_obj = parse_date_any(playing_date)
+
         tee_times = json.loads(request.POST.get('tee_times_json'))
         number_of_players = int(request.POST.get('number_of_players'))
         first_name = request.POST.get('first_name')
@@ -4208,11 +4241,19 @@ def skins_config_view(request):
         logged_in_player = Players.objects.get(user_id=user.id)
         logged_in_player_id = logged_in_player.id
 
+        print()
+        print('ymd', playing_date)
+        print()
+
         # Convert playing_date to YYYY-MM-DD
-        try:
-            playing_date_ymd = datetime.strptime(playing_date, "%Y-%m-%d").date()
-        except ValueError:
-            playing_date_ymd = datetime.strptime(playing_date, "%B %d, %Y").date()
+        # try:
+        #     playing_date_ymd = datetime.strptime(playing_date, "%Y-%m-%d").date()
+        # except ValueError:
+        #     playing_date_ymd = datetime.strptime(playing_date, "%B %d, %Y").date()
+
+        playing_date_ymd = parse_date_any(playing_date)
+
+        print('ymd', playing_date_ymd )
 
         # Hard code ct_id for now
         ct_id = 1  # TODO: Make dynamic in future
@@ -4850,10 +4891,14 @@ def skins_initiate_scorecard_meta_view(request):
 
         request.session['game_id'] = game_id
 
+        # get flag for Gas Cup enablement
+        toggles = get_toggles()
+
         context = {
         'game_id': game_id,
         'play_date': play_date,
         'game_format': game_format,
+        'gascup_enabled': toggles.gascup_enabled,
         'first_name': request.user.first_name,
         'last_name': request.user.last_name,
     }
@@ -4899,11 +4944,17 @@ def skins_leaderboard_view(request):
     # =================== Gas Cup table ===========================
     gas_matches = []
     gas_totals  = None
-    from GRPR.services import gascup
-    gas_game = gascup._get_gascup_game_for_skins(game_id)
-    if gas_game:
-        gas_matches, gas_totals = gascup.summary_for_game(gas_game.id)
-        gas_rosters = gascup.rosters_for_game(gas_game.id)
+    gas_rosters = None
+
+    toggles = get_toggles()
+    want_gascup = request.session.get("want_gascup", False)
+
+    if toggles.gascup_enabled and want_gascup:
+        from GRPR.services import gascup
+        gas_game = gascup._get_gascup_game_for_skins(game_id)
+        if gas_game:
+            gas_matches, gas_totals = gascup.summary_for_game(gas_game.id)
+            gas_rosters = gascup.rosters_for_game(gas_game.id)
     # =================== End Gas Cup table ===========================
 
     # Get the Status and PlayDate of the game in a single query

@@ -37,6 +37,7 @@
   </div>
 
   {# Gas Cup selectable #}
+  {% if gascup_enabled %}
   <div class="form-check">
     <input class="form-check-input"
            type="checkbox"
@@ -47,6 +48,7 @@
       <h4>Gas Cup</h4>
     </label>
   </div>
+  {% endif %}
 
   {# If you still need to pass game_format along to Forty, keep this hidden #}
   {% if game_format %}

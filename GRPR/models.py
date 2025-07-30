@@ -360,3 +360,13 @@ class GasCupOverride(models.Model):
 
     def __str__(self):
         return f"{self.Game_id} • {self.Slot} override"
+
+
+class GameToggles(models.Model):
+    # keep this as a single-row table; we’ll always get_or_create(pk=1)
+    id = models.SmallAutoField(primary_key=True)
+    gascup_enabled = models.BooleanField(default=False)  # off post-season
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"GameToggles(gascup_enabled={self.gascup_enabled})"
