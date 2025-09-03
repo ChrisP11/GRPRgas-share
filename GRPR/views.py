@@ -17,7 +17,7 @@ from django.contrib.auth.views import LoginView # added for secure login page cr
 from django.contrib.auth.views import PasswordChangeView
 from .forms import CustomPasswordChangeForm
 from django.views.decorators.csrf import csrf_exempt # added to allow Twilio to send messages
-from django.views.decorators.http import require_POST # added for Gas Cup toggling
+from django.views.decorators.http import require_POST, require_http_methods # added for Gas Cup toggling & new game setup workflow
 from django.template.loader import render_to_string  # used on hole_input_score_view
 from django.db.models import Q, Count, F, Func, Subquery, OuterRef, Max, Min, IntegerField, ExpressionWrapper, Sum
 from django.db.models.functions import Cast
@@ -40,35 +40,26 @@ from typing import Optional
 
 # --- helper: normalize user-entered tee time strings to "H:MM" not sure this is needed long term---
 _TIME_RE = re.compile(r'^\s*(\d{1,2})(?::?(\d{2}))?\s*(am|pm)?\s*$', re.I)
-_DIGITS_RE = re.compile(r'\D+')
 
 def _normalize_teetime_label(raw: str) -> Optional[str]:
     """
-    Accepts inputs like '9', '900', '9:00', '9am', '9:15', '0915', '9:15am'.
-    Returns canonical 'H:MM' (no leading zero on hour). We *don’t* convert am/pm
-    to 24h since your stored slots are typically morning 12-hour like '9:00'.
+    '900'  -> '9:00'
+    '9:00' -> '9:00'
+    '900am'/'9:00 AM' -> '9:00'
+    '12', '12pm'-> '12:00', '12am'-> '12:00' (we’re not storing am/pm; label only)
+    Returns None if it can't parse.
     """
-    s = (raw or "").strip().lower()
-    if not s:
+    if not raw:
         return None
-
-    m = _TIME_RE.match(s)
+    m = _TIME_RE.match(raw)
     if not m:
-        # try the "900" or "0915" style
-        digits = _DIGITS_RE.sub("", s)
-        if len(digits) in (3, 4):
-            hh = int(digits[:-2])
-            mm = int(digits[-2:])
-            if 1 <= hh <= 23 and 0 <= mm < 60:
-                return f"{hh}:{mm:02d}"
         return None
-
-    hh = int(m.group(1))
-    mm = int(m.group(2) or 0)
-    # ignore am/pm for storage; golf times are morning in your data model
-    if not (1 <= hh <= 23 and 0 <= mm < 60):
+    hour = int(m.group(1))
+    minute = int(m.group(2) or 0)
+    # We ignore am/pm in the label because your DB uses strings like '8:04'
+    if not (1 <= hour <= 12) or not (0 <= minute < 60):
         return None
-    return f"{hh}:{mm:02d}"
+    return f"{hour}:{minute:02d}"
 
 
 # Function to round numbers to the nearest integer
@@ -4281,12 +4272,6 @@ def skins_config_view(request):
         print('ymd', playing_date)
         print()
 
-        # Convert playing_date to YYYY-MM-DD
-        # try:
-        #     playing_date_ymd = datetime.strptime(playing_date, "%Y-%m-%d").date()
-        # except ValueError:
-        #     playing_date_ymd = datetime.strptime(playing_date, "%B %d, %Y").date()
-
         playing_date_ymd = parse_date_any(playing_date)
 
         print('ymd', playing_date_ymd )
@@ -4294,7 +4279,7 @@ def skins_config_view(request):
         # Hard code ct_id for now
         ct_id = 1  # TODO: Make dynamic in future
 
-                # --- Prevent duplicate game creation ---
+        # --- Prevent duplicate game creation ---
         existing_game = Games.objects.filter(
             CrewID=1,
             PlayDate=playing_date_ymd,
@@ -5755,6 +5740,131 @@ def forty_input_scores_view(request):
         return redirect('home')
     
 
+def _draft_for_user_or_redirect(request, need_date=True, need_course=True, need_assignments=True):
+    """
+    Fetch the most recent in-progress draft for the logged-in user.
+    Optionally enforce that certain prior steps are completed.
+    """
+    draft = (GameSetupDraft.objects
+             .filter(created_by=request.user, is_complete=False)
+             .order_by("-updated_at", "-created_at")
+             .first())
+    if not draft:
+        return None, redirect("game_setup_date")
+    if need_date and not draft.event_date:
+        return None, redirect("game_setup_date")
+    if need_course and not draft.course_id:
+        return None, redirect("game_setup_course")
+
+    # assignments/players chosen on previous steps
+    state = draft.state or {}
+    if need_assignments and not state.get("assignments"):
+        # if you split groups selection & assignment into two views,
+        # redirect to assignment view; otherwise redirect to groups view
+        return None, redirect("game_setup_assign")
+
+    return draft, None
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def game_setup_config_view(request):
+    """
+    Step 5/6: General configuration (tees & handicap mode).
+    - Shows a summary of chosen date, course, tee times, and assigned players.
+    - Lets the user pick a tee set for the game and a handicap mode.
+    - Saves choices back into GameSetupDraft.state (and tee_choice field).
+    - Does not create Games / GameInvites (that will happen on the final step).
+    """
+    draft, redir = _draft_for_user_or_redirect(request, need_date=True, need_course=True, need_assignments=True)
+    if redir:
+        return redir
+
+    # Resolve course & tee options
+    course = Courses.objects.filter(id=draft.course_id).only("id", "courseName").first()
+    tee_options = list(CourseTees.objects.filter(CourseID=draft.course_id).order_by("TeeID"))
+
+    # Pull assignment summary from draft.state
+    state = draft.state or {}
+    assignments = state.get("assignments") or {}   # {"9:04": [pid, pid, ...], ...}
+    player_ids = {pid for plist in assignments.values() for pid in plist}
+    players = {p.id: p for p in Players.objects.filter(id__in=player_ids).only("id", "FirstName", "LastName")}
+    num_players = len(player_ids)
+
+    # Also allow arriving here directly after POST from the prior page (if you posted JSON forward)
+    if request.method == "POST" and request.POST.get("carry_forward_json"):
+        try:
+            forwarded = json.loads(request.POST.get("carry_forward_json") or "{}")
+            if "assignments" in forwarded:
+                state["assignments"] = forwarded["assignments"]
+                assignments = forwarded["assignments"]
+                draft.state = state
+                draft.save(update_fields=["state", "updated_at"])
+                # refresh players set
+                player_ids = {pid for plist in assignments.values() for pid in plist}
+                players = {p.id: p for p in Players.objects.filter(id__in=player_ids).only("id", "FirstName", "LastName")}
+                num_players = len(player_ids)
+        except Exception:
+            # Ignore; the draft already has assignments.
+            pass
+
+    # Handle configuration submit (tee + handicap)
+    if request.method == "POST" and request.POST.get("action") == "save_config":
+        tee_id_raw = (request.POST.get("tee_id") or "").strip()
+        hc_mode    = (request.POST.get("handicap_mode") or "Low").strip()  # "Low" or "Full" (adapt to your choices)
+
+        # Validate tee choice if provided
+        chosen_tee = None
+        if tee_id_raw.isdigit():
+            chosen_tee = CourseTees.objects.filter(CourseID=draft.course_id, id=int(tee_id_raw)).first()
+
+        if not chosen_tee:
+            messages.warning(request, "Please choose a tee set.")
+        else:
+            # Persist to draft
+            state["handicap_mode"] = hc_mode
+            state["tee_id"] = chosen_tee.id
+            state["tee_label"] = getattr(chosen_tee, "Tee", None) or getattr(chosen_tee, "tee", None) or "Tee"
+            draft.state = state
+            draft.tee_choice = state["tee_label"]
+            draft.save(update_fields=["state", "tee_choice", "updated_at"])
+
+            messages.success(request, "Configuration saved.")
+            # NEXT: send to the “Games selection” step (or summary/confirm page).
+            return redirect("games_view")  # replace with your next step when ready
+
+    # Build a UI-friendly summary structure (like the old skins_config)
+    # tee_times_for_display = [{"label": "9:04", "players": [{"id":..., "name":...}, ...]}, ...]
+    tee_times_for_display = []
+    for tt in sorted(assignments.keys()):
+        plist = []
+        for pid in assignments.get(tt, []):
+            p = players.get(pid)
+            if p:
+                plist.append({"id": pid, "name": f"{p.FirstName} {p.LastName}"})
+        tee_times_for_display.append({"label": tt, "players": plist})
+
+    context = {
+        "first_name": request.user.first_name,
+        "last_name":  request.user.last_name,
+        "playing_date": draft.event_date,              # template can format
+        "number_of_players": num_players,
+        "course_name": course.courseName if course else "—",
+        "tee_options": tee_options,                    # iterate and show Tee / TeeID
+        "tee_times": tee_times_for_display,            # list of groups+players to show
+        # progress / UX
+        "progress": {
+            "current": 5, "total": 6,
+            "labels": ["date", "course", "players", "tee times", "configuration", "review"],
+        },
+        "progress_pct": f"{int(5/6*100)}%",
+        # if you want to preselect a prior tee / mode:
+        "selected_tee_id": state.get("tee_id"),
+        "selected_handicap_mode": state.get("handicap_mode", "Low"),
+    }
+    return render(request, "GRPR/game_setup_config.html", context)
+
+    
+
 ##########################
 #### Gas Cup Section  ####
 ##########################
@@ -6231,13 +6341,13 @@ def game_setup_players_view(request):
 @login_required
 def game_setup_groups_view(request):
     """
-    Step 4/6: Choose tee times (Groups).
-    - Requires a draft with event_date and course_id set.
-    - Shows existing tee slots for the chosen course (distinct courseTimeSlot).
-    - Allows adding one new tee slot (validated/normalized, deduped).
-    - Saves selected slots to draft.state['tee_times'] (list[str]).
+    Step 3/6: Choose tee times for the selected course.
+    - Uses GameSetupDraft with event_date + course_id already chosen.
+    - Shows distinct tee times for (crew_id, courseName).
+    - Lets the user add a new tee time (deduped by normalization).
+    - Persists list of selected tee times in draft.state["teetimes"] and
+      on success redirects to Step 4 (assign players).
     """
-    # Get the in-progress draft for this user
     draft = (
         GameSetupDraft.objects
         .filter(created_by=request.user, is_complete=False)
@@ -6251,92 +6361,108 @@ def game_setup_groups_view(request):
     if not draft.course_id:
         return redirect("game_setup_course")
 
-    # Resolve the chosen course row so we can use its courseName for slot lookups
-    course_row = Courses.objects.filter(pk=draft.course_id).only("id", "courseName", "crewID").first()
+    # Find the chosen courseName for this course_id
+    course_row = Courses.objects.filter(id=draft.course_id).only("courseName", "crewID").first()
     if not course_row:
+        messages.error(request, "Course not found. Please choose the course again.")
         return redirect("game_setup_course")
 
-    course_name = (course_row.courseName or "").strip()
-    crew_id     = draft.crew_id
+    course_name = course_row.courseName
+    crew_id = draft.crew_id
 
-    # Existing tee slots for this crew/course (distinct)
-    existing_times = sorted({
-        t for t in
+    # Distinct tee times for this (courseName, crewID)
+    existing_qs = (
         Courses.objects
-               .filter(crewID=crew_id, courseName=course_name)
-               .values_list("courseTimeSlot", flat=True)
-               .distinct()
-        if t
-    })
+        .filter(courseName=course_name, crewID=crew_id)
+        .exclude(courseTimeSlot__isnull=True)
+        .exclude(courseTimeSlot__exact="")
+        .values_list("courseTimeSlot", flat=True)
+        .distinct()
+        .order_by("courseTimeSlot")
+    )
+    existing = list(existing_qs)
 
+    # Use any previously selected set from state
     state = draft.state or {}
-    preselected = set(state.get("tee_times") or [])
-
-    error = None
-    info  = None
+    selected = list(state.get("teetimes") or [])
 
     if request.method == "POST":
-        # selections from the checkbox list
-        selected = set(request.POST.getlist("times_existing"))
+        action = (request.POST.get("action") or "").strip()  # 'continue' or 'add_and_continue'
+        # Checkboxes: <input type="checkbox" name="teetimes" value="8:04">
+        chosen = request.POST.getlist("teetimes")
 
-        # optional: a single new tee time to add
-        raw_new = (request.POST.get("new_time") or "").strip()
-        if raw_new:
-            new_norm = _normalize_teetime_label(raw_new)
+        # Normalize + dedupe chosen
+        norm_chosen = []
+        seen = set()
+        for raw in chosen:
+            lab = _normalize_teetime_label(raw) or raw.strip()
+            if not lab:
+                continue
+            key = lab.lower()
+            if key not in seen:
+                seen.add(key)
+                norm_chosen.append(lab)
+
+        # If an extra tee time is provided, process it
+        new_tt_raw = (request.POST.get("new_teetime") or "").strip()
+        if action == "add_and_continue" and new_tt_raw:
+            new_norm = _normalize_teetime_label(new_tt_raw)
             if not new_norm:
-                error = "Please enter a recognizable time (e.g., 9:00, 9am, 9:15, 0915)."
+                messages.warning(request, "That tee time format wasn’t recognized (try like 9:00).")
+                # keep selections and fall through to render
             else:
-                # Dedup vs existing slots (normalize both sides) and also vs already-selected
-                existing_norms = { _normalize_teetime_label(t) for t in existing_times }
-                selected_norms = { _normalize_teetime_label(t) for t in selected }
-                if new_norm in existing_norms or new_norm in selected_norms:
-                    error = f"Tee time {new_norm} already exists for {course_name}."
+                # Check duplicate against existing set (normalize those as well)
+                existing_norm = set((_normalize_teetime_label(x) or x).lower() for x in existing)
+                if new_norm.lower() in existing_norm:
+                    messages.info(request, f"{new_norm} already exists for {course_name}.")
                 else:
-                    # Create the new row in Courses
+                    # Create new Courses row with same courseName + crewID
                     Courses.objects.create(
                         crewID=crew_id,
                         courseName=course_name,
-                        courseTimeSlot=new_norm,
+                        courseTimeSlot=new_norm
                     )
-                    # Refresh the list after insert
-                    existing_times = sorted({
-                        t for t in
-                        Courses.objects
-                               .filter(crewID=crew_id, courseName=course_name)
-                               .values_list("courseTimeSlot", flat=True)
-                               .distinct()
-                        if t
-                    })
-                    # Auto-select the newly added time
-                    selected.add(new_norm)
-                    info = f"Added tee time {new_norm}."
+                    existing.append(new_norm)
+                    messages.success(request, f"Added tee time {new_norm}.")
 
-        if not error:
-            if not selected:
-                error = "Select at least one tee time."
-            else:
-                state["tee_times"] = sorted(selected)
-                draft.state = state
-                draft.save(update_fields=["state", "updated_at"])
-                # NEXT STEP: assign players to tee times (to be implemented)
-                return redirect("game_setup_assign")
+                # Also mark it selected (if not already)
+                if new_norm not in norm_chosen:
+                    norm_chosen.append(new_norm)
 
-        # If we had an error, keep what the user selected in this postback
-        preselected = selected or preselected
+        # Final validation: need at least one tee time before continuing
+        if not norm_chosen:
+            messages.error(request, "Please select at least one tee time (or add a new one).")
+            return render(request, "GRPR/game_setup_groups.html", {
+                "draft": draft,
+                "course_name": course_name,
+                "existing": existing,
+                "selected": norm_chosen,  # empty -> nothing checked
+                "progress": {
+                    "current": 3, "total": 6,
+                    "labels": ["date", "course", "players", "tee times", "games", "configuration"],
+                },
+                "progress_pct": f"{int(3/6*100)}%",
+            })
 
+        # Persist and move on
+        state["teetimes"] = sorted(norm_chosen)
+        draft.state = state
+        draft.save(update_fields=["state", "updated_at"])
+        return redirect("game_setup_assign")  # Step 4
+
+    # GET
     return render(request, "GRPR/game_setup_groups.html", {
         "draft": draft,
         "course_name": course_name,
-        "existing_times": existing_times,
-        "selected": preselected,
-        "error": error,
-        "info": info,
+        "existing": existing,
+        "selected": selected,
         "progress": {
-            "current": 4, "total": 6,
+            "current": 3, "total": 6,
             "labels": ["date", "course", "players", "tee times", "games", "configuration"],
         },
-        "progress_pct": f"{int(4/6*100)}%",
+        "progress_pct": f"{int(3/6*100)}%",
     })
+
 
 
 @login_required

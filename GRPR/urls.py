@@ -85,7 +85,7 @@ urlpatterns = [
     path("games/setup/players/", views.game_setup_players_view, name="game_setup_players"),
     path("GRPR/games/setup/groups/", views.game_setup_groups_view, name="game_setup_groups"),
     path("GRPR/games/setup/assign/", views.game_setup_assign_view, name="game_setup_assign"),
-
+    path("GRPR/games/setup/config/", views.game_setup_config_view, name="game_setup_config"),
 
 
     ### Skins Game
