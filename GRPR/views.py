@@ -34,6 +34,39 @@ import math
 from collections import Counter, defaultdict
 import itertools
 from itertools import chain
+import re
+
+# --- helper: normalize user-entered tee time strings to "H:MM" not sure this is needed long term---
+_TIME_RE = re.compile(r'^\s*(\d{1,2})(?::?(\d{2}))?\s*(am|pm)?\s*$', re.I)
+_DIGITS_RE = re.compile(r'\D+')
+
+def _normalize_teetime_label(raw: str) -> str | None:
+    """
+    Accepts inputs like '9', '900', '9:00', '9am', '9:15', '0915', '9:15am'.
+    Returns canonical 'H:MM' (no leading zero on hour). We *don’t* convert am/pm
+    to 24h since your stored slots are typically morning 12-hour like '9:00'.
+    """
+    s = (raw or "").strip().lower()
+    if not s:
+        return None
+
+    m = _TIME_RE.match(s)
+    if not m:
+        # try the "900" or "0915" style
+        digits = _DIGITS_RE.sub("", s)
+        if len(digits) in (3, 4):
+            hh = int(digits[:-2])
+            mm = int(digits[-2:])
+            if 1 <= hh <= 23 and 0 <= mm < 60:
+                return f"{hh}:{mm:02d}"
+        return None
+
+    hh = int(m.group(1))
+    mm = int(m.group(2) or 0)
+    # ignore am/pm for storage; golf times are morning in your data model
+    if not (1 <= hh <= 23 and 0 <= mm < 60):
+        return None
+    return f"{hh}:{mm:02d}"
 
 
 # Function to round numbers to the nearest integer
@@ -6177,7 +6210,7 @@ def game_setup_players_view(request):
 
         # NEXT STEP (placeholder): send to the “Choose Groups / Tee Times” step.
         # Update this when you add the next page.
-        return redirect("games_view")
+        return redirect("game_setup_groups")
 
     # GET: render
     return render(request, "GRPR/game_setup_players.html", {
@@ -6192,6 +6225,116 @@ def game_setup_players_view(request):
         "progress_pct": f"{int(3/6*100)}%",
     })
 
+
+@login_required
+def game_setup_groups_view(request):
+    """
+    Step 4/6: Choose tee times (Groups).
+    - Requires a draft with event_date and course_id set.
+    - Shows existing tee slots for the chosen course (distinct courseTimeSlot).
+    - Allows adding one new tee slot (validated/normalized, deduped).
+    - Saves selected slots to draft.state['tee_times'] (list[str]).
+    """
+    # Get the in-progress draft for this user
+    draft = (
+        GameSetupDraft.objects
+        .filter(created_by=request.user, is_complete=False)
+        .order_by("-updated_at", "-created_at")
+        .first()
+    )
+    if not draft:
+        return redirect("game_setup_date")
+    if not draft.event_date:
+        return redirect("game_setup_date")
+    if not draft.course_id:
+        return redirect("game_setup_course")
+
+    # Resolve the chosen course row so we can use its courseName for slot lookups
+    course_row = Courses.objects.filter(pk=draft.course_id).only("id", "courseName", "crewID").first()
+    if not course_row:
+        return redirect("game_setup_course")
+
+    course_name = (course_row.courseName or "").strip()
+    crew_id     = draft.crew_id
+
+    # Existing tee slots for this crew/course (distinct)
+    existing_times = sorted({
+        t for t in
+        Courses.objects
+               .filter(crewID=crew_id, courseName=course_name)
+               .values_list("courseTimeSlot", flat=True)
+               .distinct()
+        if t
+    })
+
+    state = draft.state or {}
+    preselected = set(state.get("tee_times") or [])
+
+    error = None
+    info  = None
+
+    if request.method == "POST":
+        # selections from the checkbox list
+        selected = set(request.POST.getlist("times_existing"))
+
+        # optional: a single new tee time to add
+        raw_new = (request.POST.get("new_time") or "").strip()
+        if raw_new:
+            new_norm = _normalize_teetime_label(raw_new)
+            if not new_norm:
+                error = "Please enter a recognizable time (e.g., 9:00, 9am, 9:15, 0915)."
+            else:
+                # Dedup vs existing slots (normalize both sides) and also vs already-selected
+                existing_norms = { _normalize_teetime_label(t) for t in existing_times }
+                selected_norms = { _normalize_teetime_label(t) for t in selected }
+                if new_norm in existing_norms or new_norm in selected_norms:
+                    error = f"Tee time {new_norm} already exists for {course_name}."
+                else:
+                    # Create the new row in Courses
+                    Courses.objects.create(
+                        crewID=crew_id,
+                        courseName=course_name,
+                        courseTimeSlot=new_norm,
+                    )
+                    # Refresh the list after insert
+                    existing_times = sorted({
+                        t for t in
+                        Courses.objects
+                               .filter(crewID=crew_id, courseName=course_name)
+                               .values_list("courseTimeSlot", flat=True)
+                               .distinct()
+                        if t
+                    })
+                    # Auto-select the newly added time
+                    selected.add(new_norm)
+                    info = f"Added tee time {new_norm}."
+
+        if not error:
+            if not selected:
+                error = "Select at least one tee time."
+            else:
+                state["tee_times"] = sorted(selected)
+                draft.state = state
+                draft.save(update_fields=["state", "updated_at"])
+                # NEXT STEP: assign players to tee times (to be implemented)
+                return redirect("game_setup_assign")
+
+        # If we had an error, keep what the user selected in this postback
+        preselected = selected or preselected
+
+    return render(request, "GRPR/game_setup_groups.html", {
+        "draft": draft,
+        "course_name": course_name,
+        "existing_times": existing_times,
+        "selected": preselected,
+        "error": error,
+        "info": info,
+        "progress": {
+            "current": 4, "total": 6,
+            "labels": ["date", "course", "players", "tee times", "games", "configuration"],
+        },
+        "progress_pct": f"{int(4/6*100)}%",
+    })
 
 
 ##########################

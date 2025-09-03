@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Start New Game · Choose Tee Times{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 900px;">
+
+  <h1 class="mb-1">Start New Game</h1>
+  <p class="text-muted mb-3">Step 4 of 6 — Choose tee times (groups).</p>
+
+  <!-- Progress -->
+  {% if progress %}
+    <div class="mb-3">
+      <div class="progress" style="height:10px;">
+        <div class="progress-bar" role="progressbar"
+             style="width: {{ progress_pct }};"
+             aria-valuenow="{{ progress.current }}" aria-valuemin="0" aria-valuemax="{{ progress.total }}">
+        </div>
+      </div>
+      <div class="small text-muted mt-1">
+        {{ progress.labels.0 }} ▸ {{ progress.labels.1 }} ▸ {{ progress.labels.2 }} ▸
+        {{ progress.labels.3 }} ▸ {{ progress.labels.4 }} ▸ {{ progress.labels.5 }}
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Draft summary -->
+  <div class="alert alert-info mb-4">
+    <strong>Date:</strong> {{ draft.event_date|date:"D, M j, Y" }} &nbsp;•&nbsp;
+    <strong>Course:</strong> {{ course_name }}
+  </div>
+
+  <form method="post" class="card">
+    {% csrf_token %}
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span>Select existing tee times</span>
+      <span class="small text-muted">Selected: <span id="selCount">0</span></span>
+    </div>
+
+    <div class="card-body">
+      {% if error %}
+        <div class="alert alert-warning">{{ error }}</div>
+      {% endif %}
+      {% if info %}
+        <div class="alert alert-success">{{ info }}</div>
+      {% endif %}
+
+      {% if existing_times %}
+        <div class="row g-2">
+          {% for t in existing_times %}
+            <div class="col-6 col-md-3">
+              <div class="form-check">
+                <input class="form-check-input tee-check" type="checkbox"
+                       value="{{ t }}" id="t_{{ forloop.counter }}"
+                       name="times_existing"
+                       {% if t in selected %}checked{% endif %}>
+                <label class="form-check-label" for="t_{{ forloop.counter }}">{{ t }}</label>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="text-muted">No tee times found yet for this course.</div>
+      {% endif %}
+
+      <hr class="my-4">
+
+      <label for="new_time" class="form-label fw-bold">Add a new tee time</label>
+      <div class="input-group" style="max-width: 320px;">
+        <input id="new_time" name="new_time" type="text" maxlength="10"
+               class="form-control" placeholder="e.g., 9:00 or 915 or 9am">
+        <button class="btn btn-outline-secondary" type="submit">Add &amp; Continue</button>
+      </div>
+      <div class="form-text">We’ll normalize and deduplicate. Examples: 9, 900, 9:00, 9am, 9:15, 0915.</div>
+    </div>
+
+    <div class="card-footer d-flex gap-2">
+      <a class="btn btn-outline-secondary" href="{% url 'game_setup_players' %}">Back</a>
+      <button class="btn btn-primary" type="submit">Continue</button>
+    </div>
+  </form>
+</div>
+
+<script>
+  (function(){
+    function updateCount(){
+      const n = document.querySelectorAll('.tee-check:checked').length;
+      const el = document.getElementById('selCount');
+      if (el) el.textContent = n;
+    }
+    document.addEventListener('change', function(e){
+      if (e.target && e.target.classList.contains('tee-check')) updateCount();
+    });
+    updateCount();
+  })();
+</script>
+{% endblock %}
