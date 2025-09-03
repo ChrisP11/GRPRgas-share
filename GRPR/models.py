@@ -122,6 +122,9 @@ class UserProfile(models.Model):
     def __str__(self):
         return self.user.username
     
+    class Meta:
+        db_table = "UserProfile" 
+    
 
 class AutomatedMessages(models.Model):
     CreateDate = models.DateTimeField(auto_now_add=True)
@@ -199,6 +202,7 @@ class GameSetupDraft(models.Model):
     is_complete  = models.BooleanField(default=False)
 
     class Meta:
+        db_table = "GameSetupDraft" 
         indexes = [models.Index(fields=["created_by", "is_complete"])]
         ordering = ["-updated_at"]
 
@@ -395,3 +399,6 @@ class GameToggles(models.Model):
 
     def __str__(self):
         return f"GameToggles(gascup_enabled={self.gascup_enabled})"
+    
+    class Meta:
+        db_table = "GameToggles" 

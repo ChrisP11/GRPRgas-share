@@ -5860,18 +5860,57 @@ def _validate_gascup_teams(invites, assignments):
 #### New Game Creation Workflow ####
 ####################################
 
+from django.db import connection
+
 def _get_user_crew_id(user) -> int:
     """
-    Return the crew id for this user.
-    Adjust this to your actual schema (e.g. user.profile.crew_id).
-    Fallback to '1' so the page still works if we can't resolve it.
+    Resolve the user's CrewID from the legacy Players table.
+
+    Strategy:
+      1) Try the Django model `Players` if it exists, reading `.CrewID`.
+      2) Fallback to raw SQL against the `Players` table, trying common
+         column-name variants for both user and crew columns.
+      3) Default to 1 if we can't resolve cleanly.
     """
-    # EXAMPLES (uncomment what matches your app):
-    # if hasattr(user, "profile") and getattr(user.profile, "crew_id", None):
-    #     return user.profile.crew_id
-    # if hasattr(user, "crew_id"):
-    #     return user.crew_id
+    # 1) Try via ORM if the model is present
+    try:
+        # Common case: fields are user_id and CrewID on the model
+        rec = Players.objects.filter(user_id=user.id).only("CrewID").first()
+        if rec:
+            crew = getattr(rec, "CrewID", None)
+            if crew:
+                return int(crew)
+    except Exception:
+        # Model might not be present or field names differ — fall through to SQL
+        pass
+
+    # 2) Fallback: raw SQL (tolerant to column-case variations)
+    user_col_candidates = ("user_id", "UserID", "User_id", "userid")
+    crew_col_candidates = ("CrewID", "crew_id", "CrewId", "crewid")
+
+    with connection.cursor() as cur:
+        for ucol in user_col_candidates:
+            for ccol in crew_col_candidates:
+                try:
+                    # Quote identifiers to be safe with case-sensitive backends
+                    cur.execute(
+                        f'SELECT "{ccol}" FROM "Players" WHERE "{ucol}" = %s LIMIT 1',
+                        [user.id],
+                    )
+                    row = cur.fetchone()
+                except Exception:
+                    # Column combo didn’t exist; try the next pair
+                    continue
+
+                if row and row[0] is not None:
+                    try:
+                        return int(row[0])
+                    except (TypeError, ValueError):
+                        pass
+
+    # 3) Fallback so pages still render
     return 1
+
 
 @login_required
 def game_setup_date_view(request):
@@ -5960,7 +5999,7 @@ def game_setup_date_view(request):
         # NEXT: course selection step (we'll add that in the next chunk)
         # For now, go back to Games home so you can see the flow working.
         messages.success(request, f"Date saved: {ev_date}. Next step will be course selection.")
-        return redirect("games_view")  # adjust if your games home URL name is different
+        return redirect("game_setup_course")  
     
     progress = {
         "current": 1,
@@ -5977,6 +6016,10 @@ def game_setup_date_view(request):
     })
 
 
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render, redirect, get_object_or_404
+from .models import GameSetupDraft, Courses
+
 @login_required
 def game_setup_course_view(request):
     """
@@ -5985,42 +6028,47 @@ def game_setup_course_view(request):
     - Presents a distinct list of course names pulled from Courses.
     - Saves the chosen CourseID to the draft, then goes to the next step.
     """
-    # Fetch the most-recent draft for this user (created at step 1)
-    draft = (GameSetupDraft.objects
-             .filter(user=request.user)
-             .order_by("-updated_at", "-created_at")
-             .first())
-    if not draft:
-        # If no draft yet, start at step 1
+
+    # Get the user’s most recent open draft (created at step 1)
+    draft = (
+        GameSetupDraft.objects
+        .filter(created_by=request.user, is_complete=False)
+        .order_by("-updated_at", "-created_at")
+        .first()
+    )
+    if not draft or not draft.event_date:
         return redirect("game_setup_date")
 
-    if not draft.event_date:
-        # Must pick a date first
-        return redirect("game_setup_date")
+    # Resolve the user’s crew (legacy lookup helper you added earlier)
+    crew_id = _get_user_crew_id(request.user)
 
-    # Build a distinct list of course names with a representative id
-    # (we de-dupe in Python so this works on SQLite too)
-    all_courses = Courses.objects.only("id", "courseName").order_by("courseName", "id")
-    seen = set()
-    course_options = []
-    for c in all_courses:
-        name = (c.courseName or "").strip()
-        if not name:
-            continue
-        if name.lower() in seen:
-            continue
-        seen.add(name.lower())
-        course_options.append({"id": c.id, "name": name})
+    # Build a distinct list of course names with a representative id.
+    # Prefer courses for this crew; if none, fall back to all courses.
+    base_qs = Courses.objects.filter(crewID=crew_id)
+    if not base_qs.exists():
+        base_qs = Courses.objects.all()
 
-    # Handle form post
+    # DISTINCT by courseName, pick the smallest id for that name
+    rows = (
+        base_qs
+        .values("courseName")
+        .annotate(id_rep=Min("id"))
+        .order_by("courseName")
+    )
+    course_options = [
+        {"id": r["id_rep"], "name": (r["courseName"] or "").strip()}
+        for r in rows
+        if (r["courseName"] or "").strip()
+    ]
+
+    # Handle form submission
     if request.method == "POST":
         course_id = (request.POST.get("course_id") or "").strip()
-        # Defensive: ensure it's a valid id
         chosen = None
         if course_id.isdigit():
-            chosen = Courses.objects.filter(pk=int(course_id)).only("id").first()
+            chosen = Courses.objects.filter(pk=int(course_id)).only("id", "courseName").first()
+
         if not chosen:
-            # Re-render with a message
             return render(request, "GRPR/game_setup_course.html", {
                 "draft": draft,
                 "courses": course_options,
@@ -6032,10 +6080,14 @@ def game_setup_course_view(request):
                 "error": "Please choose a course.",
             })
 
+        # Save selection to the draft (and stash readable name in state)
         draft.course_id = chosen.id
-        draft.save(update_fields=["course_id", "updated_at"])
+        state = dict(draft.state or {})
+        state["courseName"] = chosen.courseName
+        draft.state = state
+        draft.save(update_fields=["course_id", "state", "updated_at"])
 
-        # Next step (players). You can change this when you add the players page.
+        # Next step (players) — adjust if your URL name differs
         return redirect("game_setup_players")
 
     # GET
@@ -6048,6 +6100,7 @@ def game_setup_course_view(request):
         },
         "progress_pct": f"{int(2/6*100)}%",
     })
+
 
 
 ##########################
