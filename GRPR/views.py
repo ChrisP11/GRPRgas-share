@@ -35,12 +35,14 @@ from collections import Counter, defaultdict
 import itertools
 from itertools import chain
 import re
+from typing import Optional
+
 
 # --- helper: normalize user-entered tee time strings to "H:MM" not sure this is needed long term---
 _TIME_RE = re.compile(r'^\s*(\d{1,2})(?::?(\d{2}))?\s*(am|pm)?\s*$', re.I)
 _DIGITS_RE = re.compile(r'\D+')
 
-def _normalize_teetime_label(raw: str) -> str | None:
+def _normalize_teetime_label(raw: str) -> Optional[str]:
     """
     Accepts inputs like '9', '900', '9:00', '9am', '9:15', '0915', '9:15am'.
     Returns canonical 'H:MM' (no leading zero on hour). We *don’t* convert am/pm
@@ -6334,6 +6336,157 @@ def game_setup_groups_view(request):
             "labels": ["date", "course", "players", "tee times", "games", "configuration"],
         },
         "progress_pct": f"{int(4/6*100)}%",
+    })
+
+
+@login_required
+def game_setup_assign_view(request):
+    """
+    Step 4/6: Assign players to selected tee times.
+    Reads from the GameSetupDraft created by the earlier steps:
+      - state["player_ids"] : list[int]
+      - state["teetimes"]   : list[str]
+    Writes:
+      - state["assignments"]: { tee_label: [player_id, ...], ... }
+    Constraints:
+      - All selected players must be assigned.
+      - Max 4 players per tee time.
+      - No duplicates.
+    """
+    draft = (
+        GameSetupDraft.objects
+        .filter(created_by=request.user, is_complete=False)
+        .order_by("-updated_at", "-created_at")
+        .first()
+    )
+    if not draft:
+        return redirect("game_setup_date")
+    if not draft.event_date:
+        return redirect("game_setup_date")
+    if not draft.course_id:
+        return redirect("game_setup_course")
+
+    state = draft.state or {}
+    player_ids = state.get("player_ids") or []
+    teetimes   = state.get("teetimes") or []
+
+    # Guard: need players & tee times selected earlier
+    if not player_ids:
+        messages.error(request, "Please choose players first.")
+        return redirect("game_setup_players")
+    if not teetimes:
+        messages.error(request, "Please choose at least one tee time.")
+        return redirect("game_setup_groups")  # previous step where tee times are chosen
+
+    # Fetch player objects (limit to chosen ids)
+    players_qs = (
+        Players.objects
+        .filter(id__in=player_ids)
+        .only("id", "FirstName", "LastName")
+        .order_by("LastName", "FirstName")
+    )
+    players = list(players_qs.values("id", "FirstName", "LastName"))
+
+    # Existing assignments (if any)
+    assignments = state.get("assignments") or {}
+    # Make sure every selected tee time has a list
+    for t in teetimes:
+        assignments.setdefault(t, [])
+
+    # Compute unassigned based on current assignments
+    assigned_set = set()
+    for vec in assignments.values():
+        assigned_set.update(int(x) for x in vec if str(x).isdigit())
+    unassigned = [p for p in players if p["id"] not in assigned_set]
+
+    if request.method == "POST":
+        raw = (request.POST.get("assignments_json") or "").strip()
+        try:
+            incoming = json.loads(raw)
+        except Exception:
+            incoming = None
+
+        if not isinstance(incoming, dict):
+            messages.error(request, "Could not read the assignments. Please try again.")
+            return redirect("game_setup_assign")
+
+        allowed_pids = set(int(pid) for pid in player_ids)
+        cleaned = {}
+        used    = set()
+        valid   = True
+        reason  = ""
+
+        for tee in teetimes:
+            ids = incoming.get(tee) or []
+            vec = []
+            for s in ids:
+                try:
+                    pid = int(s)
+                except Exception:
+                    continue
+                if pid not in allowed_pids:
+                    # ignore unknown ids
+                    continue
+                if pid in used:
+                    # no duplicates
+                    continue
+                vec.append(pid)
+                used.add(pid)
+            if len(vec) > 4:
+                valid = False
+                reason = f"Tee time {tee} has more than 4 players."
+                break
+            cleaned[tee] = vec
+
+        # Require all players assigned
+        if valid and used != allowed_pids:
+            valid = False
+            missing = allowed_pids - used
+            reason = f"Please assign all players. {len(missing)} unassigned."
+
+        if not valid:
+            # Re-render page with message and current UI state
+            messages.error(request, reason or "Invalid assignment.")
+            # Recalculate for page
+            assigned_set = set(pid for lst in cleaned.values() for pid in lst)
+            unassigned = [p for p in players if p["id"] not in assigned_set]
+            return render(request, "GRPR/game_setup_assign.html", {
+                "draft": draft,
+                "players": players,
+                "teetimes": teetimes,
+                "assignments": cleaned,
+                "unassigned": unassigned,
+                "progress": {
+                    "current": 4, "total": 6,
+                    "labels": ["date", "course", "players", "tee times", "games", "configuration"],
+                },
+                "progress_pct": f"{int(4/6*100)}%",
+                "total_players": len(players),
+                "assigned_count": len(assigned_set),
+            })
+
+        # Persist to draft
+        state["assignments"] = cleaned
+        draft.state = state
+        draft.save(update_fields=["state", "updated_at"])
+
+        # NEXT STEP: tees & handicap config (placeholder name)
+        return redirect("game_setup_config")
+
+    # GET render
+    return render(request, "GRPR/game_setup_assign.html", {
+        "draft": draft,
+        "players": players,
+        "teetimes": teetimes,
+        "assignments": assignments,
+        "unassigned": unassigned,
+        "progress": {
+            "current": 4, "total": 6,
+            "labels": ["date", "course", "players", "tee times", "games", "configuration"],
+        },
+        "progress_pct": f"{int(4/6*100)}%",
+        "total_players": len(players),
+        "assigned_count": len(assigned_set),
     })
 
 
