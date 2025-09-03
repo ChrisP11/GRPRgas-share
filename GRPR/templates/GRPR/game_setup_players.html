@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Start New Game · Choose Players{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 900px;">
+
+  <h1 class="mb-1">Start New Game</h1>
+  <p class="text-muted mb-3">Step 3 of 6 — Choose the players.</p>
+
+  {% if progress %}
+    <div class="mb-3">
+      <div class="progress" style="height: 10px;">
+        <div class="progress-bar" role="progressbar"
+             style="width: {{ progress_pct }};"
+             aria-valuenow="{{ progress.current }}"
+             aria-valuemin="0" aria-valuemax="{{ progress.total }}">
+        </div>
+      </div>
+      <div class="small text-muted mt-1">
+        {{ progress.labels.0 }} ▸ {{ progress.labels.1 }} ▸ {{ progress.labels.2 }} ▸
+        {{ progress.labels.3 }} ▸ {{ progress.labels.4 }} ▸ {{ progress.labels.5 }}
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Draft summary -->
+  <div class="alert alert-info mb-4">
+    <div><strong>Date:</strong> {{ draft.event_date|date:"D, M j, Y" }}</div>
+    {% if draft.course_id %}
+      <div class="small text-muted">Course ID: {{ draft.course_id }}</div>
+    {% endif %}
+  </div>
+
+  <!-- Filter bar -->
+  <form method="get" class="d-flex align-items-center gap-2 mb-3">
+    <input type="hidden" name="t" value="{{ draft.updated_at|date:'U' }}">
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" value="1" id="show_all" name="show_all"
+             {% if show_all %}checked{% endif %}>
+      <label class="form-check-label" for="show_all">
+        Include non-members
+      </label>
+    </div>
+    <button class="btn btn-outline-secondary btn-sm" type="submit">Apply</button>
+  </form>
+
+  <!-- Selection form -->
+  <form method="post" class="card">
+    {% csrf_token %}
+    <input type="hidden" name="show_all" value="{% if show_all %}1{% else %}0{% endif %}">
+
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span>Choose players</span>
+      <span class="badge bg-primary" id="selCountBadge">Selected: 0</span>
+    </div>
+
+    <div class="card-body">
+      {% if error %}
+        <div class="alert alert-warning">{{ error }}</div>
+      {% endif %}
+
+      {% if players %}
+        <div class="list-group">
+          {% for p in players %}
+            {% with pid=p.id %}
+            <label class="list-group-item d-flex align-items-center">
+              <input class="form-check-input me-2 player-box"
+                     type="checkbox"
+                     name="player_ids"
+                     value="{{ pid }}"
+                     {% if pid in selected_ids %}checked{% endif %}>
+              <div class="flex-grow-1">
+                {{ p.LastName }}, {{ p.FirstName }}
+                {% if p.Member != 1 %}
+                  <span class="badge bg-warning text-dark ms-2">Non-member</span>
+                {% endif %}
+              </div>
+            </label>
+            {% endwith %}
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="text-muted">No players found for your crew.</div>
+      {% endif %}
+    </div>
+
+    <div class="card-footer d-flex gap-2">
+      <a class="btn btn-outline-secondary" href="{% url 'game_setup_course' %}">Back</a>
+      <button class="btn btn-primary" type="submit">Continue</button>
+    </div>
+  </form>
+</div>
+
+<script>
+  (function(){
+    function updateCount() {
+      const boxes = document.querySelectorAll('.player-box');
+      let c = 0;
+      boxes.forEach(b => { if (b.checked) c++; });
+      const badge = document.getElementById('selCountBadge');
+      if (badge) badge.textContent = 'Selected: ' + c;
+    }
+    document.addEventListener('change', function(e){
+      if (e.target && e.target.classList.contains('player-box')) updateCount();
+    });
+    // initial
+    updateCount();
+  })();
+</script>
+{% endblock %}

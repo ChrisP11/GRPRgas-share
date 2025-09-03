@@ -82,6 +82,8 @@ urlpatterns = [
     ### New Game Creation workflow
     path("games/new/date/", views.game_setup_date_view, name="game_setup_date"),
     path("games/setup/course/", views.game_setup_course_view, name="game_setup_course"),
+    path("games/setup/players/", views.game_setup_players_view, name="game_setup_players"),
+
 
 
     ### Skins Game

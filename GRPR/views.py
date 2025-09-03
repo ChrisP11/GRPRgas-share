@@ -6102,6 +6102,97 @@ def game_setup_course_view(request):
     })
 
 
+@login_required
+def game_setup_players_view(request):
+    """
+    Step 3/6: Choose players.
+    - Requires a draft with event_date (step 1) and course_id (step 2).
+    - Lists players in the user's crew (Members only by default, with an option
+      to include non-members).
+    - Stores selected player IDs in draft.state["player_ids"] (list of ints).
+    """
+    # Fetch the user's most-recent in-progress draft
+    draft = (
+        GameSetupDraft.objects
+        .filter(created_by=request.user, is_complete=False)
+        .order_by("-updated_at", "-created_at")
+        .first()
+    )
+    if not draft:
+        return redirect("game_setup_date")
+    if not draft.event_date:
+        return redirect("game_setup_date")
+    if not draft.course_id:
+        return redirect("game_setup_course")
+
+    # Read current filter state (include non-members or not)
+    # Keep it sticky across POST/GET via query param + local variable.
+    show_all = request.GET.get("show_all") == "1"
+
+    # Build player queryset for this crew
+    qs = Players.objects.filter(CrewID=draft.crew_id).only("id", "FirstName", "LastName", "Member")
+    if not show_all:
+        qs = qs.filter(Member=1)
+    else:
+            # Include non-members = Member is 1 OR NULL
+            qs = qs.filter(Q(Member=1) | Q(Member=0))
+
+    # Order by last name, first name (case-insensitive-ish)
+    qs = qs.order_by("LastName", "FirstName")
+
+    # Pre-fill any existing selection (from state)
+    state = draft.state or {}
+    selected_ids = set(state.get("player_ids") or [])
+
+    if request.method == "POST":
+        # Gather selections; POST loses querystring, so preserve show_all via hidden input
+        show_all = (request.POST.get("show_all") == "1")
+
+        chosen = request.POST.getlist("player_ids")
+        # Validate -> keep only ints that are in this crew
+        valid_ids = set(
+            qs.filter(id__in=[int(x) for x in chosen if x.isdigit()])
+              .values_list("id", flat=True)
+        )
+
+        if not valid_ids:
+            # Re-render with an error and keep whatever was already selected
+            return render(request, "GRPR/game_setup_players.html", {
+                "draft": draft,
+                "players": qs,
+                "selected_ids": selected_ids,
+                "show_all": show_all,
+                "error": "Please select at least one player.",
+                "progress": {
+                    "current": 3, "total": 6,
+                    "labels": ["date", "course", "players", "tee times", "games", "configuration"],
+                },
+                "progress_pct": f"{int(3/6*100)}%",
+            })
+
+        # Persist selection to the draft.state JSON
+        state["player_ids"] = sorted(list(valid_ids))
+        draft.state = state
+        draft.save(update_fields=["state", "updated_at"])
+
+        # NEXT STEP (placeholder): send to the “Choose Groups / Tee Times” step.
+        # Update this when you add the next page.
+        return redirect("games_view")
+
+    # GET: render
+    return render(request, "GRPR/game_setup_players.html", {
+        "draft": draft,
+        "players": qs,
+        "selected_ids": selected_ids,
+        "show_all": show_all,
+        "progress": {
+            "current": 3, "total": 6,
+            "labels": ["date", "course", "players", "tee times", "games", "configuration"],
+        },
+        "progress_pct": f"{int(3/6*100)}%",
+    })
+
+
 
 ##########################
 #### Scorecard views ####
