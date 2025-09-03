@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Start New Game · Choose Course{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 900px;">
+
+  <h1 class="mb-1">Start New Game</h1>
+  <p class="text-muted mb-3">Step 2 of 6 — Choose the course.</p>
+
+  <!-- Progress -->
+  {% if progress %}
+    <div class="mb-3">
+      <div class="progress" style="height: 10px;">
+        <div class="progress-bar" role="progressbar"
+             style="width: {{ progress_pct }};"
+             aria-valuenow="{{ progress.current }}"
+             aria-valuemin="0" aria-valuemax="{{ progress.total }}">
+        </div>
+      </div>
+      <div class="small text-muted mt-1">
+        {{ progress.labels.0 }} ▸ {{ progress.labels.1 }} ▸ {{ progress.labels.2 }} ▸
+        {{ progress.labels.3 }} ▸ {{ progress.labels.4 }} ▸ {{ progress.labels.5 }}
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Draft summary (so the user sees the date they picked) -->
+  <div class="alert alert-info mb-4">
+    <strong>Date:</strong> {{ draft.event_date|date:"D, M j, Y" }}
+  </div>
+
+  <!-- Form -->
+  <form method="post" class="card">
+    {% csrf_token %}
+    <div class="card-header">Choose a course</div>
+    <div class="card-body">
+      {% if error %}
+        <div class="alert alert-warning">{{ error }}</div>
+      {% endif %}
+
+      <label for="course_id" class="form-label">Course</label>
+      <select id="course_id" name="course_id" class="form-select">
+        <option value="">— Select course —</option>
+        {% for c in courses %}
+          <option value="{{ c.id }}"
+            {% if draft.course_id == c.id %}selected{% endif %}>
+            {{ c.name }}
+          </option>
+        {% endfor %}
+      </select>
+      <div class="form-text">List shows unique course names from your Courses table.</div>
+    </div>
+
+    <div class="card-footer d-flex gap-2">
+      <a class="btn btn-outline-secondary" href="{% url 'game_setup_date' %}">Back</a>
+      <button class="btn btn-primary" type="submit">Continue</button>
+    </div>
+  </form>
+
+</div>
+{% endblock %}

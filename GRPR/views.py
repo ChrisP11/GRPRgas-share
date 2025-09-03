@@ -5874,7 +5874,7 @@ def _get_user_crew_id(user) -> int:
     return 1
 
 @login_required
-def game_setup_date(request):
+def game_setup_date_view(request):
     """
     Step 1: choose a date (with a suggested 'next available' for the user's crew).
     Creates or resumes a GameSetupDraft and stores its id in session.
@@ -5960,7 +5960,7 @@ def game_setup_date(request):
         # NEXT: course selection step (we'll add that in the next chunk)
         # For now, go back to Games home so you can see the flow working.
         messages.success(request, f"Date saved: {ev_date}. Next step will be course selection.")
-        return redirect("games")  # adjust if your games home URL name is different
+        return redirect("games_view")  # adjust if your games home URL name is different
     
     progress = {
         "current": 1,
@@ -5975,6 +5975,80 @@ def game_setup_date(request):
         "progress": progress,
         "progress_pct": progress_pct,
     })
+
+
+@login_required
+def game_setup_course_view(request):
+    """
+    Step 2/6: Course choice.
+    - Requires an existing draft with event_date.
+    - Presents a distinct list of course names pulled from Courses.
+    - Saves the chosen CourseID to the draft, then goes to the next step.
+    """
+    # Fetch the most-recent draft for this user (created at step 1)
+    draft = (GameSetupDraft.objects
+             .filter(user=request.user)
+             .order_by("-updated_at", "-created_at")
+             .first())
+    if not draft:
+        # If no draft yet, start at step 1
+        return redirect("game_setup_date")
+
+    if not draft.event_date:
+        # Must pick a date first
+        return redirect("game_setup_date")
+
+    # Build a distinct list of course names with a representative id
+    # (we de-dupe in Python so this works on SQLite too)
+    all_courses = Courses.objects.only("id", "courseName").order_by("courseName", "id")
+    seen = set()
+    course_options = []
+    for c in all_courses:
+        name = (c.courseName or "").strip()
+        if not name:
+            continue
+        if name.lower() in seen:
+            continue
+        seen.add(name.lower())
+        course_options.append({"id": c.id, "name": name})
+
+    # Handle form post
+    if request.method == "POST":
+        course_id = (request.POST.get("course_id") or "").strip()
+        # Defensive: ensure it's a valid id
+        chosen = None
+        if course_id.isdigit():
+            chosen = Courses.objects.filter(pk=int(course_id)).only("id").first()
+        if not chosen:
+            # Re-render with a message
+            return render(request, "GRPR/game_setup_course.html", {
+                "draft": draft,
+                "courses": course_options,
+                "progress": {
+                    "current": 2, "total": 6,
+                    "labels": ["date", "course", "players", "tee times", "games", "configuration"],
+                },
+                "progress_pct": f"{int(2/6*100)}%",
+                "error": "Please choose a course.",
+            })
+
+        draft.course_id = chosen.id
+        draft.save(update_fields=["course_id", "updated_at"])
+
+        # Next step (players). You can change this when you add the players page.
+        return redirect("game_setup_players")
+
+    # GET
+    return render(request, "GRPR/game_setup_course.html", {
+        "draft": draft,
+        "courses": course_options,
+        "progress": {
+            "current": 2, "total": 6,
+            "labels": ["date", "course", "players", "tee times", "games", "configuration"],
+        },
+        "progress_pct": f"{int(2/6*100)}%",
+    })
+
 
 ##########################
 #### Scorecard views ####
