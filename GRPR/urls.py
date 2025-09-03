@@ -79,6 +79,9 @@ urlpatterns = [
     path('games/', views.games_view, name='games_view'),
     path('games_choice/', views.games_choice_view, name='games_choice_view'),
 
+    ### New Game Creation workflow
+    path("games/new/date/", views.game_setup_date, name="game_setup_date"),
+
     ### Skins Game
     path('skins/', views.skins_view, name='skins_view'),
     path('skins/choose/', views.skins_choose_players_view, name='skins_choose_players_view'),

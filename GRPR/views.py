@@ -4,7 +4,8 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpResponse, JsonResponse, HttpResponseBadRequest
 from django.utils import timezone
 from django.utils.timezone import now
-from GRPR.models import Crews, Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity, SMSResponse, Xdates, Games, GameInvites, CourseTees, ScorecardMeta, Scorecard, CourseHoles, Skins, AutomatedMessages, Forty, GasCupPair, GasCupScore
+from django.utils.dateparse import parse_date
+from GRPR.models import Crews, Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity, SMSResponse, Xdates, Games, GameInvites, CourseTees, ScorecardMeta, Scorecard, CourseHoles, Skins, AutomatedMessages, Forty, GasCupPair, GasCupScore, GameSetupDraft
 from datetime import datetime, date
 from django.conf import settings  # Import settings
 from django.contrib import messages
@@ -5855,6 +5856,126 @@ def _validate_gascup_teams(invites, assignments):
     return errs
 
 
+####################################
+#### New Game Creation Workflow ####
+####################################
+
+def _get_user_crew_id(user) -> int:
+    """
+    Return the crew id for this user.
+    Adjust this to your actual schema (e.g. user.profile.crew_id).
+    Fallback to '1' so the page still works if we can't resolve it.
+    """
+    # EXAMPLES (uncomment what matches your app):
+    # if hasattr(user, "profile") and getattr(user.profile, "crew_id", None):
+    #     return user.profile.crew_id
+    # if hasattr(user, "crew_id"):
+    #     return user.crew_id
+    return 1
+
+@login_required
+def game_setup_date(request):
+    """
+    Step 1: choose a date (with a suggested 'next available' for the user's crew).
+    Creates or resumes a GameSetupDraft and stores its id in session.
+    """
+    crew_id = _get_user_crew_id(request.user)
+
+    # Create or resume draft
+    draft_id = request.session.get("game_setup_id")
+    draft = None
+    if draft_id:
+        draft = GameSetupDraft.objects.filter(
+            pk=draft_id, created_by=request.user, is_complete=False
+        ).first()
+    if not draft:
+        draft = GameSetupDraft.objects.create(created_by=request.user, crew_id=crew_id)
+        request.session["game_setup_id"] = draft.pk
+
+    # Try to compute a "suggested next date" card from your tee time tables.
+    suggested = None
+    try:
+        # TODO: adjust these imports/field names to match your models.
+        # These are written to *not* crash if you don't have these models/fields yet.
+        from .models import TeeTimesInd, Courses  # adjust if your app models differ
+
+        # Find earliest date with any rows for this crew
+        # CHANGE fields if needed: e.g., TeeTimesInd has fields like: crew_id/CrewID, date/teeDate, CourseID_id, etc.
+        bucket = (
+            TeeTimesInd.objects
+            .filter(CrewID=crew_id, teeDate__gte=today)        # <— adjust field names
+            .values("teeDate")
+            .annotate(num_players=Count("id"), any_course=Max("CourseID_id"))
+            .order_by("teeDate")
+            .first()
+        )
+
+        if bucket:
+            course_name = ""
+            tee_times = []
+
+            if bucket["any_course"]:
+                c = Courses.objects.filter(pk=bucket["any_course"]).first()
+                # CHANGE property names if your Courses model differs
+                course_name = getattr(c, "courseName", "") if c else ""
+
+                # If you store time slots on the course model (as 'courseTimeSlot'), gather distinct ones
+                # Otherwise, you might want distinct times from the tee times table for that date.
+                if hasattr(Courses, "objects") and hasattr(c, "courseTimeSlot"):
+                    tee_times = list(
+                        Courses.objects
+                        .filter(pk=bucket["any_course"])
+                        .values_list("courseTimeSlot", flat=True)
+                        .distinct()
+                    )  # may be empty if you don't use this field
+                else:
+                    # As a fallback: distinct times from TeeTimesInd for that date:
+                    tee_times = list(
+                        TeeTimesInd.objects
+                        .filter(CrewID=crew_id, teeDate=bucket["teeDate"])  # <— adjust
+                        .values_list("teeTime", flat=True)                  # <— adjust
+                        .distinct()
+                    )
+
+            suggested = {
+                "date": bucket["teeDate"],
+                "num_players": bucket["num_players"],
+                "course_name": course_name,
+                "tee_times": tee_times,
+            }
+    except Exception:
+        # If models/fields don't line up, we still render the page w/o the suggested card.
+        suggested = None
+
+    if request.method == "POST":
+        chosen = (request.POST.get("event_date") or "").strip()
+        ev_date = parse_date(chosen)
+        if not ev_date:
+            messages.error(request, "Please choose a valid date.")
+            return redirect("game_setup_date")
+
+        draft.event_date = ev_date
+        draft.save(update_fields=["event_date", "updated_at"])
+
+        # NEXT: course selection step (we'll add that in the next chunk)
+        # For now, go back to Games home so you can see the flow working.
+        messages.success(request, f"Date saved: {ev_date}. Next step will be course selection.")
+        return redirect("games")  # adjust if your games home URL name is different
+    
+    progress = {
+        "current": 1,
+        "total": 6,
+        "labels": ["Date", "Course", "Players", "Tee times", "Games", "Config"],
+    }
+    progress_pct = int(progress["current"] * 100 / progress["total"])
+
+    return render(request, "GRPR/game_setup_date.html", {
+        "draft": draft,
+        "suggested": suggested,
+        "progress": progress,
+        "progress_pct": progress_pct,
+    })
+
 ##########################
 #### Scorecard views ####
 ##########################
@@ -6223,259 +6344,6 @@ def hole_display_view(request):
         context['forty_scores_already_entered'] = forty_scores_already_entered
 
     return render(request, 'GRPR/hole_display.html', context)
-
-
-# @login_required
-# def scorecard_view(request):
-#     # Fetch game_id from GET parameters
-#     game_id = request.GET.get('game_id', None)
-#     group_id = request.GET.get('group_id', None)
-#     msg = request.GET.get('msg', None)
-#     print()
-#     print('scorecard_view - game_id', game_id)
-#     print('scorecard_view - group_id', group_id)
-
-#     # Get the associated Forty game ID
-#     forty_game_id = Games.objects.filter(id=game_id).values_list('AssocGame', flat=True).first()
-
-#     # Build a set of (pid, hole_id) for scores used in Forty
-#     forty_used_scores = set()
-#     if forty_game_id:
-#         for forty in Forty.objects.filter(GameID_id=forty_game_id):
-#             forty_used_scores.add(f"{forty.PID_id}:{forty.HoleNumber_id}")
-
-
-#     # Fetch players where GameID = game_id and GroupID = group_id
-#     ### GroupID=group_id
-#     players = ScorecardMeta.objects.filter(GameID=game_id).select_related('PID').values(
-#         first_name=F('PID__FirstName'),
-#         last_name=F('PID__LastName'),
-#         pid=F('PID__id'),
-#         net_hdcp=F('NetHDCP'), 
-#     )
-
-#     # Conditionally filter by group_id if it exists - sometimes it will be passed (4 person scorecard) and sometimes it won't (Big Scorecard)
-#     if group_id:
-#         players = players.filter(GroupID=group_id)
-
-#     # Convert players queryset to a list of dictionaries
-#     player_list = list(players)
-#     print('player_list', player_list)
-
-#     # Fetch the most common TeeID_id for the specified GroupID and GameID
-#     ### GroupID=group_id
-#     most_common_tee_id = (
-#         ScorecardMeta.objects.filter(GameID=game_id)
-#         .values('TeeID_id')
-#         .annotate(count=Count('TeeID_id'))
-#         .order_by('-count')
-#         .first()
-#     )
-
-#     print()
-#     print('most_common_tee_id', most_common_tee_id)
-
-#     # Fetch CourseHoles data for the most common TeeID_id
-#     course_holes = []
-#     course_name = None
-#     if most_common_tee_id:
-#         course_holes = CourseHoles.objects.filter(CourseTeesID_id=most_common_tee_id['TeeID_id']).order_by('HoleNumber').values(
-#             'id', 'HoleNumber', 'Par', 'Yardage', 'Handicap'
-#         )
-#         # Fetch the CourseName from CourseTees
-#         course_name = CourseTees.objects.filter(id=most_common_tee_id['TeeID_id']).values_list('CourseName', flat=True).first()
-
-#     print()
-#     print('course_holes', list(course_holes))
-
-#     # Fetch the PlayDate from Games
-#     play_date = Games.objects.filter(id=game_id).values_list('PlayDate', flat=True).first()
-
-#     print()
-#     print('play_date', play_date)
-
-#     ### smID__GroupID=group_id
-#     # Fetch scores for the game
-#     scores = Scorecard.objects.filter(
-#         GameID_id=game_id
-#     ).select_related('HoleID', 'smID').values(
-#         'HoleID__HoleNumber', 'NetScore', 'RawScore', 'smID__PID_id'
-#     )
-
-#     # Conditionally filter by group_id if it exists - sometimes it will be passed (4 person scorecard) and sometimes it won't (Big Scorecard)
-#     if group_id:
-#         scores = scores.filter(smID__GroupID=group_id)
-
-#     # print()
-#     # print('scores', scores)
-
-#     # Initialize player_scores with empty dictionaries for all players
-#     player_scores = {player['pid']: {} for player in player_list}
-#     # print()
-#     # print('player_scores pre meta', player_scores)
-    
-#     # Populate player_scores with actual scores if they exist
-#     for score in scores:
-#         player_id = score['smID__PID_id']
-#         hole_number = score['HoleID__HoleNumber']
-#         net_score = score['NetScore']
-#         raw_score = score['RawScore']
-
-#         # print()
-#         # print('score in scores', player_id, hole_number, net_score, raw_score)
-
-#         player_scores[player_id][hole_number] = {
-#             'net': net_score if net_score is not None else '',
-#             'raw': raw_score if raw_score is not None else '',
-#             'skin': False  # Initialize skin flag as False
-#         }
-#     # print()    
-#     # print('player_scores', player_scores)
-
-#     # Ensure all holes, "Out," "In," and "Total" columns are initialized
-#     for player_id in player_scores:
-#         for hole in course_holes:
-#             hole_number = hole['HoleNumber']
-#             if hole_number not in player_scores[player_id]:
-#                 player_scores[player_id][hole_number] = {'net': '', 'raw': ''}
-
-#         # Initialize "Out," "In," and "Total" columns
-#         player_scores[player_id]['Out'] = {'net': '', 'raw': '', 'skin': False}
-#         player_scores[player_id]['In'] = {'net': '', 'raw': '', 'skin': False}
-#         player_scores[player_id]['Total'] = {'net': '', 'raw': '', 'skin': False}
-    
-#     # print()
-#     # print('player_scores post init', player_scores)
-
-#     # Fetch additional fields from ScorecardMeta and add them to player_scores
-#     scorecard_meta_data = ScorecardMeta.objects.filter(GameID=game_id).values(
-#         'PID_id', 'RawOUT', 'NetOUT', 'RawIN', 'NetIN', 'RawTotal', 'NetTotal'
-#     )
-
-#     # Conditionally filter by group_id if it exists
-#     if group_id:
-#         scorecard_meta_data = scorecard_meta_data.filter(GroupID=group_id)
-        
-#     for meta in scorecard_meta_data:
-#         pid = meta['PID_id']
-#         if pid in player_scores:
-#             player_scores[pid]['Out'] = {
-#                 'net': meta['NetOUT'] if meta['NetOUT'] is not None else '',
-#                 'raw': meta['RawOUT'] if meta['RawOUT'] is not None else '',
-#                 'skin': False
-#             }
-#             player_scores[pid]['In'] = {
-#                 'net': meta['NetIN'] if meta['NetIN'] is not None else '',
-#                 'raw': meta['RawIN'] if meta['RawIN'] is not None else '',
-#                 'skin': False
-#             }
-#             player_scores[pid]['Total'] = {
-#                 'net': meta['NetTotal'] if meta['NetTotal'] is not None else '',
-#                 'raw': meta['RawTotal'] if meta['RawTotal'] is not None else '',
-#                 'skin': False
-#             }
-#     print()
-#     # print()
-#     # print('player_scores post meta', player_scores)
-
-#     # Fetch skins data
-#     skins = Skins.objects.filter(GameID=game_id).select_related('HoleNumber').values(
-#         'HoleNumber__HoleNumber', 'PlayerID_id'
-#     )
-
-#     # Mark skins in player_scores
-#     for skin in skins:
-#         hole_number = skin['HoleNumber__HoleNumber']
-#         player_id = skin['PlayerID_id']
-#         if player_id in player_scores and hole_number in player_scores[player_id]:
-#             player_scores[player_id][hole_number]['skin'] = True
-
-#     # print()
-#     # print('player_scores post skins', player_scores)
-
-#     # Initialize player_scores as an empty dictionary if no scores exist
-#     if not player_scores:
-#         player_scores = {}
-#     # print()
-#     # print('player_scores post check for p_s existience', player_scores)
-    
-#     # Calculate strokes for each player
-#     player_strokes = {}
-#     for player in player_list:
-#         player_id = player['pid']
-
-#         # Get NetHDCP for the player
-#         net_hdcp = ScorecardMeta.objects.filter(GameID=game_id, PID_id=player_id).values_list('NetHDCP', flat=True).first()
-
-#         if net_hdcp is not None:
-#             # Calculate base_strokes and addl_strokes
-#             base_strokes, addl_strokes = divmod(net_hdcp, 18)
-
-#             # Get holes where the player gets an additional stroke
-#             stroke_holes = CourseHoles.objects.filter(
-#                 CourseTeesID_id=most_common_tee_id['TeeID_id'],
-#                 Handicap__lte=addl_strokes
-#             ).values_list('HoleNumber', flat=True)
-
-#             # Assign strokes for each hole
-#             strokes = {}
-#             for hole in course_holes:
-#                 hole_number = hole['HoleNumber']
-#                 if hole_number in stroke_holes:
-#                     strokes[hole_number] = base_strokes + 1
-#                 else:
-#                     strokes[hole_number] = base_strokes
-
-#             player_strokes[player_id] = strokes
-
-#     # Initialize player_strokes as an empty dictionary if no strokes exist
-#     if not player_strokes:
-#         player_strokes = {}
-#     print("")
-#     print("forty_used_scores:", forty_used_scores)
-
-#     # ------------------- Gas Cup status (optional) -------------------
-#     gas_status = None
-#     try:
-#         if group_id:   # only show for 4-person sub-card; too noisy for big card
-#             pids = list(
-#                 ScorecardMeta.objects
-#                 .filter(GameID=game_id, GroupID=group_id)
-#                 .values_list("PID_id", flat=True)
-#             )
-#             if pids:
-#                 thru = (
-#                     Scorecard.objects
-#                     .filter(GameID=game_id, smID__PID_id__in=pids)
-#                     .aggregate(Max("HoleID__HoleNumber"))["HoleID__HoleNumber__max"]
-#                 ) or 0
-#                 status = gascup.status_for_pids(game_id, pids, thru)
-#                 if status:
-#                     pga_lbl, liv_lbl = gascup.pair_labels_for_pids(game_id, pids)
-#                     gas_status = gascup.format_status_human_verbose(status, pga_lbl, liv_lbl)
-#     except Exception as e:
-#         print("GAS STATUS ERROR (scorecard_view):", e)
-#         gas_status = None
-#     # ------------------- End Gas Cup status -------------------
-    
-#     context = {
-#         'game_id': game_id,
-#         'group_id': group_id,
-#         'player_list': player_list,
-#         'course_holes': list(course_holes),
-#         'course_name': course_name,
-#         'play_date': play_date,
-#         'player_scores': player_scores,  # Pass player scores to the template
-#         'player_strokes': player_strokes,  # Pass player strokes to the template
-#         'msg': msg,  # Pass the message
-#         'gas_status': gas_status,
-#         'first_name': request.user.first_name,
-#         'last_name': request.user.last_name,
-#     }
-#     context['forty_used_scores'] = list(forty_used_scores)
-    
-
-#     return render(request, 'GRPR/scorecard.html', context)
 
 
 @login_required

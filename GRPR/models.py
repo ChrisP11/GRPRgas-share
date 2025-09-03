@@ -182,6 +182,31 @@ class Scorecard(models.Model):
 
 ### Games Tables
 
+# --- Wizard draft state for new game setup ---
+class GameSetupDraft(models.Model):
+    """
+    Holds partial choices while a user steps through the new game setup wizard.
+    We keep it very generic so we don't collide with legacy tables yet.
+    """
+    created_at   = models.DateTimeField(auto_now_add=True)
+    updated_at   = models.DateTimeField(auto_now=True)
+    created_by   = models.ForeignKey(User, on_delete=models.CASCADE, related_name="game_setup_drafts")
+    crew_id      = models.IntegerField(db_index=True)               # keeping it simple/agnostic to your crew model name
+    event_date   = models.DateField(null=True, blank=True)          # chosen date (step 1)
+    course_id    = models.IntegerField(null=True, blank=True)       # optional: stash the course PK later (step 2)
+    tee_choice   = models.CharField(max_length=64, blank=True)      # later: “Blue/White”, “White”, etc.
+    state        = models.JSONField(default=dict, blank=True)       # anything else we want to cache per step
+    is_complete  = models.BooleanField(default=False)
+
+    class Meta:
+        indexes = [models.Index(fields=["created_by", "is_complete"])]
+        ordering = ["-updated_at"]
+
+    def __str__(self):
+        status = "complete" if self.is_complete else "draft"
+        return f"SetupDraft #{self.pk} by {self.created_by} ({status})"
+
+
 class Games(models.Model):
     CreateID = models.ForeignKey('Players', on_delete=models.CASCADE)  # Links to Players table, creator of the game
     CrewID = models.IntegerField()
