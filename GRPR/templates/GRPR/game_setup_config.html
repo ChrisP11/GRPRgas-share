@@ -34,39 +34,40 @@
           <input type="hidden" name="action" value="save_config">
           <div class="card-body">
             <div class="mb-3">
-              <label for="tee_id" class="form-label">Tee set</label>
-              <select id="tee_id" name="tee_id" class="form-select">
+            <label for="tee_id" class="form-label">Tee set</label>
+            <select id="tee_id" name="tee_id" class="form-select">
                 <option value="">— Select a tee —</option>
                 {% for t in tee_options %}
-                  {# Try common field names; adjust if your CourseTees uses different ones #}
-                  {% with label=t.Tee|default:t.tee value=t.id %}
-                    <option value="{{ value }}" {% if value == selected_tee_id %}selected{% endif %}>
-                      {{ label }}
+                    <option value="{{ t.id }}" {% if t.id == selected_tee_id %}selected{% endif %}>
+                    {{ t.name }} — {{ t.rating|floatformat:1 }} — {{ t.yards }} yds
                     </option>
-                  {% endwith %}
                 {% endfor %}
-              </select>
+            </select>
               <div class="form-text">Choose the tee set the group will play.</div>
             </div>
 
             <div class="mb-3">
-              <label class="form-label d-block">Handicap mode</label>
-              <div class="form-check form-check-inline">
-                <input class="form-check-input" type="radio" name="handicap_mode" id="hcLow"
-                       value="Low" {% if selected_handicap_mode != "Full" %}checked{% endif %}>
-                <label class="form-check-label" for="hcLow">Low man</label>
-              </div>
-              <div class="form-check form-check-inline">
-                <input class="form-check-input" type="radio" name="handicap_mode" id="hcFull"
-                       value="Full" {% if selected_handicap_mode == "Full" %}checked{% endif %}>
-                <label class="form-check-label" for="hcFull">Full</label>
-              </div>
+                <label for="handicap_mode" class="form-label">Handicap mode</label>
+                <select class="form-select" id="handicap_mode" name="handicap_mode" required>
+                    <option value="" disabled {% if not selected_handicap_mode %}selected{% endif %}>— Select mode —</option>
+                    <option value="Low"  {% if selected_handicap_mode == "Low" %}selected{% endif %}>Low man</option>
+                    <option value="Full" {% if selected_handicap_mode == "Full" %}selected{% endif %}>Full handicap</option>
+                </select>
             </div>
-          </div>
-          <div class="card-footer d-flex gap-2">
-            <a class="btn btn-outline-secondary" href="{% url 'game_setup_assign' %}">Back</a>
-            <button class="btn btn-primary" type="submit">Continue</button>
-          </div>
+
+            <div class="alert alert-info">
+                <p class="mb-1">
+                    <strong>Low man</strong> — Lowest handicap gets 0 strokes; everyone else gets strokes equal to
+                    their handicap minus the low man’s handicap. Example: if the low man is 5 and you’re 15, you get
+                    one stroke on each of the hardest 10 holes. This format tends to give higher handicappers an
+                    advantage on the hardest holes.
+                </p>
+                <p class="mb-0">
+                    <strong>Full handicap</strong> — Everyone receives strokes equal to their full handicap.
+                    Example: a 15 handicap gets one stroke on the 15 hardest holes. This format tends to give
+                    higher handicappers an advantage on the easiest holes.
+                </p>
+            </div>
         </form>
       </div>
     </div>

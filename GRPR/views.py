@@ -5775,47 +5775,71 @@ def game_setup_config_view(request):
     - Saves choices back into GameSetupDraft.state (and tee_choice field).
     - Does not create Games / GameInvites (that will happen on the final step).
     """
-    draft, redir = _draft_for_user_or_redirect(request, need_date=True, need_course=True, need_assignments=True)
+    draft, redir = _draft_for_user_or_redirect(
+        request, need_date=True, need_course=True, need_assignments=True
+    )
     if redir:
         return redir
 
     # Resolve course & tee options
     course = Courses.objects.filter(id=draft.course_id).only("id", "courseName").first()
-    tee_options = list(CourseTees.objects.filter(CourseID=draft.course_id).order_by("TeeID"))
+
+    tee_rows = (
+        CourseTees.objects
+        .filter(CourseID=draft.course_id)
+        .order_by("TeeID", "id")
+        .values("id", "TeeName", "CourseRating", "Yards")   # <-- dicts
+    )
+
+    tee_options = [
+        {
+            "id":     r["id"],
+            "name":   r["TeeName"],
+            "rating": r["CourseRating"],
+            "yards":  r["Yards"],
+        }
+        for r in tee_rows
+    ]
 
     # Pull assignment summary from draft.state
     state = draft.state or {}
     assignments = state.get("assignments") or {}   # {"9:04": [pid, pid, ...], ...}
     player_ids = {pid for plist in assignments.values() for pid in plist}
-    players = {p.id: p for p in Players.objects.filter(id__in=player_ids).only("id", "FirstName", "LastName")}
+    players = {
+        p.id: p
+        for p in Players.objects.filter(id__in=player_ids).only("id", "FirstName", "LastName")
+    }
     num_players = len(player_ids)
 
-    # Also allow arriving here directly after POST from the prior page (if you posted JSON forward)
+    # If coming here directly with forwarded JSON, accept it and persist
     if request.method == "POST" and request.POST.get("carry_forward_json"):
         try:
             forwarded = json.loads(request.POST.get("carry_forward_json") or "{}")
-            if "assignments" in forwarded:
+            if "assignments" in forwarded and isinstance(forwarded["assignments"], dict):
                 state["assignments"] = forwarded["assignments"]
-                assignments = forwarded["assignments"]
                 draft.state = state
                 draft.save(update_fields=["state", "updated_at"])
-                # refresh players set
+                assignments = forwarded["assignments"]
                 player_ids = {pid for plist in assignments.values() for pid in plist}
-                players = {p.id: p for p in Players.objects.filter(id__in=player_ids).only("id", "FirstName", "LastName")}
+                players = {
+                    p.id: p
+                    for p in Players.objects.filter(id__in=player_ids).only("id", "FirstName", "LastName")
+                }
                 num_players = len(player_ids)
         except Exception:
-            # Ignore; the draft already has assignments.
+            # Ignore parse errors; fall back to what’s already in the draft
             pass
 
     # Handle configuration submit (tee + handicap)
     if request.method == "POST" and request.POST.get("action") == "save_config":
         tee_id_raw = (request.POST.get("tee_id") or "").strip()
-        hc_mode    = (request.POST.get("handicap_mode") or "Low").strip()  # "Low" or "Full" (adapt to your choices)
+        hc_mode    = (request.POST.get("handicap_mode") or "Low").strip()  # "Low" or "Full"
 
-        # Validate tee choice if provided
         chosen_tee = None
         if tee_id_raw.isdigit():
-            chosen_tee = CourseTees.objects.filter(CourseID=draft.course_id, id=int(tee_id_raw)).first()
+            chosen_tee = CourseTees.objects.filter(
+                CourseID=draft.course_id, id=int(tee_id_raw)
+            ).first()
 
         if not chosen_tee:
             messages.warning(request, "Please choose a tee set.")
@@ -5823,17 +5847,16 @@ def game_setup_config_view(request):
             # Persist to draft
             state["handicap_mode"] = hc_mode
             state["tee_id"] = chosen_tee.id
-            state["tee_label"] = getattr(chosen_tee, "Tee", None) or getattr(chosen_tee, "tee", None) or "Tee"
+            state["tee_label"] = chosen_tee.TeeName
             draft.state = state
-            draft.tee_choice = state["tee_label"]
+            draft.tee_choice = chosen_tee.TeeName
             draft.save(update_fields=["state", "tee_choice", "updated_at"])
 
             messages.success(request, "Configuration saved.")
-            # NEXT: send to the “Games selection” step (or summary/confirm page).
-            return redirect("games_view")  # replace with your next step when ready
+            # NEXT: route to your next step (games selection / review)
+            return redirect("games_view")  # adjust when you add the next screen
 
-    # Build a UI-friendly summary structure (like the old skins_config)
-    # tee_times_for_display = [{"label": "9:04", "players": [{"id":..., "name":...}, ...]}, ...]
+    # Build display like skins_config: [{"label": "9:04", "players": [{"id":..., "name":...}, ...]}, ...]
     tee_times_for_display = []
     for tt in sorted(assignments.keys()):
         plist = []
@@ -5846,18 +5869,16 @@ def game_setup_config_view(request):
     context = {
         "first_name": request.user.first_name,
         "last_name":  request.user.last_name,
-        "playing_date": draft.event_date,              # template can format
+        "playing_date": draft.event_date,
         "number_of_players": num_players,
         "course_name": course.courseName if course else "—",
-        "tee_options": tee_options,                    # iterate and show Tee / TeeID
-        "tee_times": tee_times_for_display,            # list of groups+players to show
-        # progress / UX
+        "tee_options": tee_options,                    # list of {"id","label"}
+        "tee_times": tee_times_for_display,
         "progress": {
             "current": 5, "total": 6,
             "labels": ["date", "course", "players", "tee times", "configuration", "review"],
         },
         "progress_pct": f"{int(5/6*100)}%",
-        # if you want to preselect a prior tee / mode:
         "selected_tee_id": state.get("tee_id"),
         "selected_handicap_mode": state.get("handicap_mode", "Low"),
     }
