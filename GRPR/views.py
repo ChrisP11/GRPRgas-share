@@ -271,22 +271,33 @@ def admin_view(request):
     
     context = {
         'users': users,
-        "gascup_enabled": toggles.gascup_enabled,
+        'gascup_enabled': toggles.gascup_enabled,
+        'fallclassic_enabled': getattr(toggles, "fallclassic_enabled", False),
         'login_activities': login_activities,
         'responses': responses,
     }
     return render(request, 'admin_view.html', context)
 
 # added for Gas Cup toggling
+# @login_required
+# @require_POST
+# def toggle_gascup_view(request):
+#     toggles = get_toggles()
+#     # checkbox posts only when checked; treat absence as False
+#     new_value = request.POST.get('gascup_enabled') == 'on'
+#     if toggles.gascup_enabled != new_value:
+#         toggles.gascup_enabled = new_value
+#         toggles.save()
+#     return redirect('admin_page')
+
 @login_required
 @require_POST
-def toggle_gascup_view(request):
+def toggle_games_view(request):
     toggles = get_toggles()
-    # checkbox posts only when checked; treat absence as False
-    new_value = request.POST.get('gascup_enabled') == 'on'
-    if toggles.gascup_enabled != new_value:
-        toggles.gascup_enabled = new_value
-        toggles.save()
+    toggles.gascup_enabled      = (request.POST.get('gascup_enabled') == 'on')
+    toggles.fallclassic_enabled = (request.POST.get('fallclassic_enabled') == 'on')
+    toggles.save()
+    messages.success(request, "Game toggles saved.")
     return redirect('admin_page')
 
 
@@ -5854,7 +5865,7 @@ def game_setup_config_view(request):
 
             messages.success(request, "Configuration saved.")
             # NEXT: route to your next step (games selection / review)
-            return redirect("games_view")  # adjust when you add the next screen
+            return redirect("game_setup_games")
 
     # Build display like skins_config: [{"label": "9:04", "players": [{"id":..., "name":...}, ...]}, ...]
     tee_times_for_display = []
@@ -6635,6 +6646,107 @@ def game_setup_assign_view(request):
         "total_players": len(players),
         "assigned_count": len(assigned_set),
     })
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def game_setup_games_view(request):
+    """
+    Step 6/6: Choose which games will be played.
+    - Shows full summary (date, course, players, tee times & groups, chosen tee + handicap).
+    - Lets the user select games (Skins, Forty, optionally Gas Cup / Fall Classic).
+    - Stores choices in GameSetupDraft.state["games_selected"].
+    """
+    # Need date, course, assignments, and config to be present
+    draft, redir = _draft_for_user_or_redirect(
+        request,
+        need_date=True,
+        need_course=True,
+        need_assignments=True
+    )
+    if redir:
+        return redir
+
+    # Ensure config (tee & handicap) exists; if not, send back to config
+    state = draft.state or {}
+    if not state.get("tee_id") or not state.get("handicap_mode"):
+        messages.warning(request, "Please choose a tee set and handicap mode first.")
+        return redirect("game_setup_config")
+
+    # Load summary bits
+    course = Courses.objects.filter(id=draft.course_id).only("id", "courseName").first()
+    tee_label = state.get("tee_label") or "—"
+    handicap_mode = state.get("handicap_mode") or "—"
+
+    # Assignments summary
+    assignments = state.get("assignments") or {}   # {"9:04": [pid, pid], ...}
+    player_ids = {pid for plist in assignments.values() for pid in plist}
+    players = {
+        p.id: p for p in Players.objects
+            .filter(id__in=player_ids)
+            .only("id", "FirstName", "LastName")
+    }
+    num_players = len(player_ids)
+
+    toggles = get_toggles()
+    enable_gas_cup = bool(getattr(toggles, "gascup_enabled", False))
+    enable_fall_classic = bool(getattr(toggles, "fallclassic_enabled", False))
+
+    # Build UI-friendly groups like prior pages
+    tee_times_for_display = []
+    for tt in sorted(assignments.keys()):
+        plist = []
+        for pid in assignments.get(tt, []):
+            p = players.get(pid)
+            if p:
+                plist.append({"id": pid, "name": f"{p.FirstName} {p.LastName}"})
+        tee_times_for_display.append({"label": tt, "players": plist})
+
+    # Existing selection (sticky)
+    selected_games = set(state.get("games_selected") or [])
+
+    if request.method == "POST":
+        # name=games (checkboxes)
+        chosen = request.POST.getlist("games")
+        # Only allow the supported set
+        allowed = {"skins", "forty"}
+        if enable_gas_cup:
+            allowed.add("gascup")
+        if enable_fall_classic:
+            allowed.add("fallclassic")
+
+        chosen = [g for g in chosen if g in allowed]
+        if not chosen:
+            messages.warning(request, "Please choose at least one game to play.")
+        else:
+            state["games_selected"] = chosen
+            draft.state = state
+            draft.save(update_fields=["state", "updated_at"])
+            messages.success(request, "Games saved.")
+            # TODO: route to your per-game configuration or final review/confirm screen.
+            # For now, send back to Games home.
+            return redirect("games_view")
+
+        # Persist sticky selection even when warning
+        selected_games = set(chosen)
+
+    context = {
+        "playing_date": draft.event_date,
+        "course_name": course.courseName if course else "—",
+        "number_of_players": num_players,
+        "tee_times": tee_times_for_display,
+        "tee_label": tee_label,
+        "handicap_mode": "Low man" if handicap_mode == "Low" else "Full handicap",
+        "selected_games": selected_games,
+        "enable_gas_cup": enable_gas_cup,
+        "enable_fall_classic": enable_fall_classic,
+        "progress": {
+            "current": 6, "total": 6,
+            "labels": ["date", "course", "players", "tee times", "configuration", "games"],
+        },
+        "progress_pct": f"{int(6/6*100)}%",
+    }
+    return render(request, "GRPR/game_setup_games.html", context)
 
 
 ##########################

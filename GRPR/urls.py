@@ -65,7 +65,8 @@ urlpatterns = [
     path('reset/<uidb64>/<token>/', auth_views.PasswordResetConfirmView.as_view(template_name='GRPR/password_reset_confirm.html'), name='password_reset_confirm'),
     path('reset/done/', auth_views.PasswordResetCompleteView.as_view(template_name='GRPR/password_reset_complete.html'), name='password_reset_complete'),
     path('admin_page/', views.admin_view, name='admin_page'),
-    path('admin/toggle-gascup/', views.toggle_gascup_view, name='toggle_gascup_view'),
+    # path('admin/toggle-gascup/', views.toggle_gascup_view, name='toggle_gascup_view'),
+    path('admin/toggles/', views.toggle_games_view, name='toggle_games_view'),
     path('email_test/', views.email_test_view, name='email_test_view'),
     path('automated_msg_admin/', views.automated_msg_admin_view, name='automated_msg_admin_view'),
     path('automated_msg_confirm/', views.automated_msg_confirm_view, name='automated_msg_confirm_view'),
@@ -86,6 +87,8 @@ urlpatterns = [
     path("GRPR/games/setup/groups/", views.game_setup_groups_view, name="game_setup_groups"),
     path("GRPR/games/setup/assign/", views.game_setup_assign_view, name="game_setup_assign"),
     path("GRPR/games/setup/config/", views.game_setup_config_view, name="game_setup_config"),
+    path("GRPR/games/setup/games/", views.game_setup_games_view, name="game_setup_games"),
+
 
 
     ### Skins Game

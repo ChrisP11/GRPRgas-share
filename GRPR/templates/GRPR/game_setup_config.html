@@ -25,6 +25,34 @@
     </div>
   {% endif %}
 
+      <div class="col-lg-5">
+      <div class="card h-100">
+        <div class="card-header">Summary</div>
+        <div class="card-body">
+          <div class="mb-2"><strong>Date:</strong> {{ playing_date|date:"D, M j, Y" }}</div>
+          <div class="mb-2"><strong>Course:</strong> {{ course_name }}</div>
+          <div class="mb-2"><strong>Players:</strong> {{ number_of_players }}</div>
+          <hr>
+          <div class="mb-2"><strong>Tee times & groups:</strong></div>
+          {% if tee_times %}
+            <ul class="list-unstyled mb-0">
+              {% for grp in tee_times %}
+                <li class="mb-2">
+                  <span class="badge bg-secondary me-2">{{ grp.label }}</span>
+                  {% for p in grp.players %}
+                    <span class="badge bg-light text-dark me-1">{{ p.name }}</span>
+                  {% endfor %}
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <div class="text-muted">No assignments found.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="row g-3">
     <div class="col-lg-7">
       <div class="card">
@@ -72,33 +100,12 @@
       </div>
     </div>
 
-    <div class="col-lg-5">
-      <div class="card h-100">
-        <div class="card-header">Summary</div>
-        <div class="card-body">
-          <div class="mb-2"><strong>Date:</strong> {{ playing_date|date:"D, M j, Y" }}</div>
-          <div class="mb-2"><strong>Course:</strong> {{ course_name }}</div>
-          <div class="mb-2"><strong>Players:</strong> {{ number_of_players }}</div>
-          <hr>
-          <div class="mb-2"><strong>Tee times & groups:</strong></div>
-          {% if tee_times %}
-            <ul class="list-unstyled mb-0">
-              {% for grp in tee_times %}
-                <li class="mb-2">
-                  <span class="badge bg-secondary me-2">{{ grp.label }}</span>
-                  {% for p in grp.players %}
-                    <span class="badge bg-light text-dark me-1">{{ p.name }}</span>
-                  {% endfor %}
-                </li>
-              {% endfor %}
-            </ul>
-          {% else %}
-            <div class="text-muted">No assignments found.</div>
-          {% endif %}
-        </div>
-      </div>
+    <div class="card-footer d-flex gap-2">
+        <a class="btn btn-outline-secondary" href="{% url 'game_setup_assign' %}">Back</a>
+        <button class="btn btn-primary" type="submit">Save &amp; Continue</button>
     </div>
-  </div>
+
+
 
 </div>
 {% endblock %}
