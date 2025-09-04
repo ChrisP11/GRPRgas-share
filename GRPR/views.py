@@ -7128,10 +7128,6 @@ def scorecard_view(request):
     group_id = request.GET.get('group_id')  # may be blank → Big Scorecard
     msg = request.GET.get('msg')
 
-    print()
-    print('scorecard_view - game_id', game_id)
-    print('scorecard_view - group_id', group_id)
-
     # ------------------------------------------------------------------
     # Linked Forty game (for red-border highlighting)
     # ------------------------------------------------------------------
