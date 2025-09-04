@@ -5654,11 +5654,6 @@ def forty_view(request):
     return render(request, 'GRPR/forty.html', context)
 
 
-from django.db import transaction
-from django.utils import timezone
-# make sure these are imported near your other model imports:
-# from GRPR.models import Games, Players, ScorecardMeta
-
 @login_required
 @require_http_methods(["GET", "POST"])
 def forty_config_view(request):
@@ -5670,7 +5665,7 @@ def forty_config_view(request):
 
     state = draft.state or {}
 
-    # If we arrived here from the games selection page, capture the choices.
+    # Capture chosen games if we arrived here via POST from the selection page.
     if request.method == "POST":
         chosen = request.POST.getlist("games")
         if chosen:
@@ -5684,71 +5679,111 @@ def forty_config_view(request):
             draft.state = state
             draft.save(update_fields=["state", "updated_at"])
 
-    # --- Wizard prelude: ensure tee times; create Skins (optional); create scorecards (optional) ---
+    # --- Ensure TT rows; create Skins/Forty games (+invites); create scorecards ---
     wizard_msg = None
     try:
-        # Refresh draft/state to be safe
+        # refetch to keep state fresh
         draft = (
             GameSetupDraft.objects
             .filter(created_by=request.user, is_complete=False)
             .order_by("-updated_at", "-created_at")
             .first()
         )
-        if draft:
-            state = draft.state or {}
-            created_tt_count = 0
-            with transaction.atomic():
-                # 1) Ensure TeeTimesInd exists for all assignments (only once)
-                ttid_by_player = state.get("ttid_by_player")
-                if not ttid_by_player:
-                    ttid_by_player, created_tt_count = _ensure_teetimesind_for_draft(draft)
-                    # persist mapping in state
-                    state = draft.state or {}
-                    state["ttid_by_player"] = ttid_by_player
-                    draft.state = state
+        state = draft.state or {}
+        created_tt_count = 0
+
+        with transaction.atomic():
+            # 1) TeeTimesInd (idempotent)
+            ttid_by_player = state.get("ttid_by_player")
+            if not ttid_by_player:
+                ttid_by_player, created_tt_count = _ensure_teetimesind_for_draft(draft)
+                st = draft.state or {}
+                st["ttid_by_player"] = ttid_by_player
+                draft.state = st
+                draft.save(update_fields=["state", "updated_at"])
+                state = st  # refresh local
+
+            games_selected = set(state.get("games_selected") or [])
+
+            # 2) If Skins selected, ensure Skins game (+invites) and scorecards
+            skins_game = None
+            if "skins" in games_selected:
+                skins_game_id = state.get("skins_game_id")
+                if skins_game_id:
+                    skins_game = Games.objects.filter(pk=skins_game_id).first()
+                if skins_game is None:
+                    skins_game = _create_game_and_invites(
+                        draft=draft,
+                        ttid_by_player=ttid_by_player,
+                        creator_user=request.user,
+                        game_type="Skins",
+                    )
+                    st = draft.state or {}
+                    st["skins_game_id"] = int(skins_game.id)
+                    draft.state = st
                     draft.save(update_fields=["state", "updated_at"])
+                    state = st
 
-                # 2) If Skins was selected (and not yet created), create it with invites
-                games_selected = set((draft.state or {}).get("games_selected") or [])
-                skins_game = None
-                if "skins" in games_selected:
-                    skins_game_id = (draft.state or {}).get("skins_game_id")
-                    if skins_game_id:
-                        skins_game = Games.objects.filter(pk=skins_game_id).first()
-                    if skins_game is None:
-                        skins_game = _create_skins_game_and_invites(
-                            draft=draft,
-                            ttid_by_player=ttid_by_player,
-                            creator_user=request.user,
-                        )
-                        # remember the id
-                        state = draft.state or {}
-                        state["skins_game_id"] = int(skins_game.id)
-                        draft.state = state
-                        draft.save(update_fields=["state", "updated_at"])
+                if skins_game and not ScorecardMeta.objects.filter(GameID=skins_game.id).exists():
+                    _create_scorecards_for_game(
+                        draft=draft,
+                        game=skins_game,
+                        ttid_by_player=ttid_by_player,
+                        creator_user=request.user,
+                    )
 
-                    # 3) Ensure ScorecardMeta exists for the Skins game
-                    if skins_game and not ScorecardMeta.objects.filter(GameID=skins_game.id).exists():
-                        _create_scorecards_for_game(
-                            draft=draft,
-                            game=skins_game,
-                            ttid_by_player=ttid_by_player,
-                            creator_user=request.user,
-                        )
+            # 3) If Forty selected, ensure Forty game (+invites) and scorecards
+            forty_game = None
+            if "forty" in games_selected:
+                forty_game_id = state.get("forty_game_id")
+                if forty_game_id:
+                    forty_game = Games.objects.filter(pk=forty_game_id).first()
+                if forty_game is None:
+                    forty_game = _create_game_and_invites(
+                        draft=draft,
+                        ttid_by_player=ttid_by_player,
+                        creator_user=request.user,
+                        game_type="Forty",
+                    )
+                    st = draft.state or {}
+                    st["forty_game_id"] = int(forty_game.id)
+                    draft.state = st
+                    draft.save(update_fields=["state", "updated_at"])
+                    state = st
 
-            # Friendly message
-            parts = []
-            if created_tt_count:
-                parts.append(f"Tee times have been created for {created_tt_count} players.")
-            if (draft.state or {}).get("skins_game_id"):
-                parts.append("Skins has been configured and is ready.")
-            wizard_msg = " ".join(parts) if parts else None
+                # Associate Skins <-> Forty if both exist
+                if forty_game and state.get("skins_game_id"):
+                    skins_game = skins_game or Games.objects.filter(pk=state["skins_game_id"]).first()
+                    if skins_game:
+                        if getattr(forty_game, "AssocGame", None) != skins_game.id:
+                            forty_game.AssocGame = skins_game.id
+                            forty_game.save(update_fields=["AssocGame"])
+                        if getattr(skins_game, "AssocGame", None) != forty_game.id:
+                            skins_game.AssocGame = forty_game.id
+                            skins_game.save(update_fields=["AssocGame"])
+
+                if forty_game and not ScorecardMeta.objects.filter(GameID=forty_game.id).exists():
+                    _create_scorecards_for_game(
+                        draft=draft,
+                        game=forty_game,
+                        ttid_by_player=ttid_by_player,
+                        creator_user=request.user,
+                    )
+
+        # Friendly banner
+        parts = []
+        if created_tt_count:
+            parts.append(f"Tee times have been created for {created_tt_count} players.")
+        if state.get("skins_game_id"):
+            parts.append("Skins has been configured and is ready.")
+        if state.get("forty_game_id"):
+            parts.append("Forty has been initialized.")
+        wizard_msg = " ".join(parts) if parts else None
 
     except Exception as e:
         messages.warning(request, f"Setup warning: {e}")
-    # --- end wizard prelude ---
 
-    # ---------- Build page data from GameSetupDraft state ----------
+    # ---------- Build page data from draft.state ----------
     state = draft.state or {}
     assignments = state.get("assignments") or {}
     time_ids_by_label = (
@@ -5757,7 +5792,7 @@ def forty_config_view(request):
         or {}
     )
 
-    # Get player names
+    # Player names
     player_ids = {pid for plist in assignments.values() for pid in plist}
     id_to_last = {
         p.id: p.LastName
@@ -5766,13 +5801,10 @@ def forty_config_view(request):
 
     group_list = []
     for idx, label in enumerate(sorted(assignments.keys())):
-        group_id = time_ids_by_label.get(label)
-        if group_id is None:
-            group_id = idx + 1  # defensive fallback
+        group_id = time_ids_by_label.get(label) or (idx + 1)
         last_names = [id_to_last.get(pid, f"#{pid}") for pid in assignments.get(label, [])]
         group_list.append({"group_id": group_id, "last_names": sorted(last_names)})
 
-    # Game format from handicap_mode in state
     hc_mode = (state.get("handicap_mode") or "").strip().lower()
     if hc_mode.startswith("low"):
         game_format = "Low Man"
@@ -5781,14 +5813,10 @@ def forty_config_view(request):
     else:
         game_format = ""
 
-    # Use skins game id if we created one; otherwise None (this page doesn’t require it)
-    game_id = state.get("skins_game_id")
-    live_skins_msg = wizard_msg or "placeholder"
-
     context = {
-        "live_skins_msg": live_skins_msg,
+        "live_skins_msg": wizard_msg or "placeholder",
         "group_list": sorted(group_list, key=lambda g: g["group_id"]),
-        "game_id": game_id,
+        "game_id": state.get("skins_game_id") or state.get("forty_game_id"),
         "game_format": game_format,
         "first_name": request.user.first_name,
         "last_name": request.user.last_name,
@@ -5797,6 +5825,7 @@ def forty_config_view(request):
         context["live_skins_msg"] = wizard_msg
 
     return render(request, "GRPR/forty_config.html", context)
+
 
 
 @login_required
