@@ -35,7 +35,7 @@ from collections import Counter, defaultdict
 import itertools
 from itertools import chain
 import re
-from typing import Optional
+from typing import Optional, Dict, Tuple
 
 
 # --- helper: normalize user-entered tee time strings to "H:MM" not sure this is needed long term---
@@ -71,6 +71,7 @@ def custom_round(value):
 
 today = datetime.now().date()
 
+
 def game_id_for_today():
     """
     Return the Skins game-id for **today** (or None if not found).
@@ -84,6 +85,123 @@ def game_id_for_today():
         .first()
     )
     return game.id if game else None
+
+# ------------------------------------------------------------------
+# Game setup workflow wizards
+# ------------------------------------------------------------------
+def _resolve_course_row_id_for_label(*, crew_id: int, course_name: str, label: str) -> Optional[int]:
+    """
+    Fallback resolver: given a human tee-time label like "9:04", find a Courses.id row
+    for this crew+courseName+time.
+    """
+    return (
+        Courses.objects
+        .filter(crewID=crew_id, courseName=course_name, courseTimeSlot=label)
+        .order_by('id')
+        .values_list('id', flat=True)
+        .first()
+    )
+
+def _ensure_teetimesind_for_draft(draft: GameSetupDraft) -> Tuple[Dict[int, int], int]:
+    """
+    Ensure a TeeTimesInd row exists for every (player, tee time) assignment in the draft.
+    Returns (ttid_by_player, created_count).
+    - ttid_by_player: {PID -> TeeTimesInd.id}
+    """
+    state        = draft.state or {}
+    assignments  = state.get("assignments") or {}        # {"9:04": [pid, pid, ...], ...}
+    label2cid    = state.get("time_ids_by_label") or {}  # {"9:04": Courses.id, ...}
+    course_name  = (state.get("courseName") or "").strip()
+
+    if not assignments:
+        raise ValueError("No player assignments found in draft.state['assignments'].")
+
+    ttid_by_player: dict[int, int] = {}
+    created = 0
+
+    for label, pid_list in assignments.items():
+        # Resolve the Courses.id for this label (prefer what we stashed at step 3).
+        course_row_id = label2cid.get(label)
+        if not course_row_id:
+            course_row_id = _resolve_course_row_id_for_label(
+                crew_id=draft.crew_id, course_name=course_name, label=label
+            )
+        if not course_row_id:
+            raise ValueError(f"Could not resolve a tee time row for '{label}'.")
+
+        for pid in pid_list:
+            # Avoid duplicates if wizard is re-submitted
+            existing = (
+                TeeTimesInd.objects
+                .filter(CrewID=draft.crew_id, gDate=draft.event_date,
+                        CourseID_id=course_row_id, PID_id=pid)
+                .values_list('id', flat=True)
+                .first()
+            )
+            if existing:
+                ttid_by_player[pid] = existing
+                continue
+
+            row = TeeTimesInd.objects.create(
+                CrewID=draft.crew_id,
+                gDate=draft.event_date,
+                CourseID_id=course_row_id,
+                PID_id=pid,
+            )
+            created += 1
+            ttid_by_player[pid] = row.id
+
+    # Persist mapping for downstream use
+    state["ttid_by_player"] = ttid_by_player
+    draft.state = state
+    draft.save(update_fields=["state", "updated_at"])
+    return ttid_by_player, created
+
+def _create_skins_game_and_invites(*, draft: GameSetupDraft, ttid_by_player: dict[int, int], creator_user: User) -> Games:
+    """
+    Create a Skins game tied to this draft and bulk-insert GameInvites from the ttid_by_player map.
+    Returns the created Games row.
+    """
+    # Find the player's PID for the logged-in user
+    creator_pid = (
+        Players.objects
+        .filter(user=creator_user)
+        .values_list('id', flat=True)
+        .first()
+    )
+    if not creator_pid:
+        raise ValueError("No Players row linked to the logged-in user.")
+
+    state = draft.state or {}
+    tee_id = state.get("tee_id") or 1  # sane fallback per your model default
+
+    game = Games.objects.create(
+        CrewID          = draft.crew_id,
+        CreateDate      = timezone.now(),
+        PlayDate        = draft.event_date,
+        CourseTeesID_id = int(tee_id),
+        Status          = 'Live',       # so forty_config_view can find it immediately
+        Type            = 'Skins',
+        CreateID_id     = creator_pid,
+    )
+
+    # Bulk invites (AlterDate is a DATE on your model)
+    today = timezone.now().date()
+    invites = [
+        GameInvites(
+            AlterDate = today,
+            Status    = 'Accepted',
+            GameID_id = game.id,
+            PID_id    = pid,
+            TTID_id   = ttid_by_player[pid],
+        )
+        for pid in ttid_by_player.keys()
+    ]
+    GameInvites.objects.bulk_create(invites)
+
+    # Keep for downstream flows that expect this in session
+    return game
+
 
 # ------------------------------------------------------------------
 # Handicap utility
@@ -5297,6 +5415,51 @@ def forty_view(request):
 
 @login_required
 def forty_config_view(request):
+    # --- Wizard prelude: create tee times (+ optional Skins) on first arrival ---
+    wizard_msg = None
+    try:
+        draft = (
+            GameSetupDraft.objects
+            .filter(created_by=request.user, is_complete=False)
+            .order_by("-updated_at", "-created_at")
+            .first()
+        )
+        if draft:
+            state = draft.state or {}
+            created_tt_count = 0
+            with transaction.atomic():
+                # 1) Create TeeTimesInd if we haven't yet
+                if not state.get("ttid_by_player"):
+                    _, created_tt_count = _ensure_teetimesind_for_draft(draft)
+
+                # 2) Create Skins game & invites if selected and not already recorded
+                games_selected = set(state.get("games_selected") or [])
+                if "skins" in games_selected and not state.get("skins_game_id"):
+                    ttid_by_player = state.get("ttid_by_player") or {}
+                    if ttid_by_player:
+                        game = _create_skins_game_and_invites(
+                            draft=draft,
+                            ttid_by_player=ttid_by_player,
+                            creator_user=request.user,
+                        )
+                        state["skins_game_id"] = int(game.id)
+                        draft.state = state
+                        draft.save(update_fields=["state", "updated_at"])
+
+            # Friendly message for the top of the page
+            parts = []
+            if created_tt_count:
+                parts.append(f"Tee times have been created for {created_tt_count} players.")
+            if state.get("skins_game_id"):
+                parts.append("Skins has been configured and is ready.")
+            wizard_msg = " ".join(parts) if parts else None
+
+    except Exception as e:
+        # Don’t block the page if something goes wrong; show a warning.
+        messages.warning(request, f"Setup warning: {e}")
+    
+    # -- end of wizard prelude ---
+
     # Find a live Skins game with a future PlayDate
     now = timezone.now().date()
     live_game = Games.objects.filter(Status='Live', Type='Skins', PlayDate__gte=now).order_by('PlayDate').first()
@@ -5336,6 +5499,9 @@ def forty_config_view(request):
         'first_name': request.user.first_name,
         'last_name': request.user.last_name,
     }
+    if wizard_msg:
+        context["live_skins_msg"] = wizard_msg  
+
     return render(request, 'GRPR/forty_config.html', context)
 
 
