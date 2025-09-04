@@ -4279,13 +4279,7 @@ def skins_config_view(request):
         logged_in_player = Players.objects.get(user_id=user.id)
         logged_in_player_id = logged_in_player.id
 
-        print()
-        print('ymd', playing_date)
-        print()
-
         playing_date_ymd = parse_date_any(playing_date)
-
-        print('ymd', playing_date_ymd )
 
         # Hard code ct_id for now
         ct_id = 1  # TODO: Make dynamic in future
@@ -6193,20 +6187,14 @@ def game_setup_date_view(request):
     })
 
 
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import render, redirect, get_object_or_404
-from .models import GameSetupDraft, Courses
-
 @login_required
 def game_setup_course_view(request):
     """
     Step 2/6: Course choice.
     - Requires an existing draft with event_date.
-    - Presents a distinct list of course names pulled from Courses.
-    - Saves the chosen CourseID to the draft, then goes to the next step.
+    - Builds the course dropdown from CourseTees (distinct CourseName, CourseID).
+    - On submit, validates the CourseID exists in CourseTees and saves it to the draft.
     """
-
-    # Get the user’s most recent open draft (created at step 1)
     draft = (
         GameSetupDraft.objects
         .filter(created_by=request.user, is_complete=False)
@@ -6216,36 +6204,22 @@ def game_setup_course_view(request):
     if not draft or not draft.event_date:
         return redirect("game_setup_date")
 
-    # Resolve the user’s crew (legacy lookup helper you added earlier)
-    crew_id = _get_user_crew_id(request.user)
-
-    # Build a distinct list of course names with a representative id.
-    # Prefer courses for this crew; if none, fall back to all courses.
-    base_qs = Courses.objects.filter(crewID=crew_id)
-    if not base_qs.exists():
-        base_qs = Courses.objects.all()
-
-    # DISTINCT by courseName, pick the smallest id for that name
+    # Distinct (CourseID, CourseName) from CourseTees
     rows = (
-        base_qs
-        .values("courseName")
-        .annotate(id_rep=Min("id"))
-        .order_by("courseName")
+        CourseTees.objects
+        .values("CourseID", "CourseName")
+        .order_by("CourseName", "CourseID")
+        .distinct()
     )
     course_options = [
-        {"id": r["id_rep"], "name": (r["courseName"] or "").strip()}
+        {"id": r["CourseID"], "name": (r["CourseName"] or "").strip()}
         for r in rows
-        if (r["courseName"] or "").strip()
+        if (r["CourseName"] or "").strip()
     ]
 
-    # Handle form submission
     if request.method == "POST":
-        course_id = (request.POST.get("course_id") or "").strip()
-        chosen = None
-        if course_id.isdigit():
-            chosen = Courses.objects.filter(pk=int(course_id)).only("id", "courseName").first()
-
-        if not chosen:
+        course_id_raw = (request.POST.get("course_id") or "").strip()
+        if not course_id_raw.isdigit():
             return render(request, "GRPR/game_setup_course.html", {
                 "draft": draft,
                 "courses": course_options,
@@ -6257,14 +6231,38 @@ def game_setup_course_view(request):
                 "error": "Please choose a course.",
             })
 
-        # Save selection to the draft (and stash readable name in state)
-        draft.course_id = chosen.id
+        cid = int(course_id_raw)
+
+        # Validate the CourseID exists in CourseTees
+        if not CourseTees.objects.filter(CourseID=cid).exists():
+            return render(request, "GRPR/game_setup_course.html", {
+                "draft": draft,
+                "courses": course_options,
+                "progress": {
+                    "current": 2, "total": 6,
+                    "labels": ["date", "course", "players", "tee times", "games", "configuration"],
+                },
+                "progress_pct": f"{int(2/6*100)}%",
+                "error": "Invalid course selection.",
+            })
+
+        # Derive a display name from CourseTees (first name for that CourseID)
+        cname = (
+            CourseTees.objects
+            .filter(CourseID=cid)
+            .values_list("CourseName", flat=True)
+            .order_by("CourseName")
+            .first()
+        ) or ""
+
+        # Save selection to the draft
+        draft.course_id = cid
         state = dict(draft.state or {})
-        state["courseName"] = chosen.courseName
+        if cname:
+            state["courseName"] = cname
         draft.state = state
         draft.save(update_fields=["course_id", "state", "updated_at"])
 
-        # Next step (players) — adjust if your URL name differs
         return redirect("game_setup_players")
 
     # GET
