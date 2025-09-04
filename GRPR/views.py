@@ -6371,12 +6371,11 @@ def game_setup_players_view(request):
 @login_required
 def game_setup_groups_view(request):
     """
-    Step 3/6: Choose tee times for the selected course.
-    - Uses GameSetupDraft with event_date + course_id already chosen.
-    - Shows distinct tee times for (crew_id, courseName).
-    - Lets the user add a new tee time (deduped by normalization).
-    - Persists list of selected tee times in draft.state["teetimes"] and
-      on success redirects to Step 4 (assign players).
+    Step 3/6 (tee times): choose tee times for the selected course.
+    - Reads draft.event_date and draft.course_id (CourseID).
+    - Lists distinct tee-time labels from Courses for (crew_id, course_name).
+    - Lets the user add a new tee time (deduped via normalization).
+    - Persists both labels and Courses.id in draft.state, then goes to Step 4 (assign).
     """
     draft = (
         GameSetupDraft.objects
@@ -6384,89 +6383,96 @@ def game_setup_groups_view(request):
         .order_by("-updated_at", "-created_at")
         .first()
     )
-    if not draft:
-        return redirect("game_setup_date")
-    if not draft.event_date:
+    if not draft or not draft.event_date:
         return redirect("game_setup_date")
     if not draft.course_id:
         return redirect("game_setup_course")
 
-    # Find the chosen courseName for this course_id
+    # Resolve chosen courseName & crew from your schema
     course_row = Courses.objects.filter(id=draft.course_id).only("courseName", "crewID").first()
     if not course_row:
         messages.error(request, "Course not found. Please choose the course again.")
         return redirect("game_setup_course")
 
-    course_name = course_row.courseName
+    course_name = (course_row.courseName or "").strip()
     crew_id = draft.crew_id
 
-    # Distinct tee times for this (courseName, crewID)
-    existing_qs = (
+    # Distinct tee-time labels for this (crew, courseName) with a canonical Courses.id per label
+    # We choose the MIN(id) as the canonical id for that label
+    rows = (
         Courses.objects
-        .filter(courseName=course_name, crewID=crew_id)
+        .filter(crewID=crew_id, courseName=course_name)
         .exclude(courseTimeSlot__isnull=True)
         .exclude(courseTimeSlot__exact="")
-        .values_list("courseTimeSlot", flat=True)
-        .distinct()
+        .values("courseTimeSlot")
+        .annotate(id_rep=Min("id"))
         .order_by("courseTimeSlot")
     )
-    existing = list(existing_qs)
+    existing_list = [r["courseTimeSlot"] for r in rows]
+    label_to_id = {r["courseTimeSlot"]: r["id_rep"] for r in rows}
 
-    # Use any previously selected set from state
+    # If you want normalization-aware lookup (handles "900", "9:00", "9 00", etc.)
+    # build a normalized index too:
+    norm_index = {}
+    for lbl, cid in label_to_id.items():
+        norm = _normalize_teetime_label(lbl) or lbl.strip()
+        norm_index[norm.lower()] = {"id": cid, "label": lbl}
+
+    # Load previously selected labels (backward compatible: labels only)
     state = draft.state or {}
-    selected = list(state.get("teetimes") or [])
+    selected_labels = list(state.get("teetimes") or [])
 
     if request.method == "POST":
         action = (request.POST.get("action") or "").strip()  # 'continue' or 'add_and_continue'
-        # Checkboxes: <input type="checkbox" name="teetimes" value="8:04">
-        chosen = request.POST.getlist("teetimes")
+        # The form posts labels: <input type="checkbox" name="teetimes" value="9:04">
+        chosen_labels_raw = request.POST.getlist("teetimes")
 
-        # Normalize + dedupe chosen
-        norm_chosen = []
+        # Normalize and de-dupe labels from the form
+        chosen_labels = []
         seen = set()
-        for raw in chosen:
-            lab = _normalize_teetime_label(raw) or raw.strip()
-            if not lab:
+        for raw in chosen_labels_raw:
+            lbl = _normalize_teetime_label(raw) or (raw or "").strip()
+            if not lbl:
                 continue
-            key = lab.lower()
+            key = lbl.lower()
             if key not in seen:
                 seen.add(key)
-                norm_chosen.append(lab)
+                chosen_labels.append(lbl)
 
-        # If an extra tee time is provided, process it
+        # Handle add-and-continue (create a new tee time if needed)
         new_tt_raw = (request.POST.get("new_teetime") or "").strip()
         if action == "add_and_continue" and new_tt_raw:
             new_norm = _normalize_teetime_label(new_tt_raw)
             if not new_norm:
                 messages.warning(request, "That tee time format wasn’t recognized (try like 9:00).")
-                # keep selections and fall through to render
             else:
-                # Check duplicate against existing set (normalize those as well)
-                existing_norm = set((_normalize_teetime_label(x) or x).lower() for x in existing)
-                if new_norm.lower() in existing_norm:
+                # Check duplicate by normalized label
+                if new_norm.lower() in norm_index:
                     messages.info(request, f"{new_norm} already exists for {course_name}.")
                 else:
-                    # Create new Courses row with same courseName + crewID
-                    Courses.objects.create(
+                    # Create new Courses row and capture its id
+                    new_row = Courses.objects.create(
                         crewID=crew_id,
                         courseName=course_name,
                         courseTimeSlot=new_norm
                     )
-                    existing.append(new_norm)
+                    # Update in-memory indices so the rest of this request sees it
+                    label_to_id[new_norm] = new_row.id
+                    norm_index[new_norm.lower()] = {"id": new_row.id, "label": new_norm}
+                    existing_list.append(new_norm)
                     messages.success(request, f"Added tee time {new_norm}.")
+                    # Auto-select it
+                    if new_norm not in chosen_labels:
+                        chosen_labels.append(new_norm)
 
-                # Also mark it selected (if not already)
-                if new_norm not in norm_chosen:
-                    norm_chosen.append(new_norm)
-
-        # Final validation: need at least one tee time before continuing
-        if not norm_chosen:
+        # Must have at least one tee time to proceed
+        if not chosen_labels:
             messages.error(request, "Please select at least one tee time (or add a new one).")
             return render(request, "GRPR/game_setup_groups.html", {
                 "draft": draft,
                 "course_name": course_name,
-                "existing": existing,
-                "selected": norm_chosen,  # empty -> nothing checked
+                "existing": existing_list,     # labels for checkboxes
+                "selected": chosen_labels,     # labels that are checked
                 "progress": {
                     "current": 3, "total": 6,
                     "labels": ["date", "course", "players", "tee times", "games", "configuration"],
@@ -6474,8 +6480,39 @@ def game_setup_groups_view(request):
                 "progress_pct": f"{int(3/6*100)}%",
             })
 
-        # Persist and move on
-        state["teetimes"] = sorted(norm_chosen)
+        # Build id mapping for chosen labels (fallback to query if not in index)
+        ids = []
+        id_by_label = {}
+        for lbl in chosen_labels:
+            key = (_normalize_teetime_label(lbl) or lbl.strip()).lower()
+            if key in norm_index:
+                cid = norm_index[key]["id"]
+                canonical_label = norm_index[key]["label"]  # keep original saved label formatting
+            else:
+                # Rare fallback: lookup directly
+                found = (
+                    Courses.objects
+                    .filter(crewID=crew_id, courseName=course_name, courseTimeSlot=lbl)
+                    .order_by("id").values_list("id", flat=True).first()
+                )
+                if not found:
+                    # create if the exact label truly doesn’t exist (defensive)
+                    created = Courses.objects.create(
+                        crewID=crew_id, courseName=course_name, courseTimeSlot=lbl
+                    )
+                    cid = created.id
+                    canonical_label = lbl
+                else:
+                    cid = found
+                    canonical_label = lbl
+            ids.append(cid)
+            id_by_label[canonical_label] = cid
+
+        # Persist BOTH labels (for downstream templates) and ids (what you asked for)
+        state["teetimes"] = sorted(chosen_labels, key=lambda s: s)  # labels for UI / next step
+        state["teetime_ids_by_label"] = id_by_label                 # {label: id}
+        state["teetime_ids"] = ids                                   # [id, id, ...]
+
         draft.state = state
         draft.save(update_fields=["state", "updated_at"])
         return redirect("game_setup_assign")  # Step 4
@@ -6484,15 +6521,14 @@ def game_setup_groups_view(request):
     return render(request, "GRPR/game_setup_groups.html", {
         "draft": draft,
         "course_name": course_name,
-        "existing": existing,
-        "selected": selected,
+        "existing": existing_list,         # labels for checkboxes
+        "selected": selected_labels,       # pre-checked labels
         "progress": {
             "current": 3, "total": 6,
             "labels": ["date", "course", "players", "tee times", "games", "configuration"],
         },
         "progress_pct": f"{int(3/6*100)}%",
     })
-
 
 
 @login_required
