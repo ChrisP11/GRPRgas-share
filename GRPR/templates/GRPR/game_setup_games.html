@@ -59,7 +59,7 @@
 
     <!-- Right: Game choices -->
     <div class="col-lg-6">
-      <form method="post" class="card h-100">
+      <form method="post" class="card h-100" action="{% url 'forty_config_view' %}">
         {% csrf_token %}
         <div class="card-header">Which games do you want to play?</div>
         <div class="card-body">
@@ -97,8 +97,8 @@
         </div>
 
         <div class="card-footer d-flex gap-2">
-          <a class="btn btn-outline-secondary" href="{% url 'game_setup_config' %}">Back</a>
-          <button class="btn btn-primary" type="submit">Continue</button>
+            <button class="btn btn-primary" type="submit">Kontinue</button>
+            <a class="btn btn-outline-secondary" href="{% url 'game_setup_config' %}">Back</a>
         </div>
       </form>
     </div>
