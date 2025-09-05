@@ -242,7 +242,7 @@ def _create_game_and_invites(
             CrewID      = draft.crew_id,
             CreateDate  = now(),
             PlayDate    = draft.event_date,
-            Status      = "Tees",
+            Status      = "Live",
             CreateID_id = creator_pid,
             Type        = game_type,
         )
@@ -5649,6 +5649,15 @@ def forty_view(request):
 @login_required
 @require_http_methods(["GET", "POST"])
 def forty_config_view(request):
+    """
+    Pre-config screen for Forty.
+    - Captures chosen games (from selection page).
+    - Ensures TeeTimesInd exist.
+    - If Skins was chosen, ensures a Skins game exists (and acts as the 'anchor'):
+        * creates GameInvites ONCE for the anchor game
+        * creates ScorecardMeta ONCE attached to the anchor game
+    - Does NOT create the Forty game here. That is done in forty_game_creation_view.
+    """
     draft, redir = _draft_for_user_or_redirect(
         request, need_date=True, need_course=True, need_assignments=True
     )
@@ -5671,7 +5680,7 @@ def forty_config_view(request):
             draft.state = state
             draft.save(update_fields=["state", "updated_at"])
 
-    # --- Ensure TT rows; create games; create invites/scorecards ONCE (anchor game) ---
+    # --- Ensure TT rows; ensure Skins anchor (invites/scorecards exactly once) ---
     wizard_msg = None
     try:
         # refetch to keep state fresh
@@ -5693,29 +5702,24 @@ def forty_config_view(request):
                 st["ttid_by_player"] = ttid_by_player
                 draft.state = st
                 draft.save(update_fields=["state", "updated_at"])
-                state = st  # refresh local
+                state = st  # refresh
 
-            games_selected = set(state.get("games_selected") or [])
+            games_selected     = set(state.get("games_selected") or [])
+            invites_game_id    = state.get("invites_game_id")     # anchor for GameInvites
+            scorecards_game_id = state.get("scorecards_game_id")  # anchor for ScorecardMeta
 
-            # Which game (if any) already owns invites/scorecards?
-            invites_game_id    = state.get("invites_game_id")
-            scorecards_game_id = state.get("scorecards_game_id")
-
-            skins_game = None
-            forty_game = None
-
-            # 2) If Skins selected, create Skins; **only** create invites if no anchor yet
+            # 2) If Skins selected, ensure Skins exists; make it the anchor if none yet
             if "skins" in games_selected:
-                skins_game_id = state.get("skins_game_id")
-                if skins_game_id:
-                    skins_game = Games.objects.filter(pk=skins_game_id).first()
+                skins_game = None
+                if state.get("skins_game_id"):
+                    skins_game = Games.objects.filter(pk=state["skins_game_id"]).first()
                 if skins_game is None:
                     skins_game = _create_game_and_invites(
                         draft=draft,
                         ttid_by_player=ttid_by_player,
                         creator_user=request.user,
                         game_type="Skins",
-                        create_invites=(invites_game_id is None),   # anchor creates invites
+                        create_invites=(invites_game_id is None),  # only once
                     )
                     st = draft.state or {}
                     st["skins_game_id"] = int(skins_game.id)
@@ -5726,12 +5730,12 @@ def forty_config_view(request):
                     draft.save(update_fields=["state", "updated_at"])
                     state = st
 
-                # Scorecards only once per event, attach to anchor if not yet done
+                # Scorecards only once (attach to anchor if not done)
                 if scorecards_game_id is None and skins_game:
                     _create_scorecards_for_game(
                         draft=draft,
                         game=skins_game,
-                        ttid_by_player=ttid_by_player,
+                        ttid_by_player=state.get("ttid_by_player") or {},
                         creator_user=request.user,
                     )
                     st = draft.state or {}
@@ -5739,56 +5743,6 @@ def forty_config_view(request):
                     draft.state = st
                     draft.save(update_fields=["state", "updated_at"])
                     state = st
-                    scorecards_game_id = st["scorecards_game_id"]
-
-            # 3) If Forty selected, create Forty; **only** create invites if no anchor yet
-            if "forty" in games_selected:
-                forty_game_id = state.get("forty_game_id")
-                if forty_game_id:
-                    forty_game = Games.objects.filter(pk=forty_game_id).first()
-                if forty_game is None:
-                    create_invites = (invites_game_id is None)   # Forty-only entry becomes anchor
-                    forty_game = _create_game_and_invites(
-                        draft=draft,
-                        ttid_by_player=ttid_by_player,
-                        creator_user=request.user,
-                        game_type="Forty",
-                        create_invites=create_invites,
-                    )
-                    st = draft.state or {}
-                    st["forty_game_id"] = int(forty_game.id)
-                    if create_invites:
-                        st["invites_game_id"] = int(forty_game.id)
-                        invites_game_id = st["invites_game_id"]
-                    draft.state = st
-                    draft.save(update_fields=["state", "updated_at"])
-                    state = st
-
-                # Associate Skins <-> Forty if both exist
-                if state.get("skins_game_id"):
-                    skins_game = skins_game or Games.objects.filter(pk=state["skins_game_id"]).first()
-                    if skins_game:
-                        if getattr(forty_game, "AssocGame", None) != skins_game.id:
-                            forty_game.AssocGame = skins_game.id
-                            forty_game.save(update_fields=["AssocGame"])
-                        if getattr(skins_game, "AssocGame", None) != forty_game.id:
-                            skins_game.AssocGame = forty_game.id
-                            skins_game.save(update_fields=["AssocGame"])
-
-                # Scorecards only once (Forty-only entry)
-                if scorecards_game_id is None and forty_game:
-                    _create_scorecards_for_game(
-                        draft=draft,
-                        game=forty_game,
-                        ttid_by_player=ttid_by_player,
-                        creator_user=request.user,
-                    )
-                    st = draft.state or {}
-                    st["scorecards_game_id"] = int(forty_game.id)
-                    draft.state = st
-                    draft.save(update_fields=["state", "updated_at"])
-                    state = st
-                    scorecards_game_id = st["scorecards_game_id"]
 
         # Friendly banner
         parts = []
@@ -5796,8 +5750,6 @@ def forty_config_view(request):
             parts.append(f"Tee times have been created for {created_tt_count} players.")
         if state.get("skins_game_id"):
             parts.append("Skins has been initialized.")
-        if state.get("forty_game_id"):
-            parts.append("Forty has been initialized.")
         wizard_msg = " ".join(parts) if parts else None
 
     except Exception as e:
@@ -5825,6 +5777,7 @@ def forty_config_view(request):
         last_names = [id_to_last.get(pid, f"#{pid}") for pid in assignments.get(label, [])]
         group_list.append({"group_id": group_id, "last_names": sorted(last_names)})
 
+    # Handicap → display format
     hc_mode = (state.get("handicap_mode") or "").strip().lower()
     if hc_mode.startswith("low"):
         game_format = "Low Man"
@@ -5833,13 +5786,13 @@ def forty_config_view(request):
     else:
         game_format = ""
 
-    # Use the anchor (invites) game id for downstream where a single GameID is expected
-    anchor_game_id = state.get("invites_game_id") or state.get("skins_game_id") or state.get("forty_game_id")
+    # Use anchor (if any) where a GameID is expected in templates; may be None for Forty-only flow
+    anchor_game_id = state.get("invites_game_id") or state.get("skins_game_id")
 
     context = {
         "live_skins_msg": wizard_msg or "placeholder",
         "group_list": sorted(group_list, key=lambda g: g["group_id"]),
-        "game_id": anchor_game_id,
+        "game_id": anchor_game_id,           # may be None; confirm page handles it
         "game_format": game_format,
         "first_name": request.user.first_name,
         "last_name": request.user.last_name,
@@ -5901,80 +5854,151 @@ def forty_config_confirm_view(request):
 @login_required
 def forty_game_creation_view(request):
     """
-    Final step in Forty setup: create the Forty Game row and (optionally)
-    hand off to Gas Cup team assignment if the user selected Gas Cup back
-    on games_choice_view.
+    Final step for Forty: actually create the Forty Games row.
+    - If a Skins game already exists (anchor), DO NOT create invites/scorecards again.
+      Just create Forty and cross-link AssocGame both ways.
+    - If no Skins game exists (Forty-only entry point), ensure TeeTimesInd, then
+      create Forty as the anchor (with invites + scorecards exactly once).
     """
     if request.method != "POST":
         return redirect("forty_config_view")
 
-    # ------------------------------------------------------------------
-    # Pull the posted Skins game id + Forty config fields
-    # NOTE: game_id here is the *Skins* game we are associating to.
-    # ------------------------------------------------------------------
-    game_id     = request.POST.get('game_id')          # Skins id!
-    game_format = request.POST.get('game_format')
-    num_scores  = request.POST.get('num_scores')
-    min_1st     = request.POST.get('min_1st')
-    min_18th    = request.POST.get('min_18th')
-
-    # Logged-in player (creator)
-    logged_in_user = get_object_or_404(Players, user_id=request.user.id)
-    logged_in_pid  = logged_in_user.id
-
-    # Skins game info (PlayDate, tees, etc.)
-    skins_game = get_object_or_404(Games, id=game_id)
-    play_date  = skins_game.PlayDate
-    ct_id      = skins_game.CourseTeesID_id
-
-    # ------------------------------------------------------------------
-    # Create the Forty game row
-    # ------------------------------------------------------------------
-    new_game = Games.objects.create(
-        CreateID_id   = logged_in_pid,
-        CrewID        = 1,
-        CreateDate    = timezone.now(),
-        PlayDate      = play_date,
-        CourseTeesID_id = ct_id,
-        Status        = 'Live',
-        Type          = 'Forty',
-        Format        = game_format,
-        NumScores     = num_scores,
-        Min1          = min_1st,
-        Min18         = min_18th,
-        AssocGame     = game_id,            # link back to Skins
+    draft, redir = _draft_for_user_or_redirect(
+        request, need_date=True, need_course=True, need_assignments=True
     )
-    forty_id = new_game.id
+    if redir:
+        return redir
 
-    # Update Skins row to cross-link back to the Forty row
-    Games.objects.filter(id=game_id).update(AssocGame=forty_id)
+    state = draft.state or {}
 
-    # Log
-    Log.objects.create(
-        SentDate    = timezone.now(),
-        Type        = 'Forty Creation',
-        RequestDate = play_date,
-        OfferID     = logged_in_pid,
-        Msg         = f'{logged_in_user.LastName} created Forty game {forty_id} from Skins {game_id}',
+    # POSTed config values from forty_config_confirm.html
+    # Note: game_id here may be a Skins id (if present); it may be missing in Forty-only flow.
+    posted_skins_id = request.POST.get("game_id")
+    posted_format   = (request.POST.get("game_format") or "").strip()
+    num_scores      = request.POST.get("num_scores")
+    min_1st         = request.POST.get("min_1st")
+    min_18th        = request.POST.get("min_18th")
+
+    # Fall back format from handicap_mode if not posted
+    if not posted_format:
+        hm = (state.get("handicap_mode") or "").strip().lower()
+        posted_format = "Low Man" if hm.startswith("low") else ("Full Handicap" if hm.startswith("full") else "")
+
+    # Creator's Players.id
+    creator_pid = (
+        Players.objects
+        .filter(user_id=request.user.id)
+        .values_list("id", flat=True)
+        .first()
     )
 
-    # ------------------------------------------------------------------
-    # Gas Cup hand-off?
-    #   We check/consume the flag *here* (final Forty step).
-    #   Ensure we still have the Skins id in session so the GasCup
-    #   team screen knows what to link to.
-    # ------------------------------------------------------------------
+    # Ensure TeeTimesInd exist (idempotent); also grab mapping
+    ttid_by_player = state.get("ttid_by_player")
+    if not ttid_by_player:
+        ttid_by_player, _ = _ensure_teetimesind_for_draft(draft)
+        st = draft.state or {}
+        st["ttid_by_player"] = ttid_by_player
+        draft.state = st
+        draft.save(update_fields=["state", "updated_at"])
+        state = st
+
+    # Determine if we already have a Skins anchor
+    skins_game = None
+    skins_game_id = None
+    if state.get("skins_game_id"):
+        skins_game_id = int(state["skins_game_id"])
+    elif posted_skins_id and posted_skins_id.isdigit():
+        skins_game_id = int(posted_skins_id)
+
+    if skins_game_id:
+        skins_game = Games.objects.filter(pk=skins_game_id).first()
+
+    # CourseTees to use for the Forty row
+    # Prefer Skins' CourseTees if set; otherwise use the selected tee from the wizard.
+    ct_id = None
+    if skins_game and getattr(skins_game, "CourseTeesID_id", None):
+        ct_id = skins_game.CourseTeesID_id
+    else:
+        ct_id = state.get("tee_id")
+
+    # Create the Forty game (once)
+    forty_game = None
+    if state.get("forty_game_id"):
+        forty_game = Games.objects.filter(pk=state["forty_game_id"]).first()
+
+    if forty_game is None:
+        with transaction.atomic():
+            forty_game = Games.objects.create(
+                CreateID_id     = creator_pid,
+                CrewID          = draft.crew_id,
+                CreateDate      = now(),
+                PlayDate        = draft.event_date,
+                CourseTeesID_id = ct_id,
+                Status          = "Live",          # you can adjust to your lifecycle
+                Type            = "Forty",
+                Format          = posted_format,
+                NumScores       = num_scores,
+                Min1            = min_1st,
+                Min18           = min_18th,
+                AssocGame       = skins_game.id if skins_game else None,
+            )
+
+            # Cross-link back to Forty on the Skins row if present
+            if skins_game and getattr(skins_game, "AssocGame", None) != forty_game.id:
+                skins_game.AssocGame = forty_game.id
+                skins_game.save(update_fields=["AssocGame"])
+
+            # Persist the Forty id
+            st = draft.state or {}
+            st["forty_game_id"] = int(forty_game.id)
+            draft.state = st
+            draft.save(update_fields=["state", "updated_at"])
+            state = st
+
+            # If NO Skins anchor exists, Forty becomes the anchor:
+            #   - create invites exactly once (if not already anchored)
+            #   - create scorecards exactly once
+            if not skins_game:
+                invites_game_id = state.get("invites_game_id")
+                if invites_game_id is None:
+                    # Create invites for Forty (anchor)
+                    _create_game_and_invites(
+                        draft=draft,
+                        ttid_by_player=ttid_by_player,
+                        creator_user=request.user,
+                        game_type="Forty",
+                        create_invites=True,
+                    )
+                    st = draft.state or {}
+                    st["invites_game_id"] = int(forty_game.id)
+                    draft.state = st
+                    draft.save(update_fields=["state", "updated_at"])
+                    state = st
+
+                scorecards_game_id = state.get("scorecards_game_id")
+                if scorecards_game_id is None:
+                    _create_scorecards_for_game(
+                        draft=draft,
+                        game=forty_game,
+                        ttid_by_player=ttid_by_player,
+                        creator_user=request.user,
+                    )
+                    st = draft.state or {}
+                    st["scorecards_game_id"] = int(forty_game.id)
+                    draft.state = st
+                    draft.save(update_fields=["state", "updated_at"])
+                    state = st
+
+    # Optional Gas Cup handoff kept intact
     if request.session.pop("want_gascup", False):
-        if "skins_game_id" not in request.session:
-            request.session["skins_game_id"] = int(game_id)
+        if skins_game_id and "skins_game_id" not in request.session:
+            request.session["skins_game_id"] = int(skins_game_id)
             request.session.modified = True
         return redirect("gascup_team_assign_view")
 
-    # ------------------------------------------------------------------
-    # No Gas Cup → normal redirect back to Skins leaderboard
-    # ------------------------------------------------------------------
-    return redirect(f"{reverse('skins_leaderboard_view')}?game_id={game_id}")
-
+    # Redirect to the leaderboard using the anchor id (Skins if present, else Forty)
+    anchor_id = skins_game_id or forty_game.id
+    return redirect(f"{reverse('skins_leaderboard_view')}?game_id={anchor_id}")
 
 
 @login_required
