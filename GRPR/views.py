@@ -302,23 +302,15 @@ def _create_scorecards_for_game(
 
     Uses wizard state:
       - assignments: { "8:40":[pid,...], ... }
-      - teetime_ids_by_label OR time_ids_by_label: {"8:40": <Courses.id>, ...}
       - tee_id: CourseTees.id (selected on config step)
       - handicap_mode: "Low" or "Full"
 
-    GroupID is stored as the numeric tee-time Courses.id (not the label).
-    Returns: number of ScorecardMeta rows created.
+    IMPORTANT: GroupID is stored as the **tee-time label** string (e.g. "8:40").
     """
     state = draft.state or {}
     assignments = state.get("assignments") or {}
-    label_to_id = (
-        state.get("teetime_ids_by_label")
-        or state.get("time_ids_by_label")
-        or {}
-    )
 
     if not assignments:
-        # Nothing to do
         return 0
 
     # Resolve creator PID (CreateID on ScorecardMeta)
@@ -336,25 +328,15 @@ def _create_scorecards_for_game(
         except Exception:
             slope_val = Decimal(0)
 
-    # Build PID -> group (Courses.id) mapping from assignments + label mapping
-    pid_to_group: Dict[int, int] = {}
-    # keep a stable order by label
+    # Build PID -> group LABEL mapping directly from assignments
+    # Example: {"8:40": [24,18], "8:50": [1,2]} -> {24:"8:40", 18:"8:40", 1:"8:50", 2:"8:50"}
+    pid_to_group_label: Dict[int, str] = {}
     for label in sorted(assignments.keys()):
-        group_courses_id = label_to_id.get(label)
-        if not group_courses_id:
-            # last-ditch lookup: exact label row for this crew/course
-            group_courses_id = (
-                Courses.objects
-                .filter(crewID=draft.crew_id, courseName=(state.get("courseName") or ""), courseTimeSlot=label)
-                .values_list("id", flat=True)
-                .order_by("id").first()
-            )
         for pid in assignments.get(label, []):
-            if group_courses_id:
-                pid_to_group[int(pid)] = int(group_courses_id)
+            pid_to_group_label[int(pid)] = str(label)
 
     # Collect unique player ids we need to create rows for
-    player_ids = sorted(pid_to_group.keys())
+    player_ids = sorted(pid_to_group_label.keys())
     if not player_ids:
         return 0
 
@@ -378,10 +360,9 @@ def _create_scorecards_for_game(
             continue
 
         index_val = idx_map.get(pid, Decimal(0))
-        if index_val in (None, 0):
+        if not index_val:
             raw_hdcp = Decimal(0)
         else:
-            # Raw = slope/113 * index
             try:
                 raw_hdcp = (slope_val / Decimal(113)) * index_val
             except Exception:
@@ -395,11 +376,11 @@ def _create_scorecards_for_game(
                 PlayDate   = draft.event_date,
                 PID_id     = pid,
                 CrewID_id  = draft.crew_id,
-                CourseID   = tee_obj.CourseID,           # CourseID from CourseTees for this tee_id
-                TeeID_id   = tee_id,           
+                CourseID   = (tee_obj.CourseID if tee_obj else None),  # int field
+                TeeID_id   = tee_id,
                 Index      = index_val,
                 RawHDCP    = raw_hdcp,
-                GroupID    = pid_to_group.get(pid),  # numeric Courses.id of tee-time
+                GroupID    = pid_to_group_label.get(pid),  # <-- label like "8:40"
             )
         )
 
@@ -411,11 +392,9 @@ def _create_scorecards_for_game(
     scm_qs = ScorecardMeta.objects.filter(GameID=game.id)
 
     if mode.lower().startswith("low"):
-        # Low Man = subtract the lowest RawHDCP, then round
         lowest = scm_qs.order_by("RawHDCP").values_list("RawHDCP", flat=True).first()
         lowest = Decimal(lowest or 0)
         for row in scm_qs:
-            # custom_round expected to exist in your codebase; fallback to round if missing
             try:
                 net_val = custom_round(float(Decimal(row.RawHDCP) - lowest))
             except Exception:
@@ -433,7 +412,6 @@ def _create_scorecards_for_game(
             row.save(update_fields=["NetHDCP"])
 
     return len(to_create)
-
 
 
 # ------------------------------------------------------------------
@@ -5989,16 +5967,19 @@ def forty_game_creation_view(request):
                     draft.save(update_fields=["state", "updated_at"])
                     state = st
 
-    # Optional Gas Cup handoff kept intact
-    if request.session.pop("want_gascup", False):
-        if skins_game_id and "skins_game_id" not in request.session:
-            request.session["skins_game_id"] = int(skins_game_id)
-            request.session.modified = True
-        return redirect("gascup_team_assign_view")
-
-    # Redirect to the leaderboard using the anchor id (Skins if present, else Forty)
+    # Decide the anchor id once (Skins if present, else Forty)
     anchor_id = skins_game_id or forty_game.id
+
+    # Optional Gas Cup handoff
+    if request.session.pop("want_gascup", False):
+        # Always provide a valid game id to Gas Cup (use anchor)
+        request.session["skins_game_id"] = int(anchor_id)
+        request.session.modified = True
+        return redirect(f"{reverse('gascup_team_assign_view')}?game_id={anchor_id}")
+
+    # No Gas Cup → normal redirect back to Skins leaderboard (using anchor)
     return redirect(f"{reverse('skins_leaderboard_view')}?game_id={anchor_id}")
+
 
 
 @login_required
