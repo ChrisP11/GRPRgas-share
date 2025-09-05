@@ -5296,21 +5296,41 @@ def skins_leaderboard_view(request):
             })
     # -- end forty leaderboard table
 
-    # =================== Gas Cup table ===========================
+     # =================== Gas Cup table (robust) ===========================
     gas_matches = []
     gas_totals  = None
     gas_rosters = None
 
-    toggles = get_toggles()
-    want_gascup = request.session.get("want_gascup", False)
+    from GRPR.services import gascup
 
-    if toggles.gascup_enabled and want_gascup:
-        from GRPR.services import gascup
-        gas_game = gascup._get_gascup_game_for_skins(game_id)
-        if gas_game:
-            gas_matches, gas_totals = gascup.summary_for_game(gas_game.id)
-            gas_rosters = gascup.rosters_for_game(gas_game.id)
+    # Find the current game and any associated partner (Skins<->Forty link)
+    game_row = Games.objects.filter(id=game_id).only("id", "Type", "AssocGame").first()
+    candidate_anchors = set()
+    if game_row:
+        candidate_anchors.add(int(game_row.id))
+        if game_row.AssocGame:
+            candidate_anchors.add(int(game_row.AssocGame))
+
+    gas_game = None
+
+    # If this page is displaying a Skins game, try the legacy helper first
+    if game_row and game_row.Type == "Skins":
+        gas_game = gascup._get_gascup_game_for_skins(game_row.id)
+
+    # Fallback: direct lookup by AssocGame pointing to either Skins or Forty anchor id
+    if not gas_game and candidate_anchors:
+        gas_game = (
+            Games.objects
+            .filter(Type="GasCup", AssocGame__in=candidate_anchors)
+            .order_by("id")
+            .first()
+        )
+
+    if gas_game:
+        gas_matches, gas_totals = gascup.summary_for_game(gas_game.id)
+        gas_rosters = gascup.rosters_for_game(gas_game.id)
     # =================== End Gas Cup table ===========================
+
 
     # Get the Status and PlayDate of the game in a single query
     game_data = Games.objects.filter(id=game_id).values('Status', 'PlayDate').first()
