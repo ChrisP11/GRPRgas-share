@@ -4947,9 +4947,8 @@ def skins_leaderboard_view(request):
     gas_rosters = None
 
     toggles = get_toggles()
-    want_gascup = request.session.get("want_gascup", False)
 
-    if toggles.gascup_enabled and want_gascup:
+    if toggles.gascup_enabled:
         from GRPR.services import gascup
         gas_game = gascup._get_gascup_game_for_skins(game_id)
         if gas_game:
