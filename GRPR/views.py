@@ -5320,12 +5320,17 @@ def skins_leaderboard_view(request):
     # =================== Team game (Gas Cup / Fall Classic) ===================
     # Find the *team* game that’s associated to the game we’re viewing (Skins or Forty).
     # Gas Cup and Fall Classic both store AssocGame = <anchor GameID> (Skins if present, else Forty).
+    # Determine team-game (GasCup or FallClassic) and its labels
+    team_labels = ("PGA", "LIV")
+
     team_game = (
         Games.objects
         .filter(AssocGame=game_id, Type__in=["GasCup", "FallClassic"])
         .order_by("-id")
         .first()
     )
+    if team_game and team_game.Type == "FallClassic":
+        team_labels = ("Cubs", "Sox")
 
     gas_matches = []
     gas_totals  = None
@@ -5463,6 +5468,7 @@ def skins_leaderboard_view(request):
         "gas_totals"  : gas_totals,
         "gas_rosters": gas_rosters,
         "is_fallclassic": is_fallclassic,
+        "team_labels": team_labels,
         "first_name": request.user.first_name,
         "last_name": request.user.last_name,
     }
@@ -6474,7 +6480,7 @@ def gascup_team_assign_view(request):
             if k.startswith("p_")
         }
 
-        errors = _validate_gascup_teams(players, assignments)
+        errors = _validate_teams(players, assignments)
         if errors:
             for e in errors:
                 messages.error(request, e)
@@ -6540,43 +6546,43 @@ def gascup_team_assign_view(request):
 
 
 
-def _validate_gascup_teams(invites, assignments):
+def _validate_teams(invites, assignments, team_labels):
     """
-    Acceptable per-foursome splits:
-      • 4 players -> exactly 2 PGA / 2 LIV
-      • 3 players -> 2/1 or 1/2
+    Validate per-foursome team splits for a 4-ball or 3-ball.
 
-    `invites`     queryset of GameInvites (must be ordered but ordering
-                  not required for correctness here).
-    `assignments` dict {pid: "PGA"/"LIV"} parsed from POST.
-
-    Return list of error strings (empty == OK).
+    invites      : queryset of GameInvites for the anchor game (ordered by time then name)
+    assignments  : dict {PID: <team_label>} from POST (radio selections)
+    team_labels  : tuple(str, str), e.g. ("PGA","LIV") or ("Cubs","Sox")
     """
-    by_slot = {}  # slot string -> counts dict
+    t0, t1 = team_labels
+
+    by_slot = {}  # slot -> {size, t0_count, t1_count}
     for inv in invites:
-        slot = inv.TTID.CourseID.courseTimeSlot  # shared tee time label
-        d = by_slot.setdefault(slot, {"size": 0, "PGA": 0, "LIV": 0})
+        slot = inv.TTID.CourseID.courseTimeSlot
+        d = by_slot.setdefault(slot, {"size": 0, t0: 0, t1: 0})
         d["size"] += 1
-        team = assignments.get(inv.PID_id)
-        if team in ("PGA", "LIV"):
-            d[team] += 1
+        sel = assignments.get(inv.PID_id)
+        if sel == t0:
+            d[t0] += 1
+        elif sel == t1:
+            d[t1] += 1
 
     errs = []
     for slot, d in by_slot.items():
         size = d["size"]
-        pga  = d["PGA"]
-        liv  = d["LIV"]
+        c0, c1 = d[t0], d[t1]
 
         if size == 4:
-            if pga != 2 or liv != 2:
-                errs.append(f"{slot}: need 2 PGA + 2 LIV (now {pga}/{liv})")
+            if c0 != 2 or c1 != 2:
+                errs.append(f"{slot}: need 2 {t0} + 2 {t1} (now {c0}/{c1})")
         elif size == 3:
-            if not ((pga == 2 and liv == 1) or (pga == 1 and liv == 2)):
-                errs.append(f"{slot}: for 3-ball use 2/1 split (now {pga}/{liv})")
+            if not ((c0 == 2 and c1 == 1) or (c0 == 1 and c1 == 2)):
+                errs.append(f"{slot}: for 3-ball use 2/1 split (now {c0}/{c1})")
         else:
             errs.append(f"{slot}: unsupported group size ({size})")
 
     return errs
+
 
 # ---- Generic Ryder Cup Game ---- #
 def _team_assign_generic(request, *, variant: str, team_labels: tuple[str, str]):
@@ -6610,7 +6616,7 @@ def _team_assign_generic(request, *, variant: str, team_labels: tuple[str, str])
             if k.startswith("p_")
         }
 
-        errors = _validate_gascup_teams(players, assignments)
+        errors = _validate_teams(players, assignments)
         if errors:
             for e in errors:
                 messages.error(request, e)
