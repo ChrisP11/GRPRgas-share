@@ -6,14 +6,15 @@
 <div class="container my-4">
     
     {% if gas_matches %}
-    <h2 class="mt-4">Gas Tank</h2>
+    <!-- <h2 class="mt-4">Gas Tank</h2> -->
+    <h2>{% if is_fallclassic %}Fall Classic{% else %}Gas Cup{% endif %}</h2>
 
     {% if gas_totals %}
     <div class="text-center mt-3">
     <h4>
-        <span class="badge bg-primary fs-5">PGA {{ gas_totals.pga }}</span>
+        <span class="badge bg-primary fs-5">{{ team_labels.0 }} {{ gas_totals.pga }}</span>
         <span class="mx-2">–</span>
-        <span class="badge bg-success fs-5">LIV {{ gas_totals.liv }}</span>
+        <span class="badge bg-success fs-5">{{ team_labels.1 }} {{ gas_totals.liv }}</span>
     </h4>
     </div>
     {% endif %}

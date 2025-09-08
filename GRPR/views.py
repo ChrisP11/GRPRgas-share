@@ -5318,17 +5318,24 @@ def skins_leaderboard_view(request):
     # -- end forty leaderboard table
 
     # =================== Team game (Gas Cup / Fall Classic) ===================
-    # Find the *team* game that’s associated to the game we’re viewing (Skins or Forty).
-    # Gas Cup and Fall Classic both store AssocGame = <anchor GameID> (Skins if present, else Forty).
-    # Determine team-game (GasCup or FallClassic) and its labels
-    team_labels = ("PGA", "LIV")
+    from GRPR.services import gascup  # lazy import here is fine
 
+    # Figure out the anchor id (Skins if present, else current)
+    row = Games.objects.filter(id=game_id).only("Type", "AssocGame").first()
+    anchor_id = game_id
+    if row and row.Type != "Skins" and row.AssocGame:
+        anchor_id = int(row.AssocGame)
+
+    # Find a team game tied to the anchor (GasCup or FallClassic)
     team_game = (
         Games.objects
-        .filter(AssocGame=game_id, Type__in=["GasCup", "FallClassic"])
+        .filter(AssocGame=anchor_id, Type__in=["GasCup", "FallClassic"])
         .order_by("-id")
         .first()
     )
+
+    # Default branding is PGA/LIV; switch for Fall Classic
+    team_labels = ("PGA", "LIV")
     if team_game and team_game.Type == "FallClassic":
         team_labels = ("Cubs", "Sox")
 
@@ -6452,100 +6459,6 @@ def game_setup_config_view(request):
 ##########################
 
 # ─── Team-assignment view  ────────────────────────────────────────────
-@login_required
-def gascup_team_assign_view(request):
-    """
-    Show radio-table, then create Gas Cup + GasCupPair rows.
-    Works whether the anchor is Skins or Forty: we just read the players
-    from GameInvites for the anchor game.
-    """
-    anchor_id = request.session.get("anchor_game_id") or request.session.get("skins_game_id")
-    if not anchor_id:
-        messages.error(request, "Missing game context for Gas Cup team assignment.")
-        return redirect("games_view")
-
-    anchor_game = get_object_or_404(Games, pk=anchor_id)
-
-    players = (
-        GameInvites.objects
-        .filter(GameID=anchor_game)
-        .select_related("PID", "TTID__CourseID")
-        .order_by("TTID__CourseID__courseTimeSlot", "PID__LastName")
-    )
-
-    if request.method == "POST":
-        assignments = {
-            int(k.split("_", 1)[1]): v
-            for k, v in request.POST.items()
-            if k.startswith("p_")
-        }
-
-        errors = _validate_teams(players, assignments)
-        if errors:
-            for e in errors:
-                messages.error(request, e)
-            return render(request, "GRPR/gascup_team_assign.html", {
-                "players":     players,
-                "skins_game":  anchor_game,   # keep template var name to avoid template edits
-                "teams":       ("PGA", "LIV"),
-                "first_name":  request.user.first_name,
-                "last_name":   request.user.last_name,
-                "assignments": assignments,
-            })
-
-        with transaction.atomic():
-            gas_game = Games.objects.create(
-                CrewID     = anchor_game.CrewID,
-                CreateDate = timezone.now().date(),
-                PlayDate   = anchor_game.PlayDate,
-                CreateID   = anchor_game.CreateID,
-                Status     = "Live",
-                Type       = "GasCup",
-                AssocGame  = anchor_game.id,
-            )
-
-            for slot, group in itertools.groupby(
-                players,
-                key=lambda x: x.TTID.CourseID.courseTimeSlot
-            ):
-                group = list(group)
-                pga_ids = sorted([p.PID_id for p in group if assignments.get(p.PID_id) == "PGA"])
-                liv_ids = sorted([p.PID_id for p in group if assignments.get(p.PID_id) == "LIV"])
-
-                def _second(lst):
-                    return lst[1] if len(lst) > 1 else None
-
-                GasCupPair.objects.create(Game=gas_game, PID1_id=pga_ids[0], PID2_id=_second(pga_ids), Team="PGA")
-                GasCupPair.objects.create(Game=gas_game, PID1_id=liv_ids[0], PID2_id=_second(liv_ids), Team="LIV")
-
-            messages.success(request, "Gas Cup game created!")
-
-            # Keep/refresh anchor in session for downstream flows
-            request.session["anchor_game_id"] = int(anchor_game.id)
-            if getattr(anchor_game, "Type", "") == "Skins":
-                request.session["skins_game_id"] = int(anchor_game.id)
-            request.session.modified = True
-
-            # Leaderboard expects a game_id. Prefer a Skins id if available, else anchor.
-            target_id = anchor_game.id
-            if getattr(anchor_game, "Type", "") != "Skins" and getattr(anchor_game, "AssocGame", None):
-                # If the anchor is Forty and it's cross-linked to a Skins game, send that id
-                target_id = anchor_game.AssocGame
-
-            return redirect(f"{reverse('skins_leaderboard_view')}?game_id={target_id}")
-
-
-    # GET
-    return render(request, "GRPR/gascup_team_assign.html", {
-        "players":    players,
-        "skins_game": anchor_game,  # template keeps same variable name
-        "teams":      ("PGA", "LIV"),
-        "first_name": request.user.first_name,
-        "last_name":  request.user.last_name,
-    })
-
-
-
 def _validate_teams(invites, assignments, team_labels):
     """
     Validate per-foursome team splits for a 4-ball or 3-ball.
@@ -6616,7 +6529,7 @@ def _team_assign_generic(request, *, variant: str, team_labels: tuple[str, str])
             if k.startswith("p_")
         }
 
-        errors = _validate_teams(players, assignments)
+        errors = _validate_teams(players, assignments, team_labels)
         if errors:
             for e in errors:
                 messages.error(request, e)
