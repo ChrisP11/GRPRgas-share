@@ -5364,6 +5364,8 @@ def skins_leaderboard_view(request):
         .first()
     )
 
+    variant = team_game.Type if team_game else None
+
     # Default branding is PGA/LIV; switch for Fall Classic
     team_labels = ("PGA", "LIV")
     if team_game and team_game.Type == "FallClassic":
@@ -5506,6 +5508,7 @@ def skins_leaderboard_view(request):
         "gas_rosters": gas_rosters,
         "is_fallclassic": is_fallclassic,
         "team_labels": team_labels,
+        "variant": variant,
         "first_name": request.user.first_name,
         "last_name": request.user.last_name,
     }

@@ -102,12 +102,8 @@ def update_for_score(score_id: int) -> None:
 # ------------------------------------------------------------------ #
 def _team_labels_for_game(game: Games) -> tuple[str, str]:
     """
-    Determine the two team labels actually used in GasCupPair for this game.
-    Order rules:
-      - If classic PGA/LIV present, return ("PGA","LIV")
-      - If Cubs/Sox present, return ("Cubs","Sox")
-      - Else return alphabetical to keep deterministic order.
-    Fallback by game.Type if pairs are missing.
+    Determine the two team labels used in this team game.
+    Prefer actual pair labels; fall back by game.Type.
     """
     labels = (
         GasCupPair.objects
@@ -116,28 +112,21 @@ def _team_labels_for_game(game: Games) -> tuple[str, str]:
         .distinct()
     )
     labels = sorted([lbl for lbl in labels if lbl])[:2]
-
-    if set(labels) == {"PGA", "LIV"}:
-        return ("PGA", "LIV")
-    if set(labels) == {"Cubs", "Sox"}:
-        return ("Cubs", "Sox")
     if len(labels) == 2:
         return (labels[0], labels[1])
-
-    # Fallback by game type
     if getattr(game, "Type", "") == "FallClassic":
         return ("Cubs", "Sox")
     return ("PGA", "LIV")
 
 
+# REPLACE the old helper with this (keep the name for backward compatibility)
 def _get_gascup_game_for_skins(skins_game_id: int) -> Optional[Games]:
     """
-    Find the Gas Cup game whose AssocGame == skins_game_id.
-    Return latest if multiple (should not happen).
+    Find the team game (GasCup or FallClassic) linked to the given Skins game.
     """
     return (
         Games.objects
-        .filter(Type="GasCup", AssocGame=skins_game_id)
+        .filter(Type__in=["GasCup", "FallClassic"], AssocGame=skins_game_id)
         .order_by("-id")
         .first()
     )
@@ -232,16 +221,12 @@ def _upsert_gascupscore(game_id: int, pair_id: int, hole_id: int, net: int) -> N
 # utilities used by status_for_pids                                  #
 # ------------------------------------------------------------------ #
 
-def _segment_txt(pga_wins: int, liv_wins: int,
-                 pga_lbl: str = "PGA", liv_lbl: str = "LIV") -> str:
-    """
-    Render a match-play segment result in 'PGA +1' / 'LIV +2' / 'AS' form.
-    """
-    if pga_wins == liv_wins:
+def _segment_txt(w0: int, w1: int, lbl0: str, lbl1: str) -> str:
+    if w0 == w1:
         return "All Square"
-    if pga_wins > liv_wins:
-        return f"{pga_lbl} +{pga_wins - liv_wins}"
-    return f"{liv_lbl} +{liv_wins - pga_wins}"
+    if w0 > w1:
+        return f"{lbl0} +{w0 - w1}"
+    return f"{lbl1} +{w1 - w0}"
 
 
 def _slot_for_pids(skins_game_id: int, pid_list: Iterable[int]) -> Optional[str]:
@@ -305,22 +290,14 @@ def _match_pairs_for_slot(gas_game_id: int,
 def status_for_pids(skins_game_id: int,
                     pid_list: Iterable[int],
                     thru_hole_number: int):
-    """
-    Return team-match status dict for the foursome containing the given
-    Skins-game players, scored through `thru_hole_number`.
-    """
+    # ... unchanged preface ...
     gas_game = _get_gascup_game_for_skins(skins_game_id)
     if not gas_game:
         return None
 
-    labels = _team_labels_for_game(gas_game)  # e.g. ("PGA","LIV") or ("Cubs","Sox")
-    t0, t1 = labels
+    lbl0, lbl1 = _team_labels_for_game(gas_game)
 
-    pid_list = [int(p) for p in pid_list]
-    if not pid_list:
-        return None
-
-    slot = _slot_for_pids(skins_game_id, pid_list)
+    slot = _slot_for_pids(skins_game_id, [int(p) for p in pid_list])
     if not slot:
         return None
 
@@ -328,8 +305,8 @@ def status_for_pids(skins_game_id: int,
     if not match_pairs:
         return None
 
-    pair0 = match_pairs.get(t0)
-    pair1 = match_pairs.get(t1)
+    pair0 = match_pairs.get(lbl0)
+    pair1 = match_pairs.get(lbl1)
     if not pair0 or not pair1:
         return None
 
@@ -343,33 +320,28 @@ def status_for_pids(skins_game_id: int,
         .select_related("Hole")
     )
 
-    hole_map = {}  # hole_no -> {t0:net, t1:net}
+    hole_map = {}  # hole_no -> {lbl0:net, lbl1:net}
     for r in gc_rows:
         hn = r.Hole.HoleNumber
         d = hole_map.setdefault(hn, {})
-        if r.Pair_id == pair0.id:
-            d[t0] = r.NetScore
-        else:
-            d[t1] = r.NetScore
+        d[lbl0 if r.Pair_id == pair0.id else lbl1] = r.NetScore
 
-    f_0 = f_1 = b_0 = b_1 = 0
+    f0 = f1 = b0 = b1 = 0
     for hn, d in hole_map.items():
-        n0 = d.get(t0)
-        n1 = d.get(t1)
+        n0 = d.get(lbl0); n1 = d.get(lbl1)
         if n0 is None or n1 is None:
             continue
         if n0 < n1:
-            (f_0 if hn <= 9 else b_0).__iadd__(1)
+            (f0 if hn <= 9 else b0).__iadd__(1)
         elif n1 < n0:
-            (f_1 if hn <= 9 else b_1).__iadd__(1)
+            (f1 if hn <= 9 else b1).__iadd__(1)
 
-    # Use labels in segment text
-    front_txt   = _segment_txt(f_0, f_1, t0, t1)
-    back_txt    = _segment_txt(b_0, b_1, t0, t1)
-    overall_txt = _segment_txt(f_0 + b_0, f_1 + b_1, t0, t1)
+    front_txt   = _segment_txt(f0, f1, lbl0, lbl1)
+    back_txt    = _segment_txt(b0, b1, lbl0, lbl1)
+    overall_txt = _segment_txt(f0 + b0, f1 + b1, lbl0, lbl1)
 
-    diff   = (f_0 + b_0) - (f_1 + b_1)
-    leader = t0 if diff > 0 else (t1 if diff < 0 else None)
+    diff = (f0 + b0) - (f1 + b1)
+    leader = lbl0 if diff > 0 else (lbl1 if diff < 0 else None)
 
     return {
         "front":   front_txt,
@@ -378,79 +350,65 @@ def status_for_pids(skins_game_id: int,
         "thru":    thru,
         "leader":  leader,
         "diff":    abs(diff),
-        # keep the detailed counts (names imply the first/second label role)
-        "f_pga":   f_0,
-        "f_liv":   f_1,
-        "b_pga":   b_0,
-        "b_liv":   b_1,
+        # keep legacy keys so callers don’t break:
+        "f_pga":   f0, "f_liv":   f1,
+        "b_pga":   b0, "b_liv":   b1,
+        # add labels so formatters can use them:
+        "labels":  (lbl0, lbl1),
     }
 
 
 def format_status_human(status: dict) -> str:
     """
-    Convert the status dict from status_for_pids() into a friendly sentence.
-
-    Examples:
-      Team PGA is up 1 on the Front and 1 Overall; AS on the Back. Thru 5.
-      All Square on the Front and Back; Team LIV up 2 Overall. Thru 14.
-      Team PGA wins the Front 3&2 ...  (← not implementing holes-to-play math yet)
-
-    Rules:
-      • We always show Overall.
-      • We show Front and Back if they differ OR user may want to see them;
-        (for now we always show all three, compact grammar).
-      • “AS” => “All Square”.
-      • Singular/plural: “up 1” vs “up 2”.
-      • We end with “Thru N.” (use status["thru"]).
+    Friendly sentence using dynamic team labels.
+    Falls back to PGA/LIV if labels aren't provided.
     """
-    f_pga = status["f_pga"]; f_liv = status["f_liv"]
-    b_pga = status["b_pga"]; b_liv = status["b_liv"]
-    thru  = status["thru"]
+    # dynamic labels (added by status_for_pids); fallback to PGA/LIV
+    lbl0, lbl1 = status.get("labels", ("PGA", "LIV"))
 
-    def seg_phrase(seg_name: str, pga_wins: int, liv_wins: int) -> str:
-        if pga_wins > liv_wins:
-            n = pga_wins - liv_wins
-            return f"Team PGA up {n} on the {seg_name}"
-        if liv_wins > pga_wins:
-            n = liv_wins - pga_wins
-            return f"Team LIV up {n} on the {seg_name}"
+    # keep legacy keys; f_pga/b_pga mean "wins for first label", f_liv/b_liv for second
+    f0 = status.get("f_pga", 0); f1 = status.get("f_liv", 0)
+    b0 = status.get("b_pga", 0); b1 = status.get("b_liv", 0)
+    thru = status.get("thru", 0)
+
+    def seg_phrase(seg_name: str, w0: int, w1: int) -> str:
+        if w0 > w1:
+            n = w0 - w1
+            return f"Team {lbl0} up {n} on the {seg_name}"
+        if w1 > w0:
+            n = w1 - w0
+            return f"Team {lbl1} up {n} on the {seg_name}"
         return f"All Square on the {seg_name}"
 
-    front_p = seg_phrase("Front", f_pga, f_liv)
-    back_p  = seg_phrase("Back",  b_pga, b_liv)
+    front_p = seg_phrase("Front", f0, b0 if False else f1)  # keep signature same
+    # ^^^ small note: above line was a typo in some older snippets; correct one is below:
+    front_p = seg_phrase("Front", f0, f1)
+    back_p  = seg_phrase("Back",  b0, b1)
 
-    # overall uses totals
-    t_pga = f_pga + b_pga
-    t_liv = f_liv + b_liv
-    if t_pga > t_liv:
-        n = t_pga - t_liv
-        overall_p = f"Team PGA up {n} Overall"
-    elif t_liv > t_pga:
-        n = t_liv - t_pga
-        overall_p = f"Team LIV up {n} Overall"
+    t0 = f0 + b0
+    t1 = f1 + b1
+    if t0 > t1:
+        n = t0 - t1
+        overall_p = f"Team {lbl0} up {n} Overall"
+    elif t1 > t0:
+        n = t1 - t0
+        overall_p = f"Team {lbl1} up {n} Overall"
     else:
         overall_p = "All Square Overall"
 
-    # join – prefer: Front and Back; Overall separated by semicolon
-    # e.g. "Team PGA up 1 on the Front and 1 Overall; AS on the Back."
-    # But reuse already-built phrases to avoid recomputing numbers.
-    # We'll build: "<Front>; <Back>; <Overall>." then tighten.
     parts = [front_p, back_p, overall_p]
 
-    # Slightly smarter join: combine AS segments
-    # If front/back are both AS, say "All Square on the Front and Back".
-    if "All Square on the Front" == front_p and "All Square on the Back" == back_p:
+    # Combine if both front/back are AS
+    if front_p == "All Square on the Front" and back_p == "All Square on the Back":
         parts = ["All Square on the Front and Back", overall_p]
     else:
-        # if both front/back led by same side with same margin, compress
-        if (f_pga > f_liv and b_pga > b_liv and
-            (f_pga - f_liv) == (b_pga - b_liv)):
-            n = f_pga - f_liv
-            parts = [f"Team PGA up {n} on the Front and Back", overall_p]
-        elif (f_liv > f_pga and b_liv > b_pga and
-              (f_liv - f_pga) == (b_liv - b_pga)):
-            n = b_liv - b_pga  # same margin
-            parts = [f"Team LIV up {n} on the Front and Back", overall_p]
+        # compress if both Front/Back led by same side with same margin
+        if (f0 > f1 and b0 > b1 and (f0 - f1) == (b0 - b1)):
+            n = f0 - f1
+            parts = [f"Team {lbl0} up {n} on the Front and Back", overall_p]
+        elif (f1 > f0 and b1 > b0 and (f1 - f0) == (b1 - b0)):
+            n = b1 - b0
+            parts = [f"Team {lbl1} up {n} on the Front and Back", overall_p]
 
     body = "; ".join(parts)
     return f"{body}. Thru {thru}."
@@ -458,51 +416,36 @@ def format_status_human(status: dict) -> str:
 
 def format_status_human_verbose(status: dict, pga_label: str, liv_label: str) -> str:
     """
-    Verbose banner string with pair labels:
-
-    'Hunter/Griffin (PGA) up 1 on Front, AS on Back, up 2 Overall (thru 7).'
-
-    `status` comes from status_for_pids() and includes hole-win counts:
-      f_pga, f_liv, b_pga, b_liv, thru
+    Verbose banner with pair labels, but use dynamic team labels in parens.
+    `pga_label`/`liv_label` are actually the pair labels (e.g., "Hunter/Griffin").
     """
-    # fall back to generic team names when label missing
-    pga_name = f"{pga_label} (PGA)" if pga_label else "Team PGA"
-    liv_name = f"{liv_label} (LIV)" if liv_label else "Team LIV"
+    lbl0, lbl1 = status.get("labels", ("PGA", "LIV"))  # dynamic team names
 
-    f_pga = status["f_pga"]; f_liv = status["f_liv"]
-    b_pga = status["b_pga"]; b_liv = status["b_liv"]
-    thru  = status.get("thru", 0)
+    # fall back to generic names if pair label missing
+    name0 = f"{pga_label} ({lbl0})" if pga_label else f"Team {lbl0}"
+    name1 = f"{liv_label} ({lbl1})" if liv_label else f"Team {lbl1}"
+
+    f0 = status.get("f_pga", 0); f1 = status.get("f_liv", 0)
+    b0 = status.get("b_pga", 0); b1 = status.get("b_liv", 0)
+    thru = status.get("thru", 0)
 
     def seg_phrase(delta: int, seg: str) -> str:
         if delta == 0:
             return f"All Square on {seg}"
         if delta > 0:
-            return f"{pga_name} up {delta} on {seg}"
-        return f"{liv_name} up {abs(delta)} on {seg}"
+            return f"{name0} up {delta} on {seg}"
+        return f"{name1} up {abs(delta)} on {seg}"
 
-    front_delta   = f_pga - f_liv
-    back_delta    = b_pga - b_liv
-    overall_delta = (f_pga + b_pga) - (f_liv + b_liv)
+    front_delta   = f0 - f1
+    back_delta    = b0 - b1
+    overall_delta = (f0 + b0) - (f1 + b1)
 
-    parts = []
-    parts.append(seg_phrase(front_delta, "Front"))
-    if thru >= 10:  # only show Back once they've played a Back hole
+    parts = [seg_phrase(front_delta, "Front")]
+    if thru >= 10:
         parts.append(seg_phrase(back_delta, "Back"))
     parts.append(seg_phrase(overall_delta, "Overall"))
 
     return ", ".join(parts) + f" (thru {thru})."
-
-
-# deprecated, can be deleted
-# def _segment_txt(for_cnt: int, ag_cnt: int, for_lbl: str, ag_lbl: str) -> str:
-#     """
-#     Format segment result: lbl +/-N or AS.
-#     """
-#     if for_cnt > ag_cnt:
-#         return f"{for_lbl} +{for_cnt - ag_cnt}"
-#     if ag_cnt > for_cnt:
-#         return f"{ag_lbl} +{ag_cnt - for_cnt}"
-#     return "AS"
 
 
 # ====================================================================== #
@@ -538,15 +481,12 @@ def _pts_from_segment(delta: int) -> Tuple[Decimal, Decimal]:
     return Decimal("0.5"), Decimal("0.5")
 
 
-def _format_total_pts(t0: Decimal, t1: Decimal, labels: tuple[str, str]) -> str:
-    """
-    Return '<t0> X – Y <t1>' with .5 as .5 and no trailing .0.
-    """
+def _format_total_pts(a: Decimal, b: Decimal, labels: tuple[str, str]) -> str:
     def _fmt(d: Decimal) -> str:
         if d == d.to_integral():
             return str(int(d))
         return f"{d.normalize()}"
-    return f"{labels[0]} {_fmt(t0)} – {_fmt(t1)} {labels[1]}"
+    return f"{labels[0]} {_fmt(a)} – {_fmt(b)} {labels[1]}"
 
 
 def _segment_delta(scores_by_hole: dict[int, Tuple[int, int]], holes: set[int]) -> int:
@@ -598,12 +538,6 @@ def _scores_for_match(gas_game_id: int, pga_pair_id: int, liv_pair_id: int) -> d
 
 
 def summary_for_game(gas_game_id: int):
-    """
-    Return (rows, totals) for display:
-      rows   -> list of dicts per foursome
-      totals -> {"pga": "...", "liv": "..."} cumulative points
-                (keys kept for backwards compatibility; values map to team0/team1)
-    """
     from GRPR.models import GasCupPair, GameInvites, GasCupOverride
 
     pairs = (
@@ -615,15 +549,17 @@ def summary_for_game(gas_game_id: int):
         return [], {"pga": "0", "liv": "0"}
 
     gas_game = pairs[0].Game
-    labels   = _team_labels_for_game(gas_game)  # ("PGA","LIV") or ("Cubs","Sox") etc.
-    t0, t1   = labels
+    labels = _team_labels_for_game(gas_game)  # e.g. ("Cubs","Sox") or ("PGA","LIV")
+    lbl0, lbl1 = labels
 
     skins_game_id = gas_game.AssocGame
 
     pid_list = []
     for p in pairs:
-        if p.PID1_id: pid_list.append(p.PID1_id)
-        if p.PID2_id: pid_list.append(p.PID2_id)
+        if p.PID1_id:
+            pid_list.append(p.PID1_id)
+        if p.PID2_id:
+            pid_list.append(p.PID2_id)
 
     invites = (
         GameInvites.objects
@@ -632,8 +568,7 @@ def summary_for_game(gas_game_id: int):
     )
     slot_by_pid = {gi.PID_id: gi.TTID.CourseID.courseTimeSlot for gi in invites}
 
-    # slot -> { label: GasCupPair }
-    matches = {}
+    matches = {}  # slot -> {label: pair}
     for p in pairs:
         slot = slot_by_pid.get(p.PID1_id) or slot_by_pid.get(p.PID2_id)
         if not slot:
@@ -643,13 +578,11 @@ def summary_for_game(gas_game_id: int):
     overrides_qs = GasCupOverride.objects.filter(Game_id=gas_game_id)
     overrides    = {ov.Slot: ov for ov in overrides_qs}
 
-    t0_total = Decimal("0")
-    t1_total = Decimal("0")
-
+    total0 = Decimal("0")
+    total1 = Decimal("0")
     rows_out = []
 
     for slot in sorted(matches.keys()):
-        # Manual override takes precedence
         if slot in overrides:
             ov = overrides[slot]
             rows_out.append({
@@ -661,13 +594,13 @@ def summary_for_game(gas_game_id: int):
                 "total":   _format_total_pts(ov.PGA_pts, ov.LIV_pts, labels),
                 "note":    ov.Note,
             })
-            t0_total += ov.PGA_pts
-            t1_total += ov.LIV_pts
+            total0 += ov.PGA_pts
+            total1 += ov.LIV_pts
             continue
 
-        match_pairs = matches[slot]
-        pair0 = match_pairs.get(t0)
-        pair1 = match_pairs.get(t1)
+        mp = matches[slot]
+        pair0 = mp.get(lbl0)
+        pair1 = mp.get(lbl1)
         if not pair0 or not pair1:
             continue
 
@@ -678,22 +611,21 @@ def summary_for_game(gas_game_id: int):
         back_delta    = _segment_delta(scores_by_hole,  BACK_HOLES)
         overall_delta = _segment_delta(scores_by_hole, FRONT_HOLES | BACK_HOLES)
 
-        front_str   = _fmt_lead(front_delta, labels)   if thru >= 1  else None
-        back_str    = _fmt_lead(back_delta, labels)    if thru >= 10 else None
+        front_str   = _fmt_lead(front_delta,   labels) if thru >= 1  else None
+        back_str    = _fmt_lead(back_delta,    labels) if thru >= 10 else None
         overall_str = _fmt_lead(overall_delta, labels) if thru >= 1  else None
 
-        # award points for completed segments
-        s0 = s1 = Decimal("0")
+        a_pts = b_pts = Decimal("0")
         if thru >= 9:
-            f0, f1 = _pts_from_segment(front_delta)
-            s0 += f0; s1 += f1
+            a_f, b_f = _pts_from_segment(front_delta)
+            a_pts += a_f; b_pts += b_f
         if thru >= 18:
-            b0, b1 = _pts_from_segment(back_delta)
-            o0, o1 = _pts_from_segment(overall_delta)
-            s0 += (b0 + o0); s1 += (b1 + o1)
+            a_b, b_b = _pts_from_segment(back_delta)
+            a_o, b_o = _pts_from_segment(overall_delta)
+            a_pts += (a_b + a_o); b_pts += (b_b + b_o)
 
-        t0_total += s0
-        t1_total += s1
+        total0 += a_pts
+        total1 += b_pts
 
         rows_out.append({
             "label":   slot,
@@ -701,16 +633,16 @@ def summary_for_game(gas_game_id: int):
             "back":    back_str,
             "overall": overall_str,
             "thru":    thru,
-            "total":   _format_total_pts(s0, s1, labels),
+            "total":   _format_total_pts(a_pts, b_pts, labels),
         })
 
-    def _fmt_pts(d: Decimal) -> str:
+    def _fmt(d: Decimal) -> str:
         if d == d.to_integral():
             return str(int(d))
         return f"{d.normalize()}"
 
-    # NOTE: keep keys "pga"/"liv" for compatibility; they correspond to labels[0]/labels[1]
-    totals = {"pga": _fmt_pts(t0_total), "liv": _fmt_pts(t1_total)}
+    # Return in legacy keys expected by template: first label -> 'pga', second -> 'liv'
+    totals = {"pga": _fmt(total0), "liv": _fmt(total1)}
     return rows_out, totals
 
 
@@ -742,15 +674,14 @@ def rosters_for_game(gas_game_id: int):
         return []
 
     gas_game = pairs[0].Game
-    labels   = _team_labels_for_game(gas_game)  # ("PGA","LIV") or ("Cubs","Sox")
-    t0, t1   = labels
+    labels = _team_labels_for_game(gas_game)
+    lbl0, lbl1 = labels
 
     skins_game_id = gas_game.AssocGame
 
     pid_list = []
     for p in pairs:
-        if p.PID1_id: pid_list.append(p.PID1_id)
-        if p.PID2_id: pid_list.append(p.PID2_id)
+        pid_list.extend([p.PID1_id] + ([p.PID2_id] if p.PID2_id else []))
 
     invites = (
         GameInvites.objects
@@ -759,22 +690,20 @@ def rosters_for_game(gas_game_id: int):
     )
     slot_by_pid = {gi.PID_id: gi.TTID.CourseID.courseTimeSlot for gi in invites}
 
-    # timeslot -> { label: "Hunter/Griffin" }
-    slot_map = {}
+    by_slot = {}
     for p in pairs:
         slot = slot_by_pid.get(p.PID1_id) or slot_by_pid.get(p.PID2_id)
         if not slot:
             continue
-        slot_map.setdefault(slot, {})[p.Team] = _pair_label(p)
+        by_slot.setdefault(slot, {})[p.Team] = _pair_label(p)
 
     rows = []
-    for slot in sorted(slot_map.keys()):
-        d = slot_map[slot]
+    for slot in sorted(by_slot.keys()):
+        d = by_slot[slot]
         rows.append({
             "label": slot,
-            # keep keys "pga"/"liv" for template, but fill using current labels
-            "pga":   d.get(t0, "—"),
-            "liv":   d.get(t1, "—"),
+            "pga":   d.get(lbl0, "—"),  # ‘pga’ key = first label column
+            "liv":   d.get(lbl1, "—"),  # ‘liv’ key = second label column
         })
     return rows
 
@@ -784,19 +713,13 @@ def rosters_for_game(gas_game_id: int):
 # ------------------------------------------------------------------ #
 
 def pair_labels_for_pids(skins_game_id: int, pids: list[int]) -> tuple[Optional[str], Optional[str]]:
-    """
-    Given up to 4 player ids (all from the same Skins foursome), return
-    (pga_label, liv_label) strings suitable for status banners.
-
-    Returns (None, None) if no Gas Cup linked or mapping not found.
-    """
     gas_game = _get_gascup_game_for_skins(skins_game_id)
     if not gas_game:
         return None, None
 
-    from GRPR.models import GasCupPair, GameInvites
+    labels = _team_labels_for_game(gas_game)
+    lbl0, lbl1 = labels
 
-    # Which timeslot is this group? Grab the first PID that has an invite.
     inv = (
         GameInvites.objects
         .filter(GameID_id=skins_game_id, PID_id__in=pids)
@@ -807,18 +730,12 @@ def pair_labels_for_pids(skins_game_id: int, pids: list[int]) -> tuple[Optional[
         return None, None
     slot = inv.TTID.CourseID.courseTimeSlot
 
-    # Build mapping of slot -> {Team:pair}
+    pairs = GasCupPair.objects.filter(Game_id=gas_game.id).select_related("PID1", "PID2")
     pid_list = []
-    pairs = (
-        GasCupPair.objects
-        .filter(Game_id=gas_game.id)
-        .select_related("PID1", "PID2")
-    )
     for p in pairs:
-        if p.PID1_id:
-            pid_list.append(p.PID1_id)
-        if p.PID2_id:
-            pid_list.append(p.PID2_id)
+        if p.PID1_id: pid_list.append(p.PID1_id)
+        if p.PID2_id: pid_list.append(p.PID2_id)
+
     invites = (
         GameInvites.objects
         .filter(GameID_id=skins_game_id, PID_id__in=pid_list)
@@ -833,12 +750,11 @@ def pair_labels_for_pids(skins_game_id: int, pids: list[int]) -> tuple[Optional[
             continue
         slot_map.setdefault(s, {})[p.Team] = p
 
-    match_pairs = slot_map.get(slot)
-    if not match_pairs:
+    mp = slot_map.get(slot)
+    if not mp:
         return None, None
 
-    pga_pair = match_pairs.get("PGA")
-    liv_pair = match_pairs.get("LIV")
-    pga_label = _pair_label(pga_pair) if pga_pair else None
-    liv_label = _pair_label(liv_pair) if liv_pair else None
-    return pga_label, liv_label
+    p0 = mp.get(lbl0); p1 = mp.get(lbl1)
+    return (_pair_label(p0) if p0 else None,
+            _pair_label(p1) if p1 else None)
+
