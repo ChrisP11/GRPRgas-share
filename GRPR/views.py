@@ -4149,7 +4149,7 @@ def rounds_leaderboard_view(request):
 def games_view(request):
     user = request.user
     # Discover if there is a current game in process
-    game = Games.objects.exclude(Status='Closed').order_by('-CreateDate').first()
+    game = Games.objects.exclude(Status='Closed').order_by('CreateDate').first()
     gDate = game.PlayDate if game else None
     game_status = game.Status if game else None
     game_id = game.id if game else None
