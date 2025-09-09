@@ -330,7 +330,7 @@ class GasCupPair(models.Model):
                                related_name="gascup_partner2",
                                on_delete=models.CASCADE,
                                null=True, blank=True,)  # <-- allow singleton team
-    Team   = models.CharField(max_length=3, choices=TEAM_CHOICES)
+    Team   = models.CharField(max_length=12, choices=TEAM_CHOICES)
 
     class Meta:
         db_table = "GasCupPair"

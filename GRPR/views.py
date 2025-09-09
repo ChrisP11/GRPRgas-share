@@ -414,6 +414,36 @@ def _create_scorecards_for_game(
     return len(to_create)
 
 
+def _team_labels_for_game(game: Games) -> tuple[str, str]:
+    """
+    Determine the two team labels actually used in GasCupPair for this game.
+    Order rules:
+      - If classic PGA/LIV present, return ("PGA","LIV")
+      - If Cubs/Sox present, return ("Cubs","Sox")
+      - Else return alphabetical to keep deterministic order.
+    Fallback by game.Type if pairs are missing (should be rare).
+    """
+    labels = (
+        GasCupPair.objects
+        .filter(Game=game)
+        .values_list("Team", flat=True)
+        .distinct()
+    )
+    labels = sorted([lbl for lbl in labels if lbl])[:2]
+
+    if set(labels) == {"PGA", "LIV"}:
+        return ("PGA", "LIV")
+    if set(labels) == {"Cubs", "Sox"}:
+        return ("Cubs", "Sox")
+    if len(labels) == 2:
+        return (labels[0], labels[1])
+
+    # Fallback by game type
+    if getattr(game, "Type", "") == "FallClassic":
+        return ("Cubs", "Sox")
+    return ("PGA", "LIV")
+
+
 # ------------------------------------------------------------------
 # Handicap utility
 # ------------------------------------------------------------------
