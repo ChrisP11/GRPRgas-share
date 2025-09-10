@@ -589,6 +589,7 @@ def summary_for_game(gas_game_id: int):
     team_game = pairs[0].Game                 # GasCup or FallClassic row
     anchor_game_id = team_game.AssocGame      # <-- anchor (Skins or Forty)
     team0, team1 = _team_labels_for_game(team_game)
+    labels = (team0, team1)
 
     # preload timeslots from the *anchor* game invites
     pid_list = []
@@ -627,7 +628,7 @@ def summary_for_game(gas_game_id: int):
                 "back":    ov.Back_txt  or "—",
                 "overall": ov.Overall_txt or "—",
                 "thru":    18,
-                "total":   _format_total_pts(ov.PGA_pts, ov.LIV_pts),
+                "total":   _format_total_pts(ov.PGA_pts, ov.LIV_pts, labels),
                 "note":    ov.Note,
                 # do not emit 'combined' on override (optional)
             })
@@ -650,9 +651,9 @@ def summary_for_game(gas_game_id: int):
         back_delta    = _segment_delta(scores_by_hole,  BACK_HOLES)
         overall_delta = _segment_delta(scores_by_hole, FRONT_HOLES | BACK_HOLES)
 
-        front_str   = _fmt_lead(front_delta)   if thru >= 1  else None
-        back_str    = _fmt_lead(back_delta)    if thru >= 10 else None
-        overall_str = _fmt_lead(overall_delta) if thru >= 1  else None
+        front_str   = _fmt_lead(front_delta, labels)   if thru >= 1  else None
+        back_str    = _fmt_lead(back_delta, labels)    if thru >= 10 else None
+        overall_str = _fmt_lead(overall_delta, labels) if thru >= 1  else None
 
         pga_pts = liv_pts = Decimal("0")
         if thru >= 9:
@@ -672,7 +673,7 @@ def summary_for_game(gas_game_id: int):
             "back":    back_str,
             "overall": overall_str,
             "thru":    thru,
-            "total":   _format_total_pts(pga_pts, liv_pts),
+            "total":   _format_total_pts(pga_pts, liv_pts, labels),
         }
 
         # Only for Fall Classic: add combined team nets using the *anchor* game id
