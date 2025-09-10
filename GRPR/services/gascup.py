@@ -689,6 +689,9 @@ def summary_for_game(gas_game_id: int):
         if d == d.to_integral():
             return str(int(d))
         return f"{d.normalize()}"
+    
+    pga_total_pts += 0
+    liv_total_pts += 0
 
     totals = {"pga": _fmt_pts(pga_total_pts), "liv": _fmt_pts(liv_total_pts)}
     return rows_out, totals
