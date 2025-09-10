@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+{% load static %}
+{% load custom_filters %}
+
+{% block title %}Start New Game · Assign Players{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 1100px;">
+
+  <h1 class="mb-1">Start New Game</h1>
+  <p class="text-muted mb-3">Step 4 of 6 — Assign players to tee times.</p>
+
+  <!-- Progress -->
+  {% if progress %}
+    <div class="mb-3">
+      <div class="progress" style="height: 10px;">
+        <div class="progress-bar" role="progressbar"
+             style="width: {{ progress_pct }};"
+             aria-valuenow="{{ progress.current }}"
+             aria-valuemin="0" aria-valuemax="{{ progress.total }}">
+        </div>
+      </div>
+      <div class="small text-muted mt-1">
+        {{ progress.labels.0 }} ▸ {{ progress.labels.1 }} ▸ {{ progress.labels.2 }} ▸
+        {{ progress.labels.3 }} ▸ {{ progress.labels.4 }} ▸ {{ progress.labels.5 }}
+      </div>
+    </div>
+  {% endif %}
+
+  {% if messages %}
+    {% for m in messages %}
+      <div class="alert alert-{{ m.tags }}">{{ m }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <!-- Summary -->
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="small text-muted">
+      <strong>Date:</strong> {{ draft.event_date|date:"D, M j, Y" }}
+      {% if teetimes %} &nbsp;·&nbsp; <strong>Tee times:</strong> {{ teetimes|join:", " }}{% endif %}
+    </div>
+    <div class="badge bg-secondary">
+      Assigned: <span id="assignedCount">{{ assigned_count }}</span> / {{ total_players }}
+    </div>
+  </div>
+
+  <form method="post" class="card">
+    {% csrf_token %}
+    <div class="card-body">
+      <div class="row g-3">
+        <!-- Left: available players -->
+        <div class="col-12 col-lg-5">
+          <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <span>Available Players</span>
+              <small class="text-muted">Tap to select; multi-select supported</small>
+            </div>
+            <div class="card-body" style="max-height: 60vh; overflow:auto;">
+              <ul id="availableList" class="list-group">
+                {% for p in unassigned %}
+                  <li class="list-group-item selectable" data-pid="{{ p.id }}">
+                    {{ p.LastName }}, {{ p.FirstName }}
+                  </li>
+                {% endfor %}
+              </ul>
+              {% if not unassigned %}
+                <div class="text-muted small mt-2">All players are assigned.</div>
+              {% endif %}
+            </div>
+            <div class="card-footer">
+              <div class="d-flex flex-wrap gap-2">
+                {% for t in teetimes %}
+                  <button class="btn btn-sm btn-outline-primary move-btn"
+                          type="button" data-target-tee="{{ t }}">
+                    Add to {{ t }} →
+                  </button>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: tee time buckets -->
+        <div class="col-12 col-lg-7">
+          <div class="row g-3">
+            {% for t in teetimes %}
+              <div class="col-12 col-md-6">
+                <div class="card h-100">
+                  <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Tee time {{ t }}</span>
+                    <span class="badge bg-info">
+                      <span class="tee-count" data-tee="{{ t }}">0</span>/4
+                    </span>
+                  </div>
+                  <div class="card-body" style="min-height: 120px;">
+                    <ul class="list-group tee-box" data-tee="{{ t }}">
+                      {% for p in assignments|get_item:t %}
+                        <li class="list-group-item assigned" data-pid="{{ p }}">
+                          {% for pl in players %}
+                            {% if pl.id == p %}
+                              {{ pl.LastName }}, {{ pl.FirstName }}
+                            {% endif %}
+                          {% endfor %}
+                          <button class="btn btn-sm btn-outline-secondary float-end remove-btn"
+                                  type="button" data-pid="{{ p }}">Remove</button>
+                        </li>
+                      {% endfor %}
+                    </ul>
+                    {% if not assignments|get_item:t %}
+                      <div class="text-muted small mt-2 empty-note">No players yet.</div>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <input type="hidden" name="assignments_json" id="assignments_json" />
+
+    <div class="card-footer d-flex gap-2">
+      <a class="btn btn-outline-secondary" href="{% url 'game_setup_groups' %}">Back</a>
+      <button class="btn btn-primary" type="submit">Continue</button>
+    </div>
+  </form>
+</div>
+
+<script>
+(function(){
+  // Utility: toggle selection in the available list
+  function toggleSelected(li) {
+    li.classList.toggle('active');
+  }
+
+  const availableList = document.getElementById('availableList');
+  const assignedCountEl = document.getElementById('assignedCount');
+  const maxPerTee = 4;
+
+  function recalcCounts() {
+    // update tee counts
+    document.querySelectorAll('.tee-box').forEach(box => {
+      const tee = box.getAttribute('data-tee');
+      const count = box.querySelectorAll('li.assigned').length;
+      const badge = document.querySelector('.tee-count[data-tee="' + tee + '"]');
+      if (badge) badge.textContent = count;
+      // empty note
+      const note = box.parentElement.querySelector('.empty-note');
+      if (note) note.style.display = count === 0 ? 'block' : 'none';
+    });
+    // update global assigned
+    const totalAssigned = document.querySelectorAll('li.assigned').length;
+    if (assignedCountEl) assignedCountEl.textContent = totalAssigned;
+  }
+
+  // Build JSON for form submit
+  function buildAssignmentsJson() {
+    const mapping = {};
+    document.querySelectorAll('.tee-box').forEach(box => {
+      const tee = box.getAttribute('data-tee');
+      const ids = [];
+      box.querySelectorAll('li.assigned').forEach(li => {
+        ids.push(parseInt(li.getAttribute('data-pid'), 10));
+      });
+      mapping[tee] = ids;
+    });
+    document.getElementById('assignments_json').value = JSON.stringify(mapping);
+  }
+
+  // Click on available player to select
+  if (availableList) {
+    availableList.addEventListener('click', function(e){
+      const li = e.target.closest('li.selectable');
+      if (!li) return;
+      toggleSelected(li);
+    });
+  }
+
+  // Add selected available players to a given tee
+  document.querySelectorAll('.move-btn').forEach(btn => {
+    btn.addEventListener('click', function(){
+      const targetTee = btn.getAttribute('data-target-tee');
+      const targetBox = document.querySelector('.tee-box[data-tee="' + targetTee + '"]');
+      if (!targetBox) return;
+
+      const currentCount = targetBox.querySelectorAll('li.assigned').length;
+      const slotsLeft = maxPerTee - currentCount;
+      if (slotsLeft <= 0) return;
+
+      const selectedLis = availableList ? Array.from(availableList.querySelectorAll('li.selectable.active')) : [];
+      if (selectedLis.length === 0) return;
+
+      // Add up to slotsLeft
+      let added = 0;
+      for (const li of selectedLis) {
+        if (added >= slotsLeft) break;
+        const pid = li.getAttribute('data-pid');
+
+        // Create assigned row
+        const node = document.createElement('li');
+        node.className = 'list-group-item assigned';
+        node.setAttribute('data-pid', pid);
+        node.innerHTML = li.innerHTML + 
+          '<button class="btn btn-sm btn-outline-secondary float-end remove-btn" type="button" data-pid="'+pid+'">Remove</button>';
+
+        // append
+        targetBox.appendChild(node);
+        // remove from available
+        li.remove();
+        added += 1;
+      }
+
+      recalcCounts();
+      buildAssignmentsJson();
+    });
+  });
+
+  // Remove from tee box -> return to available
+  document.querySelectorAll('.tee-box').forEach(box => {
+    box.addEventListener('click', function(e){
+      const btn = e.target.closest('.remove-btn');
+      if (!btn) return;
+      const li = btn.closest('li.assigned');
+      if (!li) return;
+      const pid = li.getAttribute('data-pid');
+      const nameText = li.firstChild ? li.firstChild.textContent.trim() : ('Player ' + pid);
+
+      // create available list item
+      const avail = document.createElement('li');
+      avail.className = 'list-group-item selectable';
+      avail.setAttribute('data-pid', pid);
+      avail.textContent = nameText;
+
+      if (availableList) availableList.appendChild(avail);
+      li.remove();
+
+      recalcCounts();
+      buildAssignmentsJson();
+    });
+  });
+
+  // On submit, ensure JSON is up-to-date
+  const form = document.querySelector('form');
+  if (form) {
+    form.addEventListener('submit', function(){
+      buildAssignmentsJson();
+    });
+  }
+
+  // Initial calc
+  recalcCounts();
+  buildAssignmentsJson();
+})();
+</script>
+{% endblock %}

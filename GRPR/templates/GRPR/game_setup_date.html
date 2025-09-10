@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Start New Game · Choose Date{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 900px;">
+
+  <h1 class="mb-1">Start New Game</h1>
+  <p class="text-muted mb-3">Step 1 of 6 — Choose the date.</p>
+
+  <!-- Progress -->
+  {% if progress %}
+    <div class="mb-3">
+        <div class="progress" style="height: 10px;">
+        <div class="progress-bar"
+            role="progressbar"
+            style="width: {{ progress_pct }}%;"
+            aria-valuenow="{{ progress.current }}"
+            aria-valuemin="0"
+            aria-valuemax="{{ progress.total }}">
+        </div>
+        </div>
+        <div class="small text-muted mt-1">
+        {{ progress.labels.0 }} ▸ {{ progress.labels.1 }} ▸ {{ progress.labels.2 }} ▸
+        {{ progress.labels.3 }} ▸ {{ progress.labels.4 }} ▸ {{ progress.labels.5 }}
+        </div>
+    </div>
+    {% endif %}
+
+
+  <!-- Suggested card (if we could compute it) -->
+  {% if suggested %}
+    <div class="card mb-4">
+      <div class="card-header">Suggested — next scheduled date for your crew</div>
+      <div class="card-body">
+        <div class="row">
+          <div class="col-md-3"><strong>Date</strong><br>{{ suggested.date }}</div>
+          <div class="col-md-3"><strong># Players</strong><br>{{ suggested.num_players }}</div>
+          <div class="col-md-3"><strong>Course</strong><br>{{ suggested.course_name|default:"—" }}</div>
+          <div class="col-md-3"><strong>Tee times</strong><br>
+            {% if suggested.tee_times %}
+              <span class="small">{{ suggested.tee_times|join:", " }}</span>
+            {% else %}
+              <span class="text-muted small">—</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Date selector -->
+  <form method="post" class="card">
+    {% csrf_token %}
+    <div class="card-header">Choose a date</div>
+    <div class="card-body">
+      <div class="row g-3 align-items-end">
+        <div class="col-sm-6">
+          <label for="event_date" class="form-label">Event date</label>
+          <input id="event_date" name="event_date" type="date" class="form-control"
+                 value="{{ draft.event_date|date:'Y-m-d' }}">
+        </div>
+      </div>
+    </div>
+    <div class="card-footer d-flex gap-2">
+      <a class="btn btn-outline-secondary" href="{% url 'games_view' %}">Back</a>
+      <button class="btn btn-primary" type="submit">Continue</button>
+    </div>
+  </form>
+
+</div>
+{% endblock %}

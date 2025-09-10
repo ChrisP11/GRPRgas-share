@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Start New Game · Configuration{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 1000px;">
+
+  <h1 class="mb-1">Start New Game</h1>
+  <p class="text-muted mb-3">Step 5 of 6 — General configuration.</p>
+
+  {% if progress %}
+    <div class="mb-3">
+      <div class="progress" style="height: 10px;">
+        <div class="progress-bar" role="progressbar"
+             style="width: {{ progress_pct }};"
+             aria-valuenow="{{ progress.current }}"
+             aria-valuemin="0" aria-valuemax="{{ progress.total }}">
+        </div>
+      </div>
+      <div class="small text-muted mt-1">
+        {{ progress.labels.0 }} ▸ {{ progress.labels.1 }} ▸ {{ progress.labels.2 }} ▸
+        {{ progress.labels.3 }} ▸ {{ progress.labels.4 }} ▸ {{ progress.labels.5 }}
+      </div>
+    </div>
+  {% endif %}
+
+      <div class="col-lg-5">
+      <div class="card h-100">
+        <div class="card-header">Summary</div>
+        <div class="card-body">
+          <div class="mb-2"><strong>Date:</strong> {{ playing_date|date:"D, M j, Y" }}</div>
+          <div class="mb-2"><strong>Course:</strong> {{ course_name }}</div>
+          <div class="mb-2"><strong>Players:</strong> {{ number_of_players }}</div>
+          <hr>
+          <div class="mb-2"><strong>Tee times & groups:</strong></div>
+          {% if tee_times %}
+            <ul class="list-unstyled mb-0">
+              {% for grp in tee_times %}
+                <li class="mb-2">
+                  <span class="badge bg-secondary me-2">{{ grp.label }}</span>
+                  {% for p in grp.players %}
+                    <span class="badge bg-light text-dark me-1">{{ p.name }}</span>
+                  {% endfor %}
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <div class="text-muted">No assignments found.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-7">
+      <div class="card">
+        <div class="card-header">Configuration</div>
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="save_config">
+          <div class="card-body">
+            <div class="mb-3">
+            <label for="tee_id" class="form-label">Tee set</label>
+            <select id="tee_id" name="tee_id" class="form-select">
+                <option value="">— Select a tee —</option>
+                {% for t in tee_options %}
+                    <option value="{{ t.id }}" {% if t.id == selected_tee_id %}selected{% endif %}>
+                    {{ t.name }} — {{ t.rating|floatformat:1 }} — {{ t.yards }} yds
+                    </option>
+                {% endfor %}
+            </select>
+              <div class="form-text">Choose the tee set the group will play.</div>
+            </div>
+
+            <div class="mb-3">
+                <label for="handicap_mode" class="form-label">Handicap mode</label>
+                <select class="form-select" id="handicap_mode" name="handicap_mode" required>
+                    <option value="" disabled {% if not selected_handicap_mode %}selected{% endif %}>— Select mode —</option>
+                    <option value="Low"  {% if selected_handicap_mode == "Low" %}selected{% endif %}>Low man</option>
+                    <option value="Full" {% if selected_handicap_mode == "Full" %}selected{% endif %}>Full handicap</option>
+                </select>
+            </div>
+
+            <div class="alert alert-info">
+                <p class="mb-1">
+                    <strong>Low man</strong> — Lowest handicap gets 0 strokes; everyone else gets strokes equal to
+                    their handicap minus the low man’s handicap. Example: if the low man is 5 and you’re 15, you get
+                    one stroke on each of the hardest 10 holes. This format tends to give higher handicappers an
+                    advantage on the hardest holes.
+                </p>
+                <p class="mb-0">
+                    <strong>Full handicap</strong> — Everyone receives strokes equal to their full handicap.
+                    Example: a 15 handicap gets one stroke on the 15 hardest holes. This format tends to give
+                    higher handicappers an advantage on the easiest holes.
+                </p>
+            </div>
+                <div class="card-footer d-flex gap-2">
+                    <a class="btn btn-outline-secondary" href="{% url 'game_setup_assign' %}">Back</a>
+                    <button class="btn btn-primary" type="submit">Save &amp; Continue</button>
+                </div>
+        </form>
+      </div>
+    </div>
+
+
+
+
+</div>
+{% endblock %}

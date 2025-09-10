@@ -6,14 +6,16 @@
 <div class="container my-4">
     
     {% if gas_matches %}
-    <h2 class="mt-4">Gas Tank</h2>
+    <!-- <h2 class="mt-4">Gas Tank</h2> -->
+    <h2>{% if is_fallclassic %}Fall Classic{% else %}Gas Cup{% endif %}</h2>
 
     {% if gas_totals %}
     <div class="text-center mt-3">
     <h4>
-        <span class="badge bg-primary fs-5">PGA {{ gas_totals.pga }}</span>
+        <span class="badge bg-primary text-danger fs-5">{{ team_labels.0 }} {{ gas_totals.pga }}</span>
         <span class="mx-2">–</span>
-        <span class="badge bg-success fs-5">LIV {{ gas_totals.liv }}</span>
+        <!-- <span class="badge bg-success fs-5">{{ team_labels.1 }} {{ gas_totals.liv }}</span> for LIV, green--> 
+        <span class="badge bg-dark text-white fs-5">{{ team_labels.1 }} {{ gas_totals.liv }}</span>
     </h4>
     </div>
     {% endif %}
@@ -30,8 +32,8 @@
         <thead>
         <tr>
             <th>Time</th>
-            <th>PGA</th>
-            <th>LIV</th>
+            <th>{{ team_labels.0 }}</th>
+            <th>{{ team_labels.1 }}</th>
         </tr>
         </thead>
         <tbody>
@@ -57,6 +59,9 @@
             <th>Overall</th>
             <th>Thru</th>
             <th>Total Pts</th>
+            {% if is_fallclassic %}
+                <th>Total Combined Net</th>
+            {% endif %}
         </tr>
         </thead>
         <tbody>
@@ -73,6 +78,11 @@
                 <br><small class="text-muted">{{ m.note }}</small>
             {% endif %}
             </td>
+            {% if is_fallclassic %}
+            <td>
+                {% if m.combined %}{{ m.combined }}{% else %}—{% endif %}
+            </td>
+            {% endif %}
         </tr>
         {% endfor %}
         </tbody>

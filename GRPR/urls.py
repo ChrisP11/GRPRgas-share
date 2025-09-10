@@ -65,7 +65,8 @@ urlpatterns = [
     path('reset/<uidb64>/<token>/', auth_views.PasswordResetConfirmView.as_view(template_name='GRPR/password_reset_confirm.html'), name='password_reset_confirm'),
     path('reset/done/', auth_views.PasswordResetCompleteView.as_view(template_name='GRPR/password_reset_complete.html'), name='password_reset_complete'),
     path('admin_page/', views.admin_view, name='admin_page'),
-    path('admin/toggle-gascup/', views.toggle_gascup_view, name='toggle_gascup_view'),
+    path("admin/competitions/toggles/", views.admin_save_competition_toggles, name="admin_save_competition_toggles"),
+    path('admin/toggles/', views.toggle_games_view, name='toggle_games_view'),
     path('email_test/', views.email_test_view, name='email_test_view'),
     path('automated_msg_admin/', views.automated_msg_admin_view, name='automated_msg_admin_view'),
     path('automated_msg_confirm/', views.automated_msg_confirm_view, name='automated_msg_confirm_view'),
@@ -78,6 +79,17 @@ urlpatterns = [
     ### Games
     path('games/', views.games_view, name='games_view'),
     path('games_choice/', views.games_choice_view, name='games_choice_view'),
+
+    ### New Game Creation workflow
+    path("games/new/date/", views.game_setup_date_view, name="game_setup_date"),
+    path("games/setup/course/", views.game_setup_course_view, name="game_setup_course"),
+    path("games/setup/players/", views.game_setup_players_view, name="game_setup_players"),
+    path("GRPR/games/setup/groups/", views.game_setup_groups_view, name="game_setup_groups"),
+    path("GRPR/games/setup/assign/", views.game_setup_assign_view, name="game_setup_assign"),
+    path("GRPR/games/setup/config/", views.game_setup_config_view, name="game_setup_config"),
+    path("GRPR/games/setup/games/", views.game_setup_games_view, name="game_setup_games"),
+
+
 
     ### Skins Game
     path('skins/', views.skins_view, name='skins_view'),
@@ -120,6 +132,8 @@ urlpatterns = [
     ### Gas Cup
     path("gascup/team_assign/", views.gascup_team_assign_view, name="gascup_team_assign_view"),
     path("gascup/teams/", views.gascup_team_assign_view, name="gascup_team_assign_view"),
+    path("fallclassic/teams/", views.fallclassic_team_assign_view, name="fallclassic_team_assign_view"),
+
 
     ### scorecard work
     path('scorecard/', views.scorecard_view, name='scorecard_view'),
