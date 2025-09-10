@@ -34,6 +34,7 @@ from GRPR.models import (
     GasCupPair,
     GasCupScore,
     Scorecard,
+    ScorecardMeta,
     CourseHoles,
 )
 
@@ -100,6 +101,20 @@ def update_for_score(score_id: int) -> None:
 # ------------------------------------------------------------------ #
 # Internal helpers                                                   #
 # ------------------------------------------------------------------ #
+def _combined_net_for_pair(anchor_game_id: int, pair: GasCupPair) -> Optional[int]:
+    """
+    Return current combined NetTotal for the pair from ScorecardMeta (GameID = anchor).
+    If a partner is missing NetTotal, we ignore it; if both missing, return None.
+    """
+    pids = [pair.PID1_id] + ([pair.PID2_id] if pair.PID2_id else [])
+    nets = list(
+        ScorecardMeta.objects
+        .filter(GameID_id=anchor_game_id, PID_id__in=pids)
+        .values_list("NetTotal", flat=True)
+    )
+    vals = [int(n) for n in nets if n is not None]
+    return sum(vals) if vals else None
+
 def _team_labels_for_game(game: Games) -> tuple[str, str]:
     """
     Determine the two team labels used in this team game.
@@ -550,6 +565,7 @@ def summary_for_game(gas_game_id: int):
 
     gas_game = pairs[0].Game
     labels = _team_labels_for_game(gas_game)  # e.g. ("Cubs","Sox") or ("PGA","LIV")
+    is_fallclassic = (gas_game.Type == "FallClassic")
     lbl0, lbl1 = labels
 
     skins_game_id = gas_game.AssocGame
@@ -583,6 +599,19 @@ def summary_for_game(gas_game_id: int):
     rows_out = []
 
     for slot in sorted(matches.keys()):
+        match_pairs = matches[slot]
+        pga_pair = match_pairs.get("PGA")
+        liv_pair = match_pairs.get("LIV")
+
+        combined_str = None
+        if is_fallclassic and pga_pair and liv_pair:
+            pga_total = _combined_net_for_pair(skins_game_id, pga_pair)
+            liv_total = _combined_net_for_pair(skins_game_id, liv_pair)
+            # render with em-dash and labels; show '—' if missing
+            pga_txt = "—" if pga_total is None else str(pga_total)
+            liv_txt = "—" if liv_total is None else str(liv_total)
+            combined_str = f"{labels[0]} {pga_txt} – {liv_txt} {labels[1]}"
+
         if slot in overrides:
             ov = overrides[slot]
             rows_out.append({
@@ -593,6 +622,7 @@ def summary_for_game(gas_game_id: int):
                 "thru":    18,
                 "total":   _format_total_pts(ov.PGA_pts, ov.LIV_pts, labels),
                 "note":    ov.Note,
+                "combined": combined_str,
             })
             total0 += ov.PGA_pts
             total1 += ov.LIV_pts
@@ -634,6 +664,7 @@ def summary_for_game(gas_game_id: int):
             "overall": overall_str,
             "thru":    thru,
             "total":   _format_total_pts(a_pts, b_pts, labels),
+            "combined": combined_str,
         })
 
     def _fmt(d: Decimal) -> str:
