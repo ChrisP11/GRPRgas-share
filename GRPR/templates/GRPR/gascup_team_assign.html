@@ -1,9 +1,10 @@
 {% extends "base.html" %}
 {% load custom_filters %}
-{% block title %}Gas-Cup Teams{% endblock %}
+{% block title %}{% if variant == "FallClassic" %}Fall Classic Teams{% else %}Gas Cup Teams{% endif %}{% endblock %}
 
 {% block content %}
-<h3 class="mb-3">Assign Teams – Gas Cup</h3>
+<h3 class="mb-3">Assign Teams – {% if variant == "FallClassic" %}Fall Classic{% else %}Gas Cup{% endif %}</h3>
+
 
 {% if messages %}
   {% for m in messages %}
@@ -23,8 +24,8 @@
       <thead class="table-light">
         <tr>
           <th>Player</th>
-          <th class="text-center">PGA</th>
-          <th class="text-center">LIV</th>
+          <th class="text-center">{{ teams.0 }}</th>
+          <th class="text-center">{{ teams.1 }}</th>
         </tr>
       </thead>
 

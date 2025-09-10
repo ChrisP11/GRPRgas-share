@@ -1,6 +1,7 @@
 import json
 from decimal import Decimal
 from django import template
+from collections.abc import Mapping
 
 register = template.Library()
 
@@ -18,6 +19,23 @@ def get_item(dictionary, key):
 @register.filter
 def to_json(value):
     return json.dumps(value, cls=DjangoJSONEncoder)
+
+# for new game setup workflow
+@register.filter
+def get_item(value, key):
+    """
+    Template helper to fetch dict items with arbitrary keys (e.g. '9:04').
+    Returns [] if the key isn't present so you can safely iterate:
+      {% for p in assignments|get_item:teetime %}
+    Works with plain dicts and Mapping-like objects.
+    """
+    try:
+        if isinstance(value, Mapping):
+            return value.get(key, [])
+        # Fallback for objects that support __getitem__
+        return value[key]
+    except Exception:
+        return []
 
 
 # for Gas Cup

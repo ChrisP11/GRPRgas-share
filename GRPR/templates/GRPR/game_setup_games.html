@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Start New Game · Choose Games{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 1000px;">
+
+  <h1 class="mb-1">Start New Game</h1>
+  <p class="text-muted mb-3">Step 6 of 6 — Choose which games to play.</p>
+
+  {% if progress %}
+    <div class="mb-3">
+      <div class="progress" style="height: 10px;">
+        <div class="progress-bar" role="progressbar"
+             style="width: {{ progress_pct }};"
+             aria-valuenow="{{ progress.current }}"
+             aria-valuemin="0" aria-valuemax="{{ progress.total }}">
+        </div>
+      </div>
+      <div class="small text-muted mt-1">
+        {{ progress.labels.0 }} ▸ {{ progress.labels.1 }} ▸ {{ progress.labels.2 }} ▸
+        {{ progress.labels.3 }} ▸ {{ progress.labels.4 }} ▸ {{ progress.labels.5 }}
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="row g-3">
+    <!-- Left: Summary -->
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-header">Your configuration</div>
+        <div class="card-body">
+          <div class="mb-2"><strong>Date:</strong> {{ playing_date|date:"D, M j, Y" }}</div>
+          <div class="mb-2"><strong>Course:</strong> {{ course_name }}</div>
+          <div class="mb-2"><strong>Players:</strong> {{ number_of_players }}</div>
+          <div class="mb-2"><strong>Tee set:</strong> {{ tee_label }}</div>
+          <div class="mb-3"><strong>Handicap mode:</strong> {{ handicap_mode }}</div>
+
+          <hr>
+          <div class="mb-2"><strong>Tee times & groups:</strong></div>
+          {% if tee_times %}
+            <ul class="list-unstyled mb-0">
+              {% for grp in tee_times %}
+                <li class="mb-2">
+                  <span class="badge bg-secondary me-2">{{ grp.label }}</span>
+                  {% for p in grp.players %}
+                    <span class="badge bg-light text-dark me-1">{{ p.name }}</span>
+                  {% endfor %}
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <div class="text-muted">No assignments found.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Game choices -->
+    <div class="col-lg-6">
+      <form method="post" class="card h-100" action="{% url 'forty_config_view' %}">
+        {% csrf_token %}
+        <div class="card-header">Which games do you want to play?</div>
+        <div class="card-body">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="g_skins" name="games" value="skins"
+                   {% if "skins" in selected_games %}checked{% endif %}>
+            <label class="form-check-label" for="g_skins">Skins</label>
+          </div>
+
+          <div class="form-check mt-2">
+            <input class="form-check-input" type="checkbox" id="g_forty" name="games" value="forty"
+                   {% if "forty" in selected_games %}checked{% endif %}>
+            <label class="form-check-label" for="g_forty">Forty</label>
+          </div>
+
+          {% if enable_gas_cup %}
+            <div class="form-check mt-2">
+              <input class="form-check-input" type="checkbox" id="g_gascup" name="games" value="gascup"
+                     {% if "gascup" in selected_games %}checked{% endif %}>
+              <label class="form-check-label" for="g_gascup">Gas Cup</label>
+            </div>
+          {% else %}
+            {# <div class="form-text text-muted mt-2">Gas Cup temporarily unavailable.</div> #}
+          {% endif %}
+
+          {% if enable_fall_classic %}
+            <div class="form-check mt-2">
+              <input class="form-check-input" type="checkbox" id="g_fall" name="games" value="fallclassic"
+                     {% if "fallclassic" in selected_games %}checked{% endif %}>
+              <label class="form-check-label" for="g_fall">Fall Classic</label>
+            </div>
+          {% else %}
+            {# <div class="form-text text-muted mt-2">Fall Classic temporarily unavailable.</div> #}
+          {% endif %}
+        </div>
+
+        <div class="card-footer d-flex gap-2">
+            <button class="btn btn-primary" type="submit">Kontinue</button>
+            <a class="btn btn-outline-secondary" href="{% url 'game_setup_config' %}">Back</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
