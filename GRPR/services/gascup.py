@@ -23,7 +23,8 @@ from __future__ import annotations
 from typing import Dict, Optional, Tuple, Iterable
 
 from django.db import transaction
-from django.db.models import Q, Max
+from django.db.models import Q, Max, Sum, Value, IntegerField
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from decimal import Decimal
@@ -101,19 +102,35 @@ def update_for_score(score_id: int) -> None:
 # ------------------------------------------------------------------ #
 # Internal helpers                                                   #
 # ------------------------------------------------------------------ #
-def _combined_net_for_pair(anchor_game_id: int, pair: GasCupPair) -> Optional[int]:
+def _combined_net_for_pair(anchor_game_id: int, pair: 'GasCupPair') -> int | None:
     """
-    Return current combined NetTotal for the pair from ScorecardMeta (GameID = anchor).
-    If a partner is missing NetTotal, we ignore it; if both missing, return None.
+    Sum ScorecardMeta.NetTotal for the partners in `pair` for the *anchor* game.
+    Fallback to summing posted Scorecard.NetScore if NetTotal is not populated.
     """
+    from GRPR.models import ScorecardMeta, Scorecard
+
     pids = [pair.PID1_id] + ([pair.PID2_id] if pair.PID2_id else [])
-    nets = list(
+    if not pids:
+        return None
+
+    # primary: sum NetTotal from ScorecardMeta (coalesce nulls to 0)
+    meta_sum = (
         ScorecardMeta.objects
         .filter(GameID_id=anchor_game_id, PID_id__in=pids)
-        .values_list("NetTotal", flat=True)
-    )
-    vals = [int(n) for n in nets if n is not None]
-    return sum(vals) if vals else None
+        .aggregate(total=Sum(Coalesce('NetTotal', 0)))
+    )['total']
+
+    if meta_sum and int(meta_sum) > 0:
+        return int(meta_sum)
+
+    # fallback: sum posted NetScore rows from Scorecard (works mid-round)
+    sc_sum = (
+        Scorecard.objects
+        .filter(GameID_id=anchor_game_id, smID__PID_id__in=pids)
+        .aggregate(total=Sum('NetScore'))
+    )['total']
+
+    return int(sc_sum) if sc_sum is not None else None
 
 def _team_labels_for_game(game: Games) -> tuple[str, str]:
     """
@@ -553,6 +570,12 @@ def _scores_for_match(gas_game_id: int, pga_pair_id: int, liv_pair_id: int) -> d
 
 
 def summary_for_game(gas_game_id: int):
+    """
+    Return (rows, totals) for the team match (Gas Cup or Fall Classic).
+    rows: one per foursome with keys label/front/back/overall/thru/total
+          and, for Fall Classic only, 'combined' (Cubs 144 – 147 Sox).
+    totals: cumulative points {"pga": "...", "liv": "..."}.
+    """
     from GRPR.models import GasCupPair, GameInvites, GasCupOverride
 
     pairs = (
@@ -563,55 +586,39 @@ def summary_for_game(gas_game_id: int):
     if not pairs:
         return [], {"pga": "0", "liv": "0"}
 
-    gas_game = pairs[0].Game
-    labels = _team_labels_for_game(gas_game)  # e.g. ("Cubs","Sox") or ("PGA","LIV")
-    is_fallclassic = (gas_game.Type == "FallClassic")
-    lbl0, lbl1 = labels
+    team_game = pairs[0].Game                 # GasCup or FallClassic row
+    anchor_game_id = team_game.AssocGame      # <-- anchor (Skins or Forty)
+    team0, team1 = _team_labels_for_game(team_game)
 
-    skins_game_id = gas_game.AssocGame
-
+    # preload timeslots from the *anchor* game invites
     pid_list = []
     for p in pairs:
-        if p.PID1_id:
-            pid_list.append(p.PID1_id)
-        if p.PID2_id:
-            pid_list.append(p.PID2_id)
+        pid_list.extend([p.PID1_id, p.PID2_id] if p.PID2_id else [p.PID1_id])
 
     invites = (
         GameInvites.objects
-        .filter(GameID_id=skins_game_id, PID_id__in=pid_list)
+        .filter(GameID_id=anchor_game_id, PID_id__in=pid_list)
         .select_related("TTID__CourseID")
     )
     slot_by_pid = {gi.PID_id: gi.TTID.CourseID.courseTimeSlot for gi in invites}
 
-    matches = {}  # slot -> {label: pair}
+    # group pairs into matches by tee time
+    matches: dict[str, dict[str, GasCupPair]] = {}
     for p in pairs:
         slot = slot_by_pid.get(p.PID1_id) or slot_by_pid.get(p.PID2_id)
         if not slot:
             continue
-        matches.setdefault(slot, {})[p.Team] = p
+        matches.setdefault(slot, {})[p.Team] = p  # p.Team holds the stored label ("PGA"/"LIV" or "Cubs"/"Sox")
 
     overrides_qs = GasCupOverride.objects.filter(Game_id=gas_game_id)
     overrides    = {ov.Slot: ov for ov in overrides_qs}
 
-    total0 = Decimal("0")
-    total1 = Decimal("0")
+    pga_total_pts = Decimal("0")
+    liv_total_pts = Decimal("0")
     rows_out = []
 
     for slot in sorted(matches.keys()):
-        match_pairs = matches[slot]
-        pga_pair = match_pairs.get("PGA")
-        liv_pair = match_pairs.get("LIV")
-
-        combined_str = None
-        if is_fallclassic and pga_pair and liv_pair:
-            pga_total = _combined_net_for_pair(skins_game_id, pga_pair)
-            liv_total = _combined_net_for_pair(skins_game_id, liv_pair)
-            # render with em-dash and labels; show '—' if missing
-            pga_txt = "—" if pga_total is None else str(pga_total)
-            liv_txt = "—" if liv_total is None else str(liv_total)
-            combined_str = f"{labels[0]} {pga_txt} – {liv_txt} {labels[1]}"
-
+        # manual override path unchanged...
         if slot in overrides:
             ov = overrides[slot]
             rows_out.append({
@@ -620,62 +627,70 @@ def summary_for_game(gas_game_id: int):
                 "back":    ov.Back_txt  or "—",
                 "overall": ov.Overall_txt or "—",
                 "thru":    18,
-                "total":   _format_total_pts(ov.PGA_pts, ov.LIV_pts, labels),
+                "total":   _format_total_pts(ov.PGA_pts, ov.LIV_pts),
                 "note":    ov.Note,
-                "combined": combined_str,
+                # do not emit 'combined' on override (optional)
             })
-            total0 += ov.PGA_pts
-            total1 += ov.LIV_pts
+            pga_total_pts += ov.PGA_pts
+            liv_total_pts += ov.LIV_pts
             continue
 
-        mp = matches[slot]
-        pair0 = mp.get(lbl0)
-        pair1 = mp.get(lbl1)
-        if not pair0 or not pair1:
+        match_pairs = matches[slot]
+        # For robustness, resolve pairs by label regardless of ordering stored in DB
+        pga_pair = match_pairs.get("PGA") or match_pairs.get(team0)
+        liv_pair = match_pairs.get("LIV") or match_pairs.get(team1)
+        if not pga_pair or not liv_pair:
+            # If DB 'Team' values are "Cubs"/"Sox" only, above still works via team0/team1 fallback
             continue
 
-        scores_by_hole = _scores_for_match(gas_game_id, pair0.id, pair1.id)
+        scores_by_hole = _scores_for_match(gas_game_id, pga_pair.id, liv_pair.id)
         thru = max(scores_by_hole.keys()) if scores_by_hole else 0
 
         front_delta   = _segment_delta(scores_by_hole, FRONT_HOLES)
         back_delta    = _segment_delta(scores_by_hole,  BACK_HOLES)
         overall_delta = _segment_delta(scores_by_hole, FRONT_HOLES | BACK_HOLES)
 
-        front_str   = _fmt_lead(front_delta,   labels) if thru >= 1  else None
-        back_str    = _fmt_lead(back_delta,    labels) if thru >= 10 else None
-        overall_str = _fmt_lead(overall_delta, labels) if thru >= 1  else None
+        front_str   = _fmt_lead(front_delta)   if thru >= 1  else None
+        back_str    = _fmt_lead(back_delta)    if thru >= 10 else None
+        overall_str = _fmt_lead(overall_delta) if thru >= 1  else None
 
-        a_pts = b_pts = Decimal("0")
+        pga_pts = liv_pts = Decimal("0")
         if thru >= 9:
-            a_f, b_f = _pts_from_segment(front_delta)
-            a_pts += a_f; b_pts += b_f
+            f_pga, f_liv = _pts_from_segment(front_delta)
+            pga_pts += f_pga; liv_pts += f_liv
         if thru >= 18:
-            a_b, b_b = _pts_from_segment(back_delta)
-            a_o, b_o = _pts_from_segment(overall_delta)
-            a_pts += (a_b + a_o); b_pts += (b_b + b_o)
+            b_pga, b_liv = _pts_from_segment(back_delta)
+            o_pga, o_liv = _pts_from_segment(overall_delta)
+            pga_pts += (b_pga + o_pga); liv_pts += (b_liv + o_liv)
 
-        total0 += a_pts
-        total1 += b_pts
+        pga_total_pts += pga_pts
+        liv_total_pts += liv_pts
 
-        rows_out.append({
+        row = {
             "label":   slot,
             "front":   front_str,
             "back":    back_str,
             "overall": overall_str,
             "thru":    thru,
-            "total":   _format_total_pts(a_pts, b_pts, labels),
-            "combined": combined_str,
-        })
+            "total":   _format_total_pts(pga_pts, liv_pts),
+        }
 
-    def _fmt(d: Decimal) -> str:
+        # Only for Fall Classic: add combined team nets using the *anchor* game id
+        if getattr(team_game, "Type", "") == "FallClassic":
+            pga_net = _combined_net_for_pair(anchor_game_id, pga_pair)
+            liv_net = _combined_net_for_pair(anchor_game_id, liv_pair)
+            if pga_net is not None and liv_net is not None:
+                row["combined"] = f"{team0} {pga_net} \u2013 {liv_net} {team1}"
+
+        rows_out.append(row)
+
+    def _fmt_pts(d: Decimal) -> str:
         if d == d.to_integral():
             return str(int(d))
         return f"{d.normalize()}"
 
-    # Return in legacy keys expected by template: first label -> 'pga', second -> 'liv'
-    totals = {"pga": _fmt(total0), "liv": _fmt(total1)}
+    totals = {"pga": _fmt_pts(pga_total_pts), "liv": _fmt_pts(liv_total_pts)}
     return rows_out, totals
-
 
 # ------------------------------------------------------------------ #
 #  Team labels / roster utilities                                    #
