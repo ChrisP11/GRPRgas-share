@@ -3742,7 +3742,8 @@ def players_view(request):
     current_datetime = datetime.now()
 
     # Query all players
-    players = Players.objects.filter(Member=1).order_by('LastName', 'FirstName')
+    # players = Players.objects.filter(Member=1).order_by('LastName', 'FirstName')
+    players = Players.objects.order_by('LastName', 'FirstName')
 
     # Prepare the data for the table
     players_data = []
