@@ -3873,7 +3873,10 @@ STAT_LABELS = {
 }
 
 YEAR_START = date(2025, 1, 1)
+SEASON_START = date(2025, 4, 1)
+SEASON_END   = date(2025, 9, 1)
 TODAY       = timezone.now().date() 
+
 
 
 # def _top10_gross():
@@ -3895,7 +3898,7 @@ def _top10_gross_member():
     rows = (
         ScorecardMeta.objects
         .filter(
-            PlayDate__gte=YEAR_START,
+            PlayDate__range=(SEASON_START, SEASON_END),
             PID__Member=1,
             RawTotal__isnull=False,
         )
@@ -3917,7 +3920,7 @@ def _top10_net():
     rows = (
         ScorecardMeta.objects
         .filter(
-            PlayDate__gte=YEAR_START,
+            PlayDate__range=(SEASON_START, SEASON_END),
             NetTotal__isnull=False,
         )
         .annotate(hole_count=Count("scorecard"))
@@ -3939,7 +3942,7 @@ def _top10_skins_one():
 
     per_round = (
         Skins.objects
-        .filter(SkinDate__gte=YEAR_START)
+        .filter(SkinDate__range=(SEASON_START, SEASON_END))
         .values("PlayerID_id", "PlayerID__FirstName", "PlayerID__LastName",
                 "GameID__PlayDate")
         .annotate(cnt=Count("id"))
@@ -3966,7 +3969,7 @@ def _top10_forty_one():
 
     per_round = (
         Forty.objects
-        .filter(GameID__PlayDate__gte=YEAR_START)
+        .filter(GameID__PlayDate__range=(SEASON_START, SEASON_END))
         .values("PID_id", "PID__FirstName", "PID__LastName", "GameID__PlayDate")
         .annotate(cnt=Count("id"))
     )
@@ -3986,7 +3989,7 @@ def _top10_forty_one():
 def _top10_skins():
     qs = (
         Skins.objects
-        .filter(SkinDate__gte=YEAR_START)
+        .filter(SkinDate__range=(SEASON_START, SEASON_END))
         .values("PlayerID_id", "PlayerID__FirstName", "PlayerID__LastName")
         .annotate(value=Count("id"))
         .order_by("-value")[:10]
@@ -3997,7 +4000,7 @@ def _top10_skins():
 def _top10_attendance():
     qs = (
         TeeTimesInd.objects
-        .filter(gDate__range=(YEAR_START, TODAY))
+        .filter(gDate__range=(SEASON_START, SEASON_END))
         .values("PID_id", "PID__FirstName", "PID__LastName")
         .annotate(value=Count("id"))
         .order_by("-value")[:10]
@@ -4008,7 +4011,7 @@ def _top10_forty_season():
     """Most Forty rows per player for the whole 2025 season."""
     qs = (
         Forty.objects
-        .filter(GameID__PlayDate__gte=YEAR_START)            # join through FK
+        .filter(GameID__PlayDate__range=(SEASON_START, SEASON_END))
         .values("PID_id", "PID__FirstName", "PID__LastName")
         .annotate(value=Count("id"))
         .order_by("-value")[:10]
@@ -4029,7 +4032,7 @@ def _top10_trader():
         SubSwap.objects
         .filter(nStatus="Closed",
                 SubStatus="Accepted",
-                RequestDate__range=(YEAR_START, TODAY))
+                RequestDate__range=(SEASON_START, SEASON_END))
         .values_list("SwapID", flat=True)
     )
 
@@ -4057,7 +4060,7 @@ def _top10_trader():
 def _top10_quick_draw():
     qs = (
         SubSwap.objects
-        .filter(nStatus="Closed", SubStatus="Accepted", nType="Sub", RequestDate__gte=YEAR_START)
+        .filter(nStatus="Closed", SubStatus="Accepted", nType="Sub", RequestDate__range=(SEASON_START, SEASON_END))
         .values("PID_id", "PID__FirstName", "PID__LastName")
         .annotate(value=Count("id"))
         .order_by("-value")[:10]
@@ -4084,7 +4087,7 @@ def _top10_friends():
     """
 
     with connection.cursor() as cur:
-        cur.execute(sql, [YEAR_START, TODAY])
+        cur.execute(sql, [SEASON_START, SEASON_END])
         rows = cur.fetchall()          # (p1, p2, cnt)
 
     result = []
