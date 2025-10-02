@@ -322,9 +322,13 @@ def _create_scorecards_for_game(
 
     # Slope needed for RawHDCP
     slope_val = Decimal(0)
+    par_val = Decimal(0)
+    course_val = Decimal(0)
     if tee_obj and tee_obj.SlopeRating is not None:
         try:
             slope_val = Decimal(tee_obj.SlopeRating)
+            par_val = Decimal(tee_obj.Par)
+            course_val = Decimal(tee_obj.CourseRating)
         except Exception:
             slope_val = Decimal(0)
 
@@ -364,7 +368,7 @@ def _create_scorecards_for_game(
             raw_hdcp = Decimal(0)
         else:
             try:
-                raw_hdcp = (slope_val / Decimal(113)) * index_val
+                raw_hdcp = ((index_val * (slope_val / Decimal(113))) + (course_val - par_val))
             except Exception:
                 raw_hdcp = Decimal(0)
 
@@ -5240,14 +5244,16 @@ def skins_initiate_scorecard_meta_view(request):
                 # Get player index and slope
                 player = get_object_or_404(Players, id=player_id)
                 index = player.Index
-                slope = tee_object.SlopeRating  # Access the SlopeRating directly from the object
+                slope_val = tee_object.SlopeRating
+                par_val = tee_object.Par
+                course_val = tee_object.CourseRating
 
                 # Calculate raw handicap
                 if index == 0 or index is None:
                     # Avoid division by zero, if index is 0, set raw handicap to 0
                     raw_hcdp = 0
                 else:
-                    raw_hcdp = (slope / Decimal(113)) * Decimal(index)
+                    raw_hcdp = ((index * (slope_val / Decimal(113))) + (course_val - par_val))
 
                 # Get group ID (courseTimeSlot)
                 group_id = (
