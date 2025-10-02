@@ -5601,8 +5601,8 @@ def skins_close_view(request):
     if wager is not None:
         # Close the Skins game
         Games.objects.filter(id=game_id).update(Status='Closed')
-        # Also close the associated Forty game
-        Games.objects.filter(AssocGame=game_id, Type='Forty').update(Status='Closed')
+        # Also close any associated games
+        Games.objects.filter(AssocGame=game_id).update(Status='Closed')
 
     # Pass data to the template
     context = {
