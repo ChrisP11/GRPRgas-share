@@ -57,3 +57,10 @@
 .gray-column {
     background-color: #f2f2f2; /* Light gray background */
 }
+
+
+/* Navy badge */
+.badge-navy { 
+  background-color: #0d3b66 !important; 
+  color: #fff !important; 
+}

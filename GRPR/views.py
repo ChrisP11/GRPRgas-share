@@ -439,12 +439,16 @@ def _team_labels_for_game(game: Games) -> tuple[str, str]:
         return ("PGA", "LIV")
     if set(labels) == {"Cubs", "Sox"}:
         return ("Cubs", "Sox")
+    # Ryder Cup thing
+    if set(labels) == {"USA", "EU"}:
+        return ("USA", "EU")
     if len(labels) == 2:
         return (labels[0], labels[1])
 
     # Fallback by game type
     if getattr(game, "Type", "") == "FallClassic":
-        return ("Cubs", "Sox")
+        # return ("Cubs", "Sox") # commented out to make the EU/USA thing as a hack
+        return ("USA", "EU")
     return ("PGA", "LIV")
 
 
@@ -5379,7 +5383,8 @@ def skins_leaderboard_view(request):
     # Default branding is PGA/LIV; switch for Fall Classic
     team_labels = ("PGA", "LIV")
     if team_game and team_game.Type == "FallClassic":
-        team_labels = ("Cubs", "Sox")
+        # team_labels = ("Cubs", "Sox")
+        team_labels = ("USA", "EU")
 
     gas_matches = []
     gas_totals  = None
@@ -6646,7 +6651,7 @@ def gascup_team_assign_view(request):
 
 @login_required
 def fallclassic_team_assign_view(request):
-    return _team_assign_generic(request, variant="FallClassic", team_labels=("Cubs", "Sox"))
+    return _team_assign_generic(request, variant="FallClassic", team_labels=("USA", "EU")) #team_labels=("Cubs", "Sox")
 
 # ---- End Generic Ryder Cup Game ---- #
 
