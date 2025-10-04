@@ -21,7 +21,7 @@
 {% endif %}
 
 <div class="text-center">
-  <a class="btn btn-primary" href="{% url 'game_setup_date' %}">Start New Game</a>
+  <!-- <a class="btn btn-primary" href="{% url 'game_setup_date' %}">Start New Game</a> -->
 </div>
 
 
@@ -30,7 +30,8 @@
     {% if game_status != None %}
     <a href="{% url 'skins_leaderboard_view' %}?game_id={{ skins_game_id }}" class="btn btn-primary" role="button">Leaderboard</a>
     {% else %}
-    <a href="{% url 'skins_choose_players_view' %}" class="btn btn-primary" role="button">Start New Game</a>
+    <!-- <a href="{% url 'skins_choose_players_view' %}" class="btn btn-primary" role="button">Start New Game</a> -->
+    <a href="{% url 'game_setup_date' %}" class="btn btn-primary" role="button">Start New Game</a>
     {% endif %}
     <a href="{% url 'skins_closed_games_view' %}" class="btn btn-secondary-custom" role="button">Previous Games</a>
     <!-- <a href="{% url 'forty_view' %}" class="btn btn-primary" role="button">Forty</a>
