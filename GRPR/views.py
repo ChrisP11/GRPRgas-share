@@ -4404,6 +4404,16 @@ def skins_delete_game_view(request):
             f"Scores: {gascupscore_count}, "
             f"Pairs: {gascuppair_count}, "
         )
+    elif game.Type == "FallClassic":
+        with transaction.atomic():
+            gascuppair_count = GasCupPair.objects.filter(Game=game).delete()[0]
+            gascupscore_count = GasCupScore.objects.filter(Game=game).delete()[0]
+            game.delete()
+        msg = (
+            f"Fall Classic game {game_id} deleted. "
+            f"Scores: {gascupscore_count}, "
+            f"Pairs: {gascuppair_count}, "
+        )
     else:
         msg = f"Game {game_id} is not Skins, Forty, or Gas Cup. No action taken."
 
@@ -6654,6 +6664,26 @@ def fallclassic_team_assign_view(request):
     return _team_assign_generic(request, variant="FallClassic", team_labels=("USA", "EU")) #team_labels=("Cubs", "Sox")
 
 # ---- End Generic Ryder Cup Game ---- #
+
+#### Stableford Game ####
+@login_required
+def stableford_config_view(request):
+    game_id = request.GET.get("game_id") or request.session.get("game_id")
+    if not game_id:
+        return HttpResponseBadRequest("Game ID is missing.")
+
+    # mirror your AssocGame anchor logic (like Forty does)
+    assoc_game_id = (
+        Games.objects
+        .filter(id=game_id)
+        .values_list("AssocGame", flat=True)
+        .first()
+    )
+
+    return render(request, "GRPR/stableford_config.html", {
+        "game_id": game_id,
+        "assoc_game_id": assoc_game_id,
+    })
 
 
 ####################################

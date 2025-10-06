@@ -63,42 +63,76 @@
         {% csrf_token %}
         <div class="card-header">Which games do you want to play?</div>
         <div class="card-body">
-          <div class="form-check">
-            <input class="form-check-input" type="checkbox" id="g_skins" name="games" value="skins"
-                   {% if "skins" in selected_games %}checked{% endif %}>
-            <label class="form-check-label" for="g_skins">Skins</label>
-          </div>
-
-          <div class="form-check mt-2">
-            <input class="form-check-input" type="checkbox" id="g_forty" name="games" value="forty"
-                   {% if "forty" in selected_games %}checked{% endif %}>
-            <label class="form-check-label" for="g_forty">Forty</label>
-          </div>
-
-          {% if enable_gas_cup %}
-            <div class="form-check mt-2">
-              <input class="form-check-input" type="checkbox" id="g_gascup" name="games" value="gascup"
-                     {% if "gascup" in selected_games %}checked{% endif %}>
-              <label class="form-check-label" for="g_gascup">Gas Cup</label>
+          <div class="row g-3">
+            <!-- Skins -->
+            <div class="col-12 col-md-6 col-lg-4">
+              <label class="game-card" tabindex="0">
+                <input class="visually-hidden" type="checkbox" id="g_skins" name="games" value="skins"
+                       {% if 'skins' in selected_games %}checked{% endif %}>
+                <div class="game-card-body">
+                  <div class="game-card-title">Skins</div>
+                  <div class="game-card-sub">Low score per hole wins a skin</div>
+                </div>
+              </label>
             </div>
-          {% else %}
-            {# <div class="form-text text-muted mt-2">Gas Cup temporarily unavailable.</div> #}
-          {% endif %}
 
-          {% if enable_fall_classic %}
-            <div class="form-check mt-2">
-              <input class="form-check-input" type="checkbox" id="g_fall" name="games" value="fallclassic"
-                     {% if "fallclassic" in selected_games %}checked{% endif %}>
-              <label class="form-check-label" for="g_fall">Fall Classic</label>
+            <!-- Forty -->
+            <div class="col-12 col-md-6 col-lg-4">
+              <label class="game-card" tabindex="0">
+                <input class="visually-hidden" type="checkbox" id="g_forty" name="games" value="forty"
+                       {% if 'forty' in selected_games %}checked{% endif %}>
+                <div class="game-card-body">
+                  <div class="game-card-title">Forty</div>
+                  <div class="game-card-sub">Best N net scores per group</div>
+                </div>
+              </label>
             </div>
-          {% else %}
-            {# <div class="form-text text-muted mt-2">Fall Classic temporarily unavailable.</div> #}
-          {% endif %}
+
+            <!-- Gas Cup (admin toggle) -->
+            {% if enable_gas_cup %}
+            <div class="col-12 col-md-6 col-lg-4">
+              <label class="game-card" tabindex="0">
+                <input class="visually-hidden" type="checkbox" id="g_gascup" name="games" value="gascup"
+                       {% if 'gascup' in selected_games %}checked{% endif %}>
+                <div class="game-card-body">
+                  <div class="game-card-title">Gas Cup</div>
+                  <div class="game-card-sub">Team match play</div>
+                </div>
+              </label>
+            </div>
+            {% endif %}
+
+            <!-- Fall Classic (admin toggle) -->
+            {% if enable_fall_classic %}
+            <div class="col-12 col-md-6 col-lg-4">
+              <label class="game-card" tabindex="0">
+                <input class="visually-hidden" type="checkbox" id="g_fallclassic" name="games" value="fallclassic"
+                       {% if 'fallclassic' in selected_games %}checked{% endif %}>
+                <div class="game-card-body">
+                  <div class="game-card-title">Fall Classic</div>
+                  <div class="game-card-sub">Cubs vs. Sox teams</div>
+                </div>
+              </label>
+            </div>
+            {% endif %}
+
+            <!-- Stableford (new) -->
+            <div class="col-12 col-md-6 col-lg-4">
+              <label class="game-card" tabindex="0">
+                <input class="visually-hidden" type="checkbox" id="g_stableford" name="games" value="stableford"
+                       {% if 'stableford' in selected_games %}checked{% endif %}>
+                <div class="game-card-body">
+                  <div class="game-card-title">Stableford</div>
+                  <div class="game-card-sub">Points by score (e.g., 2=par, 3=birdie)</div>
+                </div>
+              </label>
+            </div>
+          </div>
         </div>
 
         <div class="card-footer d-flex gap-2">
-            <button class="btn btn-primary" type="submit">Kontinue</button>
-            <a class="btn btn-outline-secondary" href="{% url 'game_setup_config' %}">Back</a>
+          <button class="btn btn-primary" type="submit">Kontinue</button>
+          <a class="btn btn-outline-secondary" href="{% url 'game_setup_config' %}">Back</a>
         </div>
       </form>
     </div>
@@ -106,3 +140,18 @@
 
 </div>
 {% endblock %}
+
+{# Optional: tiny keyboard helper if you want explicit JS toggling #}
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  document.querySelectorAll('.game-card').forEach(card => {
+    card.addEventListener('keydown', (e) => {
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault();
+        const cb = card.querySelector('input[type="checkbox"]');
+        if (cb) { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); }
+      }
+    });
+  });
+});
+</script>

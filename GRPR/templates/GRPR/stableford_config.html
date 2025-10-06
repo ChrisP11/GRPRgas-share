@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Stableford · Configure{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">Stableford — Configuration</h1>
+
+<p class="text-muted">
+  This is a stub configuration screen. We’ll collect per-game options here next.
+</p>
+
+<div class="card p-3">
+  <p><strong>Game ID:</strong> {{ game_id }}</p>
+  {% if assoc_game_id %}
+    <p><strong>Associated Game (anchor):</strong> {{ assoc_game_id }}</p>
+  {% endif %}
+</div>
+
+<div class="mt-3">
+  <a href="{% url 'home' %}" class="btn btn-secondary">Back to Home</a>
+  <!-- Replace the target below with whatever your “next step” should be -->
+  <a href="{% url 'skins_leaderboard_view' %}?game_id={{ game_id }}"
+     class="btn btn-primary">Continue</a>
+</div>
+{% endblock %}

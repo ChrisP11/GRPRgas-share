@@ -134,6 +134,9 @@ urlpatterns = [
     path("gascup/teams/", views.gascup_team_assign_view, name="gascup_team_assign_view"),
     path("fallclassic/teams/", views.fallclassic_team_assign_view, name="fallclassic_team_assign_view"),
 
+    ### Stableford
+    path("games/stableford/config/", views.stableford_config_view, name="stableford_config"),
+
 
     ### scorecard work
     path('scorecard/', views.scorecard_view, name='scorecard_view'),
