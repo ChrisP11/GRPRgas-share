@@ -21,6 +21,7 @@
     <form method="post" action="{% url 'forty_game_creation_view' %}">
         {% csrf_token %}
         <input type="hidden" name="game_id" value="{{ game_id }}">
+        <input type="hidden" name="forty_game_id" value="{{ game_id }}">
         <input type="hidden" name="num_scores" value="{{ num_scores }}">
         <input type="hidden" name="game_format" value="{{ game_format }}">
         <input type="hidden" name="min_1st" value="{{ min_1st }}">

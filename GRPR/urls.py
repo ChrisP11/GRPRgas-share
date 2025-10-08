@@ -88,7 +88,8 @@ urlpatterns = [
     path("GRPR/games/setup/assign/", views.game_setup_assign_view, name="game_setup_assign"),
     path("GRPR/games/setup/config/", views.game_setup_config_view, name="game_setup_config"),
     path("GRPR/games/setup/games/", views.game_setup_games_view, name="game_setup_games"),
-
+    path("game-setup/route/", views.game_setup_route_view, name="game_setup_route"),
+    path("games/new/resume/", views.game_setup_resume_view, name="game_setup_resume"),
 
 
     ### Skins Game
@@ -97,7 +98,7 @@ urlpatterns = [
     path('skins/remove_player/', views.skins_remove_player_view, name='skins_remove_player_view'),
     path('skins/choose_replacement_player/', views.skins_choose_replacement_player_view, name='skins_choose_replacement_player_view'),
     path('skins/add_player/', views.skins_add_player_view, name='skins_add_player_view'),
-    path('skins/config/', views.skins_config_view, name='skins_config_view'),
+    # path('skins/config/', views.skins_config_view, name='skins_config_view'),
     path('skins/undo_game_creation/', views.skins_undo_game_creation, name='skins_undo_game_creation'),
     path('skins/config/confirm/', views.skins_config_confirm_view, name='skins_config_confirm_view'),
 
@@ -108,7 +109,7 @@ urlpatterns = [
 
     # deprecated section?
     path('skins/new/', views.skins_new_game_view, name='skins_new_game_view'),
-    path('skins_invite_view/', views.skins_invite_view, name='skins_invite_view'),
+    # path('skins_invite_view/', views.skins_invite_view, name='skins_invite_view'),
     path('skins/invite/', views.skins_invite_status_view, name='skins_invite_status_view'),
     path('skins/accept_decline/', views.skins_accept_decline_view, name='skins_accept_decline_view'),
     path('skins/tees/', views.skins_choose_tees_view, name='skins_choose_tees_view'),
@@ -135,7 +136,7 @@ urlpatterns = [
     path("fallclassic/teams/", views.fallclassic_team_assign_view, name="fallclassic_team_assign_view"),
 
     ### Stableford
-    path("games/stableford/config/", views.stableford_config_view, name="stableford_config"),
+    path("games/stableford/config/", views.stableford_config_view, name="stableford_config_view"),
 
 
     ### scorecard work

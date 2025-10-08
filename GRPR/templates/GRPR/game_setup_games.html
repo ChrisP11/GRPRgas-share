@@ -59,7 +59,7 @@
 
     <!-- Right: Game choices -->
     <div class="col-lg-6">
-      <form method="post" class="card h-100" action="{% url 'forty_config_view' %}">
+      <form method="post" class="card h-100" action="{% url 'game_setup_route' %}">
         {% csrf_token %}
         <div class="card-header">Which games do you want to play?</div>
         <div class="card-body">
