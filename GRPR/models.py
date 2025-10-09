@@ -390,6 +390,37 @@ class GasCupOverride(models.Model):
 
     def __str__(self):
         return f"{self.Game_id} • {self.Slot} override"
+    
+
+class StblTeam(models.Model):
+    created_at   = models.DateTimeField(auto_now_add=True)
+    Game         = models.ForeignKey(Games, on_delete=models.CASCADE, db_index=True)
+    PID          = models.ForeignKey(Players, on_delete=models.CASCADE, db_index=True)
+    TeamID       = models.PositiveSmallIntegerField()  # 1,2,3,...
+    TeamName     = models.CharField(max_length=128, blank=True, null=True)
+
+    class Meta:
+        unique_together = (("Game", "PID"),)  # a player appears once per Stableford game
+        indexes = [models.Index(fields=["Game", "TeamID"])]
+        db_table = "StblTeam"
+
+class StblScore(models.Model):
+    AlterDate    = models.DateTimeField(auto_now=True)
+    Game         = models.ForeignKey(Games, on_delete=models.CASCADE, db_index=True)
+    PID          = models.ForeignKey(Players, on_delete=models.CASCADE, db_index=True)
+    Hole         = models.ForeignKey(CourseHoles, on_delete=models.CASCADE, db_index=True)
+
+    # Optional denorms for easier human debug/exports
+    RawScore     = models.PositiveSmallIntegerField(null=True, blank=True)
+    NetScore     = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    # The Stableford points for this player on this hole (0..5 in your rule)
+    Points       = models.SmallIntegerField(default=0)
+
+    class Meta:
+        unique_together = (("Game", "PID", "Hole"),)
+        indexes = [models.Index(fields=["Game", "PID"]), models.Index(fields=["Game"])]
+        db_table = "StblScore"
 
 
 class GameToggles(models.Model):

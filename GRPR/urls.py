@@ -90,6 +90,7 @@ urlpatterns = [
     path("GRPR/games/setup/games/", views.game_setup_games_view, name="game_setup_games"),
     path("game-setup/route/", views.game_setup_route_view, name="game_setup_route"),
     path("games/new/resume/", views.game_setup_resume_view, name="game_setup_resume"),
+    path("games/final-confirm/", views.final_games_confirm_view, name="final_games_confirm"),
 
 
     ### Skins Game

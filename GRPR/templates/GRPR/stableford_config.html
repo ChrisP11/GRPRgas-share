@@ -1,23 +1,254 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Stableford · Configure{% endblock %}
+
 {% block content %}
 <h1 class="h3 mb-3">Stableford — Configuration</h1>
 
-<p class="text-muted">
-  This is a stub configuration screen. We’ll collect per-game options here next.
-</p>
-
-<div class="card p-3">
-  <p><strong>Game ID:</strong> {{ game_id }}</p>
-  {% if assoc_game_id %}
-    <p><strong>Associated Game (anchor):</strong> {{ assoc_game_id }}</p>
-  {% endif %}
+<div class="mb-3 small text-muted">
+  Game ID: <strong>{{ game_id }}</strong>
+  {% if assoc_game_id %} · Anchor: <strong>{{ assoc_game_id }}</strong>{% endif %}
 </div>
 
-<div class="mt-3">
-  <a href="{% url 'home' %}" class="btn btn-secondary">Back to Home</a>
-  <!-- Replace the target below with whatever your “next step” should be -->
-  <a href="{% url 'skins_leaderboard_view' %}?game_id={{ game_id }}"
-     class="btn btn-primary">Continue</a>
-</div>
+<!-- Choice cards -->
+<form id="stableford-form" method="post">
+  {% csrf_token %}
+  <input type="hidden" name="mode" id="sf-mode" value="">
+  <input type="hidden" name="pairs_json" id="pairs_json" value="">
+
+  <div class="row g-3 mb-4">
+    <!-- Individual -->
+    <div class="col-md-4">
+      <div class="card h-100 border selectable" data-mode="individual">
+        <div class="card-body">
+          <h5 class="card-title mb-2">Individual</h5>
+          <p class="text-muted mb-0">Each player competes solo for Stableford points.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2-man teams -->
+    <div class="col-md-4">
+      <div class="card h-100 border selectable" data-mode="pairs">
+        <div class="card-body">
+          <h5 class="card-title mb-2">2-man teams</h5>
+          <p class="text-muted mb-0">Create two-person teams for each tee time.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4-man teams -->
+    <div class="col-md-4">
+      <div class="card h-100 border selectable" data-mode="foursome">
+        <div class="card-body">
+          <h5 class="card-title mb-2">Foursome</h5>
+          <p class="text-muted mb-0">Tee-time foursomes are the teams.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pairs builder (hidden until "pairs" selected) -->
+  <div id="pairs-builder" class="d-none">
+    <div class="alert alert-info py-2 mb-3">
+      Drag each player into Team 1 or Team 2 under their tee time. Max 2 per team. All players must be assigned.
+    </div>
+
+    {% for grp in group_list %}
+      <div class="card mb-3">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <div>
+            <strong>{{ grp.label }}</strong>
+            <span class="text-muted ms-2">Tee time</span>
+          </div>
+          <small class="text-muted">Players: {{ grp.players|length }}</small>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <!-- Source column -->
+            <div class="col-md-4">
+              <div class="mb-2 fw-semibold">Available</div>
+              <div class="sf-bin border rounded p-2"
+                   data-bin="source"
+                   data-slot="{{ grp.label }}"
+                   ondragover="event.preventDefault();"
+                   ondrop="onDrop(event)">
+                {% for p in grp.players %}
+                  <div class="chip mb-2 me-2"
+                       draggable="true"
+                       ondragstart="onDragStart(event)"
+                       data-pid="{{ p.id }}"
+                       data-name="{{ p.name }}"
+                       data-slot="{{ grp.label }}">
+                    {{ p.name }}
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+
+            <!-- Team 1 -->
+            <div class="col-md-4">
+              <div class="mb-2 fw-semibold">Team 1 — {{ grp.label }}</div>
+              <div class="sf-bin border rounded p-2 min-h-64"
+                   data-bin="team1"
+                   data-slot="{{ grp.label }}"
+                   ondragover="event.preventDefault();"
+                   ondrop="onDrop(event)">
+                <!-- filled by JS when re-rendering/restoring -->
+              </div>
+            </div>
+
+            <!-- Team 2 -->
+            <div class="col-md-4">
+              <div class="mb-2 fw-semibold">Team 2 — {{ grp.label }}</div>
+              <div class="sf-bin border rounded p-2 min-h-64"
+                   data-bin="team2"
+                   data-slot="{{ grp.label }}"
+                   ondragover="event.preventDefault();"
+                   ondrop="onDrop(event)">
+                <!-- filled by JS when re-rendering/restoring -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+
+  <div class="d-flex gap-2">
+    <a href="{{ cancel_href }}" class="btn btn-outline-secondary">Back</a>
+    <button id="submit-btn" class="btn btn-primary" disabled>Set Game</button>
+  </div>
+</form>
+
+<style>
+  .selectable { cursor: pointer; border-width: 2px !important; }
+  .selectable.active { border-color: var(--bs-primary) !important; box-shadow: 0 0 0 .2rem rgba(13,110,253,.25); }
+  .chip {
+    display:inline-block; padding:.25rem .5rem; border:1px solid #ddd; border-radius:.5rem;
+    background:#f8f9fa; user-select:none;
+  }
+  .sf-bin.min-h-64 { min-height: 64px; }
+</style>
+
+<script>
+  const form = document.getElementById('stableford-form');
+  const submitBtn = document.getElementById('submit-btn');
+  const modeInput = document.getElementById('sf-mode');
+  const pairsBuilder = document.getElementById('pairs-builder');
+  const pairsJsonInput = document.getElementById('pairs_json');
+
+  // selection cards
+  document.querySelectorAll('.selectable').forEach(card => {
+    card.addEventListener('click', () => {
+      document.querySelectorAll('.selectable').forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+      const mode = card.getAttribute('data-mode');
+      modeInput.value = mode;
+
+      if (mode === 'pairs') {
+        pairsBuilder.classList.remove('d-none');
+        validate();
+      } else {
+        pairsBuilder.classList.add('d-none');
+        submitBtn.disabled = false; // individual / foursome are always valid
+        pairsJsonInput.value = '';
+      }
+    });
+  });
+
+  // DnD helpers
+  function onDragStart(e) {
+    const pid = e.target.getAttribute('data-pid');
+    const name = e.target.getAttribute('data-name');
+    const slot = e.target.getAttribute('data-slot');
+    e.dataTransfer.setData('text/plain', JSON.stringify({pid, name, slot}));
+  }
+
+  function onDrop(e) {
+    const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+    const dst = e.currentTarget;
+    const dstSlot = dst.getAttribute('data-slot');
+    const dstBin  = dst.getAttribute('data-bin');
+
+    // only allow moves within the same tee time slot
+    if (dstSlot !== data.slot) return;
+
+    // enforce max 2 per team
+    if ((dstBin === 'team1' || dstBin === 'team2') && dst.children.length >= 2) return;
+
+    // Remove the original chip from any bin in this slot
+    document.querySelectorAll(`.sf-bin[data-slot="${data.slot}"] .chip[data-pid="${data.pid}"]`)
+      .forEach(el => el.parentNode.removeChild(el));
+
+    // Recreate chip in target bin
+    const chip = document.createElement('div');
+    chip.className = 'chip mb-2 me-2';
+    chip.setAttribute('draggable', 'true');
+    chip.setAttribute('data-pid', data.pid);
+    chip.setAttribute('data-name', data.name);
+    chip.setAttribute('data-slot', data.slot);
+    chip.addEventListener('dragstart', onDragStart);
+    chip.textContent = data.name;
+
+    dst.appendChild(chip);
+    validate();
+  }
+
+  // Validate pairs: every player must be in team1 or team2; max 2 per team
+  function collectPairs() {
+    // { "8:40": {team1:[pid], team2:[pid]}, ... }
+    const result = {};
+    document.querySelectorAll('.sf-bin[data-bin="source"]').forEach(src => {
+      const slot = src.getAttribute('data-slot');
+      result[slot] = {team1: [], team2: []};
+    });
+    document.querySelectorAll('.sf-bin[data-bin="team1"]').forEach(bin => {
+      const slot = bin.getAttribute('data-slot');
+      result[slot] = result[slot] || {team1: [], team2: []};
+      bin.querySelectorAll('.chip').forEach(ch => result[slot].team1.push(parseInt(ch.getAttribute('data-pid'))));
+    });
+    document.querySelectorAll('.sf-bin[data-bin="team2"]').forEach(bin => {
+      const slot = bin.getAttribute('data-slot');
+      result[slot] = result[slot] || {team1: [], team2: []};
+      bin.querySelectorAll('.chip').forEach(ch => result[slot].team2.push(parseInt(ch.getAttribute('data-pid'))));
+    });
+    return result;
+  }
+
+  function validate() {
+    const mode = modeInput.value;
+    if (mode !== 'pairs') { submitBtn.disabled = false; return; }
+
+    let ok = true;
+
+    // For each tee time, ensure everyone has been placed and capacity <= 2 each team
+    document.querySelectorAll('.card .sf-bin[data-bin="source"]').forEach(src => {
+      if (src.querySelector('.chip')) ok = false; // someone unassigned
+    });
+    document.querySelectorAll('.sf-bin[data-bin="team1"], .sf-bin[data-bin="team2"]').forEach(bin => {
+      if (bin.children.length > 2) ok = false;
+    });
+
+    submitBtn.disabled = !ok;
+
+    if (ok) {
+      pairsJsonInput.value = JSON.stringify(collectPairs());
+    } else {
+      pairsJsonInput.value = '';
+    }
+  }
+
+  form.addEventListener('submit', (e) => {
+    // Ensure we have a mode
+    if (!modeInput.value) {
+      e.preventDefault();
+      return;
+    }
+    if (modeInput.value === 'pairs' && !pairsJsonInput.value) {
+      e.preventDefault();
+      return;
+    }
+  });
+</script>
 {% endblock %}
