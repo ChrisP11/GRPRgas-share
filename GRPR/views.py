@@ -5,7 +5,7 @@ from django.http import HttpResponse, JsonResponse, HttpResponseBadRequest
 from django.utils import timezone
 from django.utils.timezone import now
 from django.utils.dateparse import parse_date
-from GRPR.models import Crews, Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity, SMSResponse, Xdates, Games, GameInvites, CourseTees, ScorecardMeta, Scorecard, CourseHoles, Skins, AutomatedMessages, Forty, GasCupPair, GasCupScore, GameSetupDraft, StblTeam, StblScore
+from GRPR.models import Crews, Courses, TeeTimesInd, Players, SubSwap, Log, LoginActivity, SMSResponse, Xdates, Games, GameInvites, CourseTees, ScorecardMeta, Scorecard, CourseHoles, Skins, AutomatedMessages, Forty, GasCupPair, GasCupScore, GameSetupDraft, StblTeam, StblScore, FortyGroupRule
 from datetime import datetime, date
 from django.conf import settings  # Import settings
 from django.contrib import messages
@@ -25,11 +25,13 @@ from django.db import transaction, connection
 from django.urls import reverse_lazy, reverse
 from django.core.mail import send_mail
 from django.core.management import call_command
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email, EmailValidator
 from GRPR.utils import get_open_subswap_or_error, check_player_availability, get_tee_time_details, parse_date_any, get_toggles
 from GRPR.services import gascup, stableford as stbl
 from twilio.rest import Client # Import the Twilio client
 from twilio.twiml.messaging_response import MessagingResponse
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import math
 from collections import Counter, defaultdict
 import itertools
@@ -37,6 +39,8 @@ from itertools import chain
 import re
 from typing import Optional, Dict, Tuple
 
+MOBILE_DIGITS_RE = re.compile(r'\D+')
+EMAIL_VALIDATOR = EmailValidator(message="Enter a valid email address.")
 
 # --- helper: normalize user-entered tee time strings to "H:MM" not sure this is needed long term---
 _TIME_RE = re.compile(r'^\s*(\d{1,2})(?::?(\d{2}))?\s*(am|pm)?\s*$', re.I)
@@ -3795,7 +3799,7 @@ def statistics_view(request):
 
     return render(request, 'GRPR/statistics.html', context)
 
-
+### Player maintenance section ###
 @login_required
 def players_view(request):
     # Get today's date
@@ -3911,6 +3915,213 @@ def player_update_view(request):
         })
 
     return redirect('profile_view')
+
+
+def _normalize_mobile_to_us_e164(raw: str) -> str:
+    """
+    Accept various US formats and return E.164-like digits-only '1NNNNNNNNNN' (11 digits).
+    Allowed:
+      - 10 digits -> prepend '1'
+      - 11 digits and startswith '1' -> as-is
+    Reject all other lengths/patterns.
+    """
+    if raw is None:
+        return ""
+    digits = MOBILE_DIGITS_RE.sub("", raw)
+    if digits == "":
+        return ""  # optional
+    if len(digits) == 10:
+        return "1" + digits
+    if len(digits) == 11 and digits.startswith("1"):
+        return digits
+    # Anything else is invalid for US-only policy
+    return None
+
+@login_required
+def player_add_view(request):
+    # gate: admin or the specific email you mentioned
+    if not (request.user.is_staff or request.user.is_superuser or
+            getattr(request.user, "email", "").lower() == "edsloanmd@gmail.com"):
+        messages.error(request, "You do not have permission to add players.")
+        return redirect("players_view")
+
+    from django.db import IntegrityError, transaction
+    from GRPR.models import Players, Log  # import here to keep this drop-in self-contained
+
+    errors = {}
+
+    if request.method == "POST":
+        # ----- sticky data (always keep the raw user input so the form re-renders with it) -----
+        data = {
+            "first_name": (request.POST.get("first_name") or "").strip(),
+            "last_name":  (request.POST.get("last_name")  or "").strip(),
+            "index":      (request.POST.get("index")      or "").strip(),
+            "email":      (request.POST.get("email")      or "").strip(),
+            "mobile":     (request.POST.get("mobile")     or "").strip(),  # keep raw for sticky UI
+            "ghin":       (request.POST.get("ghin")       or "").strip(),
+        }
+
+        # -------- field-level validation ----------
+        # First name
+        if not data["first_name"]:
+            errors["first_name"] = "First name is required."
+        elif len(data["first_name"]) > 30 or not re.search(r"[A-Za-z]", data["first_name"]):
+            errors["first_name"] = "Enter at least one letter; max length is 30."
+
+        # Last name
+        if not data["last_name"]:
+            errors["last_name"] = "Last name is required."
+        elif len(data["last_name"]) > 30 or not re.search(r"[A-Za-z]", data["last_name"]):
+            errors["last_name"] = "Enter at least one letter; max length is 30."
+
+        # Index (required; Decimal max_digits=3, decimal_places=1 → -9.9 .. 99.9)
+        if not data["index"]:
+            errors["index"] = "Index is required."
+            idx_q = None
+        else:
+            try:
+                idx = Decimal(data["index"])
+                idx_q = idx.quantize(Decimal("0.0"))
+                if idx_q < Decimal("-9.9") or idx_q > Decimal("99.9"):
+                    errors["index"] = "Index must be between -9.9 and 99.9."
+            except (InvalidOperation, ValueError):
+                errors["index"] = "Index must be a number with 1 decimal place (e.g., 12.3)."
+                idx_q = None
+
+        # Email (optional but if present must be valid)
+        email_norm = ""
+        if data["email"]:
+            email_norm = data["email"]
+            try:
+                EMAIL_VALIDATOR(email_norm)
+            except ValidationError as e:
+                errors["email"] = e.message
+
+        # Mobile (optional; if provided must normalize to US E.164 without '+')
+        mobile_norm = _normalize_mobile_to_us_e164(data["mobile"])
+        if data["mobile"] and mobile_norm is None:
+            errors["mobile"] = "Enter a valid US number (10 digits or 11 digits starting with 1)."
+
+        # GHIN (optional; exactly 13 digits if provided)
+        ghin_norm = ""
+        if data["ghin"]:
+            if re.fullmatch(r"\d{13}", data["ghin"]):
+                ghin_norm = data["ghin"]
+            else:
+                errors["ghin"] = "GHIN must be exactly 13 digits."
+
+        # -------- de-dupe checks (Crew-scoped) ----------
+        # Determine crew id (adjust to your actual helper if you have one)
+        crew_id = getattr(getattr(request.user, "userprofile", None), "CrewID", None)
+        if crew_id is None:
+            crew_id = 1  # sensible fallback for dev
+
+        qs = Players.objects.filter(CrewID=crew_id)
+
+        # First+Last unique within crew (case-insensitive)
+        if not errors.get("first_name") and not errors.get("last_name"):
+            if qs.filter(FirstName__iexact=data["first_name"],
+                         LastName__iexact=data["last_name"]).exists():
+                msg = "That first+last name already exists in your crew."
+                errors["first_name"] = msg
+                errors["last_name"]  = msg
+
+        # Mobile unique (only if provided and valid)
+        if mobile_norm and qs.filter(Mobile=mobile_norm).exists():
+            errors["mobile"] = "That mobile number is already in use in your crew."
+
+        # Email unique (only if provided and valid)
+        if email_norm and qs.filter(Email__iexact=email_norm).exists():
+            errors["email"] = "That email address is already in use in your crew."
+
+        # GHIN unique (only if provided and valid)
+        if ghin_norm and qs.filter(GHIN=ghin_norm).exists():
+            errors["ghin"] = "That GHIN is already in use in your crew."
+
+        # -------- if any errors, re-render with sticky data ----------
+        if errors:
+            return render(request, "GRPR/player_add.html", {
+                "data": data,
+                "errors": errors,
+                "back_href": reverse("players_view"),
+            })
+
+        # -------- no errors: SAVE to DB (and Log), keep sticky preview ----------
+        # Use normalized values for saving; member defaults to 0, split partner to None
+        try:
+            with transaction.atomic():
+                player = Players.objects.create(
+                    user=None,
+                    CrewID=crew_id,
+                    FirstName=data["first_name"],
+                    LastName=data["last_name"],
+                    Email=email_norm or None,
+                    Mobile=mobile_norm or None,
+                    SplitPartner=None,
+                    Member=0,
+                    GHIN=ghin_norm or None,
+                    Index=idx_q,
+                )
+
+                # Log row
+                Log.objects.create(
+                    SentDate=timezone.now(),
+                    Type="Added New Player",
+                    MessageID="",
+                    RequestDate=None,
+                    OfferID=None,
+                    ReceiveID=None,
+                    RefID=None,
+                    Msg=f'{request.user.first_name} {request.user.last_name} has added a new player: {player.FirstName} {player.LastName}',
+                    Status=None,
+                    To_number="",
+                )
+        except IntegrityError:
+            # In the unlikely event a concurrent insert hit the DB constraints first,
+            # translate it back into friendly field errors and re-render with sticky data.
+            if qs.filter(FirstName__iexact=data["first_name"],
+                         LastName__iexact=data["last_name"]).exists():
+                msg = "That first+last name already exists in your crew."
+                errors["first_name"] = msg
+                errors["last_name"]  = msg
+            if mobile_norm and qs.filter(Mobile=mobile_norm).exists():
+                errors["mobile"] = "That mobile number is already in use in your crew."
+            if email_norm and qs.filter(Email__iexact=email_norm).exists():
+                errors["email"] = "That email address is already in use in your crew."
+            if ghin_norm and qs.filter(GHIN=ghin_norm).exists():
+                errors["ghin"] = "That GHIN is already in use in your crew."
+
+            return render(request, "GRPR/player_add.html", {
+                "data": data,
+                "errors": errors,
+                "back_href": reverse("players_view"),
+            })
+
+        # success path — keep a preview card and swap the heading
+        preview = {
+            "first_name": player.FirstName,
+            "last_name":  player.LastName,
+            "index":      str(player.Index) if player.Index is not None else "—",
+            "email":      player.Email or "—",
+            "mobile":     player.Mobile or "—",
+            "ghin":       player.GHIN or "—",
+            "crew_id":    player.CrewID,
+        }
+        messages.success(request, "Player added successfully.")
+        return render(request, "GRPR/player_add.html", {
+            "data": {},                   # clear fields after a successful add
+            "errors": {},
+            "preview": preview,
+            "page_title": "Player Added Successfully",
+            "back_href": reverse("players_view"),
+        })
+
+    # GET → empty form
+    return render(request, "GRPR/player_add.html", {
+        "data": {},
+        "errors": {},
+        "back_href": reverse("players_view"),
+    })
 
 
 # ------------------------------------------------------------------ #
@@ -4228,7 +4439,7 @@ def games_view(request):
     game_status = game.Status if game else None
     game_id = game.id if game else None
     game_type = game.Type if game else None
-    assoc_game_id = game.AssocGame if game else None
+    anchor_id = game.AssocGame if game else None
 
     # assoc_game = Games.objects.filter(id = assoc_game_id).first() if assoc_game_id else None
     players_num = ScorecardMeta.objects.filter(GameID=game_id).count() if game else None
@@ -4241,6 +4452,7 @@ def games_view(request):
         'game_status': game_status,
         'gDate': gDate,
         'game_id': game_id,
+        'anchor_id': anchor_id,
         'players_num': players_num,
         'draft_id' : draft_id,
         'first_name': user.first_name,
@@ -5404,6 +5616,7 @@ def skins_leaderboard_view(request):
     forty_game_id = Games.objects.filter(AssocGame=assoc_id, Type='Forty').values_list('id', flat=True).first()
     fall_classic_game_id = Games.objects.filter(AssocGame=assoc_id, Type='FallClassic').values_list('id', flat=True).first()
     skins_game_id = Games.objects.filter(AssocGame=assoc_id, Type='Skins').values_list('id', flat=True).first()
+    stbl_game_id = Games.objects.filter(AssocGame=assoc_id, Type='Stableford').values_list('id', flat=True).first()
 
     print("forty_id", forty_game_id)
     print("fall_classic_id", fall_classic_game_id)
@@ -5417,9 +5630,10 @@ def skins_leaderboard_view(request):
         for group_id in forty_groups:
             scores_used = Forty.objects.filter(GameID_id=forty_game_id, GroupID=group_id).count()
             scores_played = Scorecard.objects.filter(GameID_id=game_id, smID__GroupID=group_id).count()
-            num_scores = Games.objects.filter(id=forty_game_id).values_list('NumScores', flat=True).first() or 0
+            # num_scores = Games.objects.filter(id=forty_game_id).values_list('NumScores', flat=True).first() or 0
+            num_scores, min1_req, min18_req = _forty_group_requirements(forty_game_id, group_id)
             scores_needed = num_scores - scores_used
-            scores_available = 72 - scores_played
+            # scores_available = 72 - scores_played
             par = Forty.objects.filter(GameID_id=forty_game_id, GroupID=group_id).aggregate(total=Sum('Par'))['total'] or 0
             group_score = Forty.objects.filter(GameID_id=forty_game_id, GroupID=group_id).aggregate(total=Sum('NetScore'))['total'] or 0
             over_under = group_score - par
@@ -5428,7 +5642,7 @@ def skins_leaderboard_view(request):
                 'group_id': group_id,
                 'scores_used': scores_used,
                 'scores_needed': scores_needed,
-                'scores_available': scores_available,
+                # 'scores_available': scores_available,
                 'over_under': over_under,
             })
     # -- end forty leaderboard table
@@ -5839,6 +6053,23 @@ def forty_view(request):
     return render(request, 'GRPR/forty.html', context)
 
 
+def _forty_group_requirements(game_id: int, group_id: str):
+    """
+    Return (num_scores, min1, min18) for a specific group in a Forty game.
+    Falls back to the game-level fields if a group row doesn’t exist.
+    """
+    row = (
+        FortyGroupRule.objects
+        .filter(Game_id=game_id, GroupID=str(group_id))
+        .values("NumScores", "Min1", "Min18")
+        .first()
+    )
+    if row:
+        return (row["NumScores"], row["Min1"], row["Min18"])
+    g = Games.objects.filter(id=game_id).values("NumScores", "Min1", "Min18").first() or {}
+    return (g.get("NumScores") or 40, g.get("Min1") or 3, g.get("Min18") or 3)
+
+
 @login_required
 @require_http_methods(["GET", "POST"])
 def forty_config_view(request):
@@ -5919,7 +6150,11 @@ def forty_config_view(request):
     for idx, label in enumerate(sorted(assignments.keys())):
         group_id = time_ids_by_label.get(label) or (idx + 1)
         last_names = [id_to_last.get(pid, f"#{pid}") for pid in assignments.get(label, [])]
-        group_list.append({"group_id": group_id, "last_names": sorted(last_names)})
+        group_list.append({"group_id": group_id, "label": label, "last_names": sorted(last_names)})
+
+    for g in group_list:
+        cnt = len(g["last_names"])
+        g["quota"] = min(40, max(10, cnt * 10))
 
     # Handicap → display format
     hc_mode = (state.get("handicap_mode") or "").strip().lower()
@@ -6065,6 +6300,39 @@ def forty_game_creation_view(request):
 
     forty.save()
 
+    # 4.5 scores required per group when groups are less than 4 players
+        # --- Seed per-group quotas based on actual group sizes ---
+    # Use the scorecards game (anchor) to discover the Groups & sizes.
+    scorecards_gid = (
+        state.get("scorecards_game_id")
+        or request.session.get("scorecards_game_id")
+        or forty.AssocGame
+        or forty.id
+    )
+
+    group_sizes = (
+        ScorecardMeta.objects
+        .filter(GameID_id=scorecards_gid)
+        .values("GroupID")
+        .annotate(cnt=Count("id"))
+    )
+
+    # Default mapping: 4→40, 3→30, 2→20, 1→10 (cap at 40, floor at 10)
+    base_min1  = forty.Min1 or 3
+    base_min18 = forty.Min18 or 3
+
+    for gs in group_sizes:
+        gid = str(gs["GroupID"] or "")
+        cnt = int(gs["cnt"] or 0)
+        if not gid or cnt <= 0:
+            continue
+        num = min(40, max(10, cnt * 10))
+        FortyGroupRule.objects.update_or_create(
+            Game=forty,
+            GroupID=gid,
+            defaults={"NumScores": num, "Min1": base_min1, "Min18": base_min18},
+        )
+
     # 5) Advance the config queue (from the router)
     queue = state.get("game_config_queue") or request.session.get("game_config_queue") or []
     # The first item should have been Forty; pop it and go next.
@@ -6119,12 +6387,14 @@ def forty_choose_score_view(request):
     next_hole_id = next_hole.id if next_hole else None
 
     # Get the AssocGame (Forty game id) for this Skins game
-    forty_game_id = Games.objects.filter(id=game_id).values_list('AssocGame', flat=True).first()
+    assoc_game_id = Games.objects.filter(id=game_id).values_list('AssocGame', flat=True).first()
+    forty_game_id = Games.objects.filter(AssocGame=assoc_game_id, Type = 'Forty').values_list('id', flat=True).first()
 
     # Efficiently gather stats
     scores_used = Forty.objects.filter(GameID_id=forty_game_id, GroupID=group_id).count()
     scores_played = Scorecard.objects.filter(GameID_id=game_id, smID__GroupID=group_id).count()
-    num_scores = Games.objects.filter(id=forty_game_id).values_list('NumScores', flat=True).first() or 0
+    # num_scores = Games.objects.filter(id=forty_game_id).values_list('NumScores', flat=True).first() or 0
+    num_scores, min1_req, min18_req = _forty_group_requirements(forty_game_id, group_id)
     scores_needed = num_scores - scores_used
     scores_available = 76 - scores_played #ack.  this is 76 instead of 72 bc when the user sees this, the scores have been entered into scorecard (4 used) but can yet still be chosen for Forty
     scores_after_this_hole = scores_available - 4
@@ -6176,9 +6446,11 @@ def forty_confirm_score_view(request):
         selected_players = request.POST.getlist('selected_players')
 
         # get Game info for variables
-        game = get_object_or_404(Games, id=forty_game_id)
-        min1 = game.Min1
-        min18 = game.Min18
+        # game = get_object_or_404(Games, id=forty_game_id)
+        # min1 = game.Min1
+        # min18 = game.Min18
+        num_scores, min1, min18 = _forty_group_requirements(int(forty_game_id), group_id)
+
         
         # Get hole number
         hole = get_object_or_404(CourseHoles, id=hole_id)
@@ -6187,7 +6459,7 @@ def forty_confirm_score_view(request):
         # Gather stats needed for validation
         scores_used = Forty.objects.filter(GameID_id=forty_game_id, GroupID=group_id).count()
         scores_played = Scorecard.objects.filter(GameID_id=game_id, smID__GroupID=group_id).count()
-        num_scores = Games.objects.filter(id=forty_game_id).values_list('NumScores', flat=True).first() or 0
+        # num_scores = Games.objects.filter(id=forty_game_id).values_list('NumScores', flat=True).first() or 0
         scores_needed = num_scores - scores_used
         scores_available = 76 - scores_played
         scores_after_this_hole = scores_available - 4

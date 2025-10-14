@@ -8,7 +8,7 @@
 <div class="text-center">
   {% if game_id != None %}
     <h3>Game currently in process: </h3>
-    <h3>{{ gDate }} - {{ players_num }} Players</h3>
+    <h3>{{ gDate }} - {{ players_num }} Players - ID: {{ game_id }} - Anchor ID: {{ anchor_id }}</h3>
   {% endif %}
 </div>
 {% endif %}
@@ -21,7 +21,7 @@
 <div class="col-lg-6 col-xxl-4 my-5 mx-auto">
   <div class="d-grid gap-2">
     {% if game_status != None %}
-    <a href="{% url 'skins_leaderboard_view' %}?game_id={{ skins_game_id }}" class="btn btn-primary" role="button">Leaderboard</a>
+    <a href="{% url 'skins_leaderboard_view' %}?game_id={{ game_id }}" class="btn btn-primary" role="button">Leaderboard</a>
     {% endif %}
     <!-- <a href="{% url 'skins_choose_players_view' %}" class="btn btn-primary" role="button">Start New Game</a> -->
      {% if draft_id != None %}

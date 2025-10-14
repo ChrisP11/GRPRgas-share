@@ -3,7 +3,12 @@
 {% block title %}Players{% endblock %}
 
 {% block content %}
-<h1 class="mb-4">Players</h1>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="mb-0">Players</h1>
+  {% if request.user.is_staff or request.user.is_superuser or request.user.email|lower == "edsloanmd@gmail.com" %}
+    <a class="btn btn-primary" href="{% url 'player_add' %}">Add Player</a>
+  {% endif %}
+</div>
 
 <!-- Players Table -->
 <table class="table table-striped">
