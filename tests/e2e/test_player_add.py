@@ -224,18 +224,15 @@ def test_submit_add_player_form_fixed_values(page):
 
 
 @pytest.mark.playwright
-# @pytest.mark.django_db
-def test_add_player_rejects_duplicate(page, cleanup_byrne):
-    # Seed an existing "David Byrne" for CrewID=1
-    _ensure_byrne_exists(crew_id=1)
-
-    # Login and navigate to the form
+def test_add_player_rejects_duplicate(page):
     _login(page)
+
+    # Go to Add Player form
     page.goto(f"{BASE}/GRPR/players/", wait_until="domcontentloaded")
     page.get_by_role("link", name="Add Player").click()
     page.wait_for_url("**/GRPR/players/add/**")
 
-    # Use identical values to trigger duplicate checks
+    # Use the same fixed values
     first = "David"
     last  = "Byrne"
     idx   = "11.1"
@@ -243,21 +240,35 @@ def test_add_player_rejects_duplicate(page, cleanup_byrne):
     mobile = "212-744-9087"
     ghin   = "0123456789321"
 
-    page.locator('input[name="first_name"]').fill(first)
-    page.locator('input[name="last_name"]').fill(last)
-    page.locator('input[name="index"]').fill(idx)
-    page.locator('input[name="email"]').fill(email)
-    page.locator('input[name="mobile"]').fill(mobile)
-    page.locator('input[name="ghin"]').fill(ghin)
+    def fill_and_submit():
+        page.locator('input[name="first_name"]').fill(first)
+        page.locator('input[name="last_name"]').fill(last)
+        page.locator('input[name="index"]').fill(idx)
+        page.locator('input[name="email"]').fill(email)
+        page.locator('input[name="mobile"]').fill(mobile)
+        page.locator('input[name="ghin"]').fill(ghin)
+        page.get_by_role("button", name="Add Player").click()
+        page.wait_for_load_state("networkidle")
 
-    page.get_by_role("button", name="Add Player").click()
-    page.wait_for_load_state("networkidle")
+    # First attempt: may succeed (if Byrne not present) or fail (already present).
+    fill_and_submit()
 
-    # Expect error messages (your view renders per-field errors + messages API as needed)
+    # Detect success (fields cleared + “Player Added Successfully” heading),
+    # and if so, immediately try to add the same player again so we *force* a duplicate.
+    success_heading = page.locator("h1", has_text=re.compile(r"Player Added Successfully", re.I))
+    first_val = page.locator('input[name="first_name"]').input_value()
+    last_val  = page.locator('input[name="last_name"]').input_value()
+    if success_heading.first.is_visible() or (first_val == "" and last_val == ""):
+        # Navigate back to the form if you’re not already on it
+        page.goto(f"{BASE}/GRPR/players/", wait_until="domcontentloaded")
+        page.get_by_role("link", name="Add Player").click()
+        page.wait_for_url("**/GRPR/players/add/**")
+        fill_and_submit()
+
+    # Now we expect duplicate/validation errors and sticky values
     errors = page.locator(".alert-danger, .invalid-feedback, .text-danger, ul.errorlist, .alert-warning")
     assert errors.first.is_visible(), "Expected duplicate/validation errors when adding an existing player."
 
-    # Sticky form values should remain
     expect(page.locator('input[name="first_name"]')).to_have_value(first)
     expect(page.locator('input[name="last_name"]')).to_have_value(last)
     expect(page.locator('input[name="index"]')).to_have_value(idx)
@@ -265,5 +276,5 @@ def test_add_player_rejects_duplicate(page, cleanup_byrne):
     expect(page.locator('input[name="mobile"]')).to_have_value(mobile)
     expect(page.locator('input[name="ghin"]')).to_have_value(ghin)
 
-    # (Optional) print captured error texts to the test output for clarity
+    # Optional: print server-provided error text to the test output
     print("Duplicate form errors:\n", errors.all_inner_texts())
