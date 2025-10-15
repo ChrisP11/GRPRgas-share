@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Add Player{% endblock %}
+
+{% block content %}
+<h1 class="mb-2">Add a New Player</h1>
+<p class="text-muted mb-4"><span class="text-danger">*</span> red indicates a required field</p>
+
+<form method="post" action="">
+  {% csrf_token %}
+
+  <div class="row g-3">
+    <!-- First Name (required) -->
+    <div class="col-md-4">
+      <label class="form-label">First Name <span class="text-danger">*</span></label>
+      <input
+        type="text"
+        name="first_name"
+        class="form-control {% if errors.first_name %}is-invalid{% endif %}"
+        maxlength="30"
+        value="{{ data.first_name }}">
+      {% if errors.first_name %}
+        <div class="invalid-feedback">{{ errors.first_name }}</div>
+      {% endif %}
+    </div>
+
+    <!-- Last Name (required) -->
+    <div class="col-md-4">
+      <label class="form-label">Last Name <span class="text-danger">*</span></label>
+      <input
+        type="text"
+        name="last_name"
+        class="form-control {% if errors.last_name %}is-invalid{% endif %}"
+        maxlength="30"
+        value="{{ data.last_name }}">
+      {% if errors.last_name %}
+        <div class="invalid-feedback">{{ errors.last_name }}</div>
+      {% endif %}
+    </div>
+
+    <!-- Index (required) -->
+    <div class="col-md-4">
+      <label class="form-label">Index <span class="text-danger">*</span></label>
+      <input
+        type="text"
+        inputmode="decimal"
+        name="index"
+        class="form-control {% if errors.index %}is-invalid{% endif %}"
+        placeholder="e.g. 12.3"
+        value="{{ data.index }}">
+      {% if errors.index %}
+        <div class="invalid-feedback">{{ errors.index }}</div>
+      {% else %}
+        <div class="form-text">One decimal, e.g., 12.3 (0.0–99.9)</div>
+      {% endif %}
+    </div>
+
+    <!-- Email (optional) -->
+    <div class="col-md-4">
+      <label class="form-label">Email</label>
+      <input
+        type="email"
+        name="email"
+        class="form-control {% if errors.email %}is-invalid{% endif %}"
+        maxlength="256"
+        value="{{ data.email }}">
+      {% if errors.email %}
+        <div class="invalid-feedback">{{ errors.email }}</div>
+      {% endif %}
+    </div>
+
+    <!-- Mobile (optional) -->
+    <div class="col-md-4">
+      <label for="mobile" class="form-label">Mobile <span class="text-muted">(optional)</span></label>
+      <input type="text" class="form-control {% if errors.mobile %}is-invalid{% endif %}"
+            id="mobile" name="mobile" value="{{ data.mobile }}"
+            placeholder="(708) 704-6284">
+      {% if errors.mobile %}
+        <div class="invalid-feedback">{{ errors.mobile }}</div>
+      {% else %}
+        <div class="form-text">US only; saved as 11 digits (e.g., 17087046284).</div>
+      {% endif %}
+    </div>
+
+    <!-- GHIN # (optional) -->
+    <div class="col-md-4">
+      <label class="form-label">GHIN #</label>
+      <input
+        type="text"
+        name="ghin"
+        class="form-control {% if errors.ghin %}is-invalid{% endif %}"
+        placeholder="13 digits"
+        value="{{ data.ghin }}">
+      {% if errors.ghin %}
+        <div class="invalid-feedback">{{ errors.ghin }}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="mt-4 d-flex gap-2">
+    <button type="submit" class="btn btn-primary">Add Player</button>
+    <a href="{{ back_href }}" class="btn btn-outline-secondary">Back to Players Page</a>
+  </div>
+</form>
+
+{% if preview %}
+  <hr class="my-4">
+  <div class="card">
+    <div class="card-body">
+      <h5 class="card-title mb-3">Submitted (not yet saved)</h5>
+      <dl class="row mb-0">
+        <dt class="col-sm-3">First Name</dt><dd class="col-sm-9">{{ preview.first_name }}</dd>
+        <dt class="col-sm-3">Last Name</dt><dd class="col-sm-9">{{ preview.last_name }}</dd>
+        <dt class="col-sm-3">Index</dt><dd class="col-sm-9">{{ preview.index }}</dd>
+        <dt class="col-sm-3">Email</dt><dd class="col-sm-9">{{ preview.email }}</dd>
+        <dt class="col-sm-3">Mobile</dt><dd class="col-sm-9">{{ preview.mobile }}</dd>
+        <dt class="col-sm-3">GHIN #</dt><dd class="col-sm-9">{{ preview.ghin }}</dd>
+      </dl>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}

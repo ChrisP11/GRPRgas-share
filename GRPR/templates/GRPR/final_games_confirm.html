@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Review & Confirm Games{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-3">Review & Confirm</h1>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <div><strong>Date:</strong> {{ playing_date|date:"D, M j, Y" }}</div>
+    <div><strong>Course:</strong> {{ course_name }}</div>
+    <div><strong>Tee set:</strong> {{ tee_choice }}</div>
+    <div><strong>Handicap:</strong> {{ handicap_label }}</div>
+  </div>
+</div>
+
+{% if skins %}
+  <div class="card mb-3">
+    <div class="card-header">Skins</div>
+    <div class="card-body">
+      <div>Players: <strong>{{ skins.num_players }}</strong></div>
+      <div class="text-muted small">Game ID: {{ skins.game_id }}</div>
+    </div>
+  </div>
+{% endif %}
+
+{% if forty %}
+  <div class="card mb-3">
+    <div class="card-header">Forty</div>
+    <div class="card-body">
+      <div>Scores required: <strong>{{ forty.num_scores|default:"—" }}</strong></div>
+      <div>Minimum @ Hole 1: <strong>{{ forty.min1|default:"—" }}</strong></div>
+      <div>Minimum @ Hole 18: <strong>{{ forty.min18|default:"—" }}</strong></div>
+      <div class="text-muted small">Game ID: {{ forty.game_id }}</div>
+    </div>
+  </div>
+{% endif %}
+
+{% if team %}
+  <div class="card mb-3">
+    <div class="card-header">{{ team.game_type }}</div>
+    <div class="card-body">
+      {% if team.pairs %}
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead class="table-light">
+              <tr><th>Team</th><th>Player 1</th><th>Player 2</th></tr>
+            </thead>
+            <tbody>
+              {% for row in team.pairs %}
+                <tr>
+                  <td>{{ row.team }}</td>
+                  <td>{{ row.name1 }}</td>
+                  <td>{{ row.name2 }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="text-muted">No team pairs recorded.</div>
+      {% endif %}
+      <div class="text-muted small">Game ID: {{ team.game_id }}</div>
+    </div>
+  </div>
+{% endif %}
+
+{% if stableford %}
+  <div class="card mb-4">
+    <div class="card-header">Stableford</div>
+    <div class="card-body">
+      <div>Format: <strong>{{ stableford.format|default:"—" }}</strong></div>
+      {% if stableford.teams %}
+        <div class="mt-2">
+          {% for tid, plist in stableford.teams.items %}
+            <div class="mb-2">
+              <div class="fw-semibold">Team {{ tid }}</div>
+              <div class="small text-muted">{{ plist|join:", " }}</div>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+      <div class="text-muted small">Game ID: {{ stableford.game_id }}</div>
+    </div>
+  </div>
+{% endif %}
+
+<form method="post" class="d-flex gap-2">
+  {% csrf_token %}
+  <a href="{% url 'game_setup_games' %}" class="btn btn-outline-secondary">Back</a>
+
+  <button name="action" value="confirm" class="btn btn-primary">
+    Final Confirm
+  </button>
+
+  <button name="action" value="cancel" class="btn btn-outline-danger ms-auto"
+          onclick="return confirm('Cancel this event and delete the created games?');">
+    Cancel Event
+  </button>
+</form>
+{% endblock %}

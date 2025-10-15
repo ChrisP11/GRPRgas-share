@@ -64,3 +64,45 @@
   background-color: #0d3b66 !important; 
   color: #fff !important; 
 }
+
+/* clickable game tiles */
+.game-card {
+  display: block;
+  border: 1px solid #dee2e6;
+  border-radius: 0.5rem;
+  background: #fff;
+  cursor: pointer;
+  transition: transform .06s ease, box-shadow .06s ease, border-color .06s ease;
+  user-select: none;
+  outline: none;
+}
+.game-card:hover { box-shadow: 0 0.25rem 0.75rem rgba(0,0,0,.06); }
+.game-card:focus { box-shadow: 0 0 0 .2rem rgba(0,142,112,.2); } /* your green */
+.game-card.selected {
+  border-color: #008e70;
+  box-shadow: 0 0 0 .2rem rgba(0,142,112,.25);
+}
+
+.game-card-body { padding: 1rem; }
+.game-card-title { font-weight: 600; }
+.game-card-sub { color: #6c757d; font-size: .9rem; }
+
+/* hide but keep accessible */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+
+/* hide the native checkbox inside the card */
+.game-card > input[type="checkbox"] {
+  position: absolute !important;
+  width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+
+/* selected state (pure CSS) */
+.game-card:has(> input[type="checkbox"]:checked) {
+  border-color: #008e70;
+  box-shadow: 0 0 0 .2rem rgba(0,142,112,.25);
+}

@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User #Built-in Django User model, called to tie to the User model and the Player table
+from django.core.validators import RegexValidator
 
 # ▸▸▸  Gas-Cup data models  ◂◂◂
 from django.db.models import UniqueConstraint, Q
@@ -39,15 +40,36 @@ class Players(models.Model):
     CrewID = models.IntegerField()
     FirstName = models.CharField(max_length=30)
     LastName = models.CharField(max_length=30)
-    Email = models.CharField(max_length=256)
-    Mobile = models.CharField(max_length=256)
+    Email = models.CharField(max_length=256, blank=True, null=True)
+    Mobile = models.CharField(max_length=256, blank=True, null=True)
     SplitPartner = models.IntegerField(null=True)
     Member = models.IntegerField(null=True)
-    GHIN = models.IntegerField(null=True)
+    GHIN = models.CharField(max_length=13, null=True, blank=True,validators=[RegexValidator(r'^\d{13}$', 'GHIN must be exactly 13 digits')],)
     Index = models.DecimalField(max_digits=3, decimal_places=1, null=True, blank=True)  
 
     class Meta:
         db_table = "Players"
+        constraints = [
+        UniqueConstraint(
+            fields=["CrewID", "FirstName", "LastName"],
+            name="uniq_player_name_per_crew",
+        ),
+        UniqueConstraint(
+            fields=["CrewID", "Email"],
+            condition=Q(Email__isnull=False) & ~Q(Email=""),
+            name="uniq_email_per_crew_when_present",
+        ),
+        UniqueConstraint(
+            fields=["CrewID", "Mobile"],
+            condition=Q(Mobile__isnull=False) & ~Q(Mobile=""),
+            name="uniq_mobile_per_crew_when_present",
+        ),
+        UniqueConstraint(
+            fields=["CrewID", "GHIN"],
+            condition=Q(GHIN__isnull=False) & ~Q(GHIN=""),
+            name="uniq_ghin_per_crew_when_present",
+        ),
+    ]
 
 
 class SubSwap(models.Model):
@@ -197,6 +219,7 @@ class GameSetupDraft(models.Model):
     crew_id      = models.IntegerField(db_index=True)               # keeping it simple/agnostic to your crew model name
     event_date   = models.DateField(null=True, blank=True)          # chosen date (step 1)
     course_id    = models.IntegerField(null=True, blank=True)       # optional: stash the course PK later (step 2)
+    anchor_game_id = models.PositiveIntegerField(null=True, blank=True, db_index=True)
     tee_choice   = models.CharField(max_length=64, blank=True)      # later: “Blue/White”, “White”, etc.
     state        = models.JSONField(default=dict, blank=True)       # anything else we want to cache per step
     is_complete  = models.BooleanField(default=False)
@@ -315,6 +338,23 @@ class Forty(models.Model):
         db_table = "Forty"
 
 
+class FortyGroupRule(models.Model):
+    """
+    Per-group Forty requirements. One row per (Forty game, GroupID).
+    GroupID is the same string you already show (e.g. "8:40").
+    """
+    Game      = models.ForeignKey('Games', on_delete=models.CASCADE, db_index=True)
+    GroupID   = models.CharField(max_length=16)             # e.g. "8:40"
+    NumScores = models.PositiveSmallIntegerField()          # usually 10, 20, 30, 40
+    Min1      = models.PositiveSmallIntegerField(default=3) # keep your global default unless you want to vary
+    Min18     = models.PositiveSmallIntegerField(default=3)
+
+    class Meta:
+        db_table = "FortyGroupRule"
+        unique_together = (("Game", "GroupID"),)
+        indexes = [models.Index(fields=["Game", "GroupID"])]
+
+
 class GasCupPair(models.Model):
     """
     Two partners that form ONE side in a Gas-Cup match.
@@ -389,6 +429,37 @@ class GasCupOverride(models.Model):
 
     def __str__(self):
         return f"{self.Game_id} • {self.Slot} override"
+    
+
+class StblTeam(models.Model):
+    created_at   = models.DateTimeField(auto_now_add=True)
+    Game         = models.ForeignKey(Games, on_delete=models.CASCADE, db_index=True)
+    PID          = models.ForeignKey(Players, on_delete=models.CASCADE, db_index=True)
+    TeamID       = models.PositiveSmallIntegerField()  # 1,2,3,...
+    TeamName     = models.CharField(max_length=128, blank=True, null=True)
+
+    class Meta:
+        unique_together = (("Game", "PID"),)  # a player appears once per Stableford game
+        indexes = [models.Index(fields=["Game", "TeamID"])]
+        db_table = "StblTeam"
+
+class StblScore(models.Model):
+    AlterDate    = models.DateTimeField(auto_now=True)
+    Game         = models.ForeignKey(Games, on_delete=models.CASCADE, db_index=True)
+    PID          = models.ForeignKey(Players, on_delete=models.CASCADE, db_index=True)
+    Hole         = models.ForeignKey(CourseHoles, on_delete=models.CASCADE, db_index=True)
+
+    # Optional denorms for easier human debug/exports
+    RawScore     = models.PositiveSmallIntegerField(null=True, blank=True)
+    NetScore     = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    # The Stableford points for this player on this hole (0..5 in your rule)
+    Points       = models.SmallIntegerField(default=0)
+
+    class Meta:
+        unique_together = (("Game", "PID", "Hole"),)
+        indexes = [models.Index(fields=["Game", "PID"]), models.Index(fields=["Game"])]
+        db_table = "StblScore"
 
 
 class GameToggles(models.Model):

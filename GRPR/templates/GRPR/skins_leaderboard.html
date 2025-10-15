@@ -91,6 +91,38 @@
     <br>
     <br>
 
+    {% if stableford_game_id %}
+    <div class="container my-4">
+    <h2>Stableford Leaderboard - {{ play_date }}</h2>
+    <table class="table table-bordered mb-4 text-center align-middle">
+        <thead class="table-light">
+        <tr>
+            <th>Team</th>
+            <th>Thru</th>
+            <th>Points</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for row in stableford_board %}
+        <tr>
+            <td>{{ row.team_name }}</td>
+            <td>{% if row.thru %}{{ row.thru }}{% else %}—{% endif %}</td>
+            <td>{{ row.points }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="3" class="text-muted">No Stableford scores yet.</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>    
+    <br>
+    <br>
+    {% endif %}
+
+
+
     {% if forty_game_id is not None %}
     <h2>Forty Leaderboard - {{ play_date }} </h2>
     <table class="table table-bordered mb-4">
@@ -121,6 +153,7 @@
 </div>
 <br>
 
+{% if skins_game_id is not None %}
 <div class="container my-4">
     <h2>Skins Leaderboard - {{ play_date }} {% if payout %} - ${{ payout }}/skin {% endif %}</h2>
     <table class="table table-striped">
@@ -148,6 +181,7 @@
         </tbody>
     </table>
 </div>
+{% endif %}
 
 <!-- Group Buttons -->
 <div class="d-flex justify-content-between mb-3">
@@ -170,5 +204,6 @@
         {% endif %}
     </div>
 </div>
+
 
 {% endblock %}

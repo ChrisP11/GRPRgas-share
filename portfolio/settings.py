@@ -180,3 +180,36 @@ ENVIRO = os.environ.get('ENVIRO', 'Prod')
 print(f"Environment: {ENVIRO}")  
 print(f"ENVIRO: {os.environ.get('ENVIRO')}")
 print(f"TWILIO_ENABLED: {os.environ.get('TWILIO_ENABLED')}")
+
+
+### components to make Playwright testing work
+# --- E2E/dev helpers (put after DEBUG) ---
+IS_E2E = os.environ.get("E2E", "0") == "1"
+
+# Point login redirect to your actual home route in this project
+LOGIN_REDIRECT_URL = "/GRPR/home/"
+
+# Security toggles for local / E2E runs
+SECURE_SSL_REDIRECT   = not (DEBUG or IS_E2E)
+SESSION_COOKIE_SECURE = not (DEBUG or IS_E2E)
+CSRF_COOKIE_SECURE    = not (DEBUG or IS_E2E)
+
+# Add local origins for CSRF when developing or running E2E
+_local_csrf = [
+    "http://127.0.0.1",
+    "http://127.0.0.1:8000",
+    "http://localhost",
+    "http://localhost:8000",
+]
+try:
+    CSRF_TRUSTED_ORIGINS = list(CSRF_TRUSTED_ORIGINS)
+except NameError:
+    CSRF_TRUSTED_ORIGINS = []
+if DEBUG or IS_E2E:
+    for origin in _local_csrf:
+        if origin not in CSRF_TRUSTED_ORIGINS:
+            CSRF_TRUSTED_ORIGINS.append(origin)
+
+# In dev/E2E, drop the custom HTTPS redirect middleware so http://127.0.0.1 works
+if DEBUG or IS_E2E:
+    MIDDLEWARE = [mw for mw in MIDDLEWARE if mw != "GRPR.middleware.SSLRedirectMiddleware"]

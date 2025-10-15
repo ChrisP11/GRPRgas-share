@@ -12,9 +12,17 @@
 
     <h4>Groups Playing</h4>
     {% for group in group_list %}
-        <p><strong>{{ group.group_id }}am</strong> - {{ group.last_names|join:", " }}</p>
+    {% with cnt=group.last_names|length %}
+        <p>
+        <strong>{{ group.label }}am</strong> — {{ group.last_names|join:", " }}
+        {% if cnt > 0 and cnt < 4 %}
+        {% widthratio cnt 1 10 as need_scores %}
+            <span class="text-danger ms-2">This group has {{ cnt }} player{{ cnt|pluralize }}, they will need {{ need_scores }} scores instead of 40.</span>
+        {% endif %}
+        </p>
+    {% endwith %}
     {% empty %}
-        <p>No groups found.</p>
+    <p>No groups found.</p>
     {% endfor %}
 
     <form method="post" action="{% url 'forty_config_confirm_view' %}" id="forty-config-form">

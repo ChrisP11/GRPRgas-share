@@ -6,16 +6,9 @@
 
 {% if game_status != None %}
 <div class="text-center">
-  {% if skins_game_id != None and forty_game_id != None %}
-    <h3>Games currently in process: </h3>
-    <h3>Skins - {{ gDate }} - {{ skins_players_num }} Players</h3>
-    <h3>Forty - {{ gDate }} - {{ skins_players_num }} Players</h3>
-  {% elif skins_game_id != None %}
+  {% if game_id != None %}
     <h3>Game currently in process: </h3>
-    <h3>Skins - {{ gDate }} - {{ skins_players_num }} Players</h3>
-  {% elif forty_game_id != None %}
-    <h3>Game currently in process: </h3>
-    <h3>Forty - {{ gDate }} - {{ forty_players_num }} Players</h3>
+    <h3>{{ gDate }} - {{ players_num }} Players - ID: {{ game_id }} - Anchor ID: {{ anchor_id }}</h3>
   {% endif %}
 </div>
 {% endif %}
@@ -28,9 +21,12 @@
 <div class="col-lg-6 col-xxl-4 my-5 mx-auto">
   <div class="d-grid gap-2">
     {% if game_status != None %}
-    <a href="{% url 'skins_leaderboard_view' %}?game_id={{ skins_game_id }}" class="btn btn-primary" role="button">Leaderboard</a>
-    {% else %}
+    <a href="{% url 'skins_leaderboard_view' %}?game_id={{ game_id }}" class="btn btn-primary" role="button">Leaderboard</a>
+    {% endif %}
     <!-- <a href="{% url 'skins_choose_players_view' %}" class="btn btn-primary" role="button">Start New Game</a> -->
+     {% if draft_id != None %}
+     <a href="{% url 'game_setup_resume' %}" class="btn btn-primary" role="button">Resume Game Setup</a>
+     {% else %}
     <a href="{% url 'game_setup_date' %}" class="btn btn-primary" role="button">Start New Game</a>
     {% endif %}
     <a href="{% url 'skins_closed_games_view' %}" class="btn btn-secondary-custom" role="button">Previous Games</a>
