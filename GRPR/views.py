@@ -326,26 +326,6 @@ def _create_game_and_invites(
     return game
 
 
-# def _create_skins_game_and_invites(
-#     *,
-#     draft: GameSetupDraft,
-#     ttid_by_player: Dict[int, int],
-#     creator_user,
-#     assoc_game_id: Optional[int] = None,
-# ) -> Games:
-#     """
-#     Thin wrapper around the generic creator for Skins.
-#     """
-#     return _create_game_and_invites(
-#         draft=draft,
-#         ttid_by_player=ttid_by_player,
-#         creator_user=creator_user,
-#         game_type="Skins",
-#         status="Live",
-#         assoc_game_id=assoc_game_id,
-#     )
-
-
 def _create_scorecards_for_game(
     *,
     draft: GameSetupDraft,
